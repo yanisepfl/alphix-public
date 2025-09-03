@@ -28,7 +28,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step {
      *****************************************************************************************************************/
 
     using StateLibrary for IPoolManager;
-    
+
     /* STRUCTURES
      *****************************************************************************************************************/
 
@@ -41,13 +41,9 @@ contract Alphix is BaseDynamicFee, Ownable2Step {
     /**
      * @dev Emitted at every fee change.
      */
-    event FeeUpdated(
-        PoolId indexed poolId,
-        uint24 oldFee,
-        uint24 newFee
-    );
+    event FeeUpdated(PoolId indexed poolId, uint24 oldFee, uint24 newFee);
 
-     /* MODIFIERS
+    /* MODIFIERS
      *****************************************************************************************************************/
 
     /* CONSTRUCTOR
