@@ -1,13 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-// OZ Imports
+/* OZ IMPORTS
+     *****************************************************************************************************************/
+// OZ Uniswap Hooks
 import {BaseDynamicFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseDynamicFee.sol";
+// OZ Contracts
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-// Uniswap v4 Imports
+/* UNISWAP V4 IMPORTS
+     *****************************************************************************************************************/
+// Types
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId} from "v4-core/src/types/PoolId.sol";
+// Interfaces
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+// Libraries
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /**
  * @title Alphix
@@ -17,6 +26,8 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 contract Alphix is BaseDynamicFee, Ownable2Step {
     /* LIBRARIES
      *****************************************************************************************************************/
+
+    using StateLibrary for IPoolManager;
     
     /* STRUCTURES
      *****************************************************************************************************************/
@@ -26,6 +37,15 @@ contract Alphix is BaseDynamicFee, Ownable2Step {
 
     /* EVENTS
      *****************************************************************************************************************/
+
+    /**
+     * @dev Emitted at every fee change.
+     */
+    event FeeUpdated(
+        PoolId indexed poolId,
+        uint24 oldFee,
+        uint24 newFee
+    );
 
      /* MODIFIERS
      *****************************************************************************************************************/
@@ -40,6 +60,17 @@ contract Alphix is BaseDynamicFee, Ownable2Step {
         BaseDynamicFee(_poolManager)
         Ownable(_alphixManager)
     {}
+
+    /**
+     * @dev See {BaseDynamicFee-poke}.
+     */
+    function poke(PoolKey calldata key) external override onlyValidPools(key.hooks) onlyOwner {
+        PoolId poolId = key.toId();
+        (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
+        uint24 newFee = _getFee(key);
+        poolManager.updateDynamicLPFee(key, newFee);
+        emit FeeUpdated(poolId, oldFee, newFee);
+    }
 
     /**
      * @dev Core logic for dynamic fee calculation.
