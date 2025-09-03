@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 // OZ Imports
 import {BaseDynamicFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseDynamicFee.sol";
+import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 // Uniswap v4 Imports
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -13,11 +14,32 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
  * @notice Uniswap v4 Dynamic Fee Hook.
  * @dev Inherits from OpenZeppelin’s BaseDynamicFee.
  */
-contract Alphix is BaseDynamicFee {
+contract Alphix is BaseDynamicFee, Ownable2Step {
+    /* LIBRARIES
+     *****************************************************************************************************************/
+    
+    /* STRUCTURES
+     *****************************************************************************************************************/
+
+    /* VARIABLES
+     *****************************************************************************************************************/
+
+    /* EVENTS
+     *****************************************************************************************************************/
+
+     /* MODIFIERS
+     *****************************************************************************************************************/
+
+    /* CONSTRUCTOR
+     *****************************************************************************************************************/
+
     /**
-     * @dev Initialize with PoolManager address.
+     * @dev Initialize with PoolManager and alphixManager addresses.
      */
-    constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) {}
+    constructor(IPoolManager _poolManager, address _alphixManager)
+        BaseDynamicFee(_poolManager)
+        Ownable(_alphixManager)
+    {}
 
     /**
      * @dev Core logic for dynamic fee calculation.
