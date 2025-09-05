@@ -88,9 +88,13 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable {
      * @notice Setter for the logic.
      * @param newLogic The new logic address.
      */
-    function setLogic(address newLogic) external onlyOwner nonReentrant {
+    function setLogic(address newLogic, PoolKey calldata key) external onlyOwner nonReentrant {
         if (newLogic == address(0)) {
             revert InvalidAddress();
+        }
+        try IAlphixLogic(newLogic).getFee(key) returns (uint24) {}
+        catch {
+            revert IAlphixLogic.InvalidLogicContract();
         }
         address oldLogic = logic;
         logic = newLogic;

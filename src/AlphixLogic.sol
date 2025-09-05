@@ -11,6 +11,9 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 
+/* LOCAL IMPORTS */
+import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
+
 /**
  * @title AlphixLogic
  * @notice Upgradeable logic for Alphix Hook.
@@ -21,7 +24,8 @@ contract AlphixLogic is
     Ownable2StepUpgradeable,
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
-    PausableUpgradeable
+    PausableUpgradeable,
+    IAlphixLogic
 {
     /* STORAGE */
     /**
@@ -53,7 +57,19 @@ contract AlphixLogic is
     }
 
     /* CORE HOOK LOGIC */
-    function getFee(PoolKey calldata key) external view whenNotPaused returns (uint24) {
+
+    /**
+     * @dev See {IAlphixLogic-getFee}.
+     */
+    function getFee(PoolKey calldata key) external view returns (uint24) {
+        // Example: return baseFee directly
+        return baseFee;
+    }
+
+    /**
+     * @dev Temporary function
+     */
+    function getFee() external view returns (uint24) {
         // Example: return baseFee directly
         return baseFee;
     }
@@ -78,5 +94,10 @@ contract AlphixLogic is
     }
 
     /* UUPS AUTHORIZATION */
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal view override onlyOwner {
+        try IAlphixLogic(newImplementation).getFee() returns (uint24) {}
+        catch {
+            revert InvalidLogicContract();
+        }
+    }
 }
