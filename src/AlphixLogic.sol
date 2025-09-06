@@ -19,7 +19,7 @@ import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 import {IAlphix} from "./interfaces/IAlphix.sol";
 
 /**
- * @title AlphixLogic
+ * @title AlphixLogic.
  * @notice Upgradeable logic for Alphix Hook.
  * @dev Deployed behind an ERC1967Proxy.
  */
@@ -32,11 +32,12 @@ contract AlphixLogic is
     IAlphixLogic
 {
     using LPFeeLibrary for uint24;
+
     /* STORAGE */
+
     /**
      * @dev The address of the Alphix Hook.
      */
-
     address private alphixHook;
     /**
      * @dev Base fee e.g. 3000 = 0.3%.
@@ -44,11 +45,13 @@ contract AlphixLogic is
     uint24 private baseFee;
 
     /* STORAGE GAP */
+
     uint256[50] private __gap;
 
     /* MODIFIERS */
+
     /**
-     * @notice Enforce sender logic to be alphix hook
+     * @notice Enforce sender logic to be alphix hook.
      */
     modifier onlyAlphixHook() {
         if (msg.sender != alphixHook) {
@@ -58,6 +61,7 @@ contract AlphixLogic is
     }
 
     /* CONSTRUCTOR */
+
     /**
      * @dev The deployed logic contract cannot later be initialized.
      */
@@ -66,6 +70,7 @@ contract AlphixLogic is
     }
 
     /* INITIALIZER */
+
     function initialize(address _owner, address _alphixHook, uint24 _baseFee) public initializer {
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
@@ -79,6 +84,7 @@ contract AlphixLogic is
     }
 
     /* CORE HOOK LOGIC */
+
     /**
      * @dev See {IAlphixLogic-beforeInitialize}.
      */
@@ -115,7 +121,7 @@ contract AlphixLogic is
     }
 
     /**
-     * @dev Temporary function
+     * @dev Temporary function.
      */
     function getFee() external view returns (uint24) {
         // Example: return baseFee directly
@@ -123,6 +129,7 @@ contract AlphixLogic is
     }
 
     /* ADMIN FUNCTIONS */
+
     /**
      * @notice Pause the contract.
      */
@@ -142,6 +149,7 @@ contract AlphixLogic is
     }
 
     /* UUPS AUTHORIZATION */
+
     function _authorizeUpgrade(address newImplementation) internal view override onlyOwner {
         try IAlphixLogic(newImplementation).getFee() returns (uint24) {}
         catch {

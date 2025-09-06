@@ -53,21 +53,21 @@ interface IAlphix {
 
     /**
      * @notice Set a new logic contract address.
-     * @param newLogic The new logic contract address
-     * @param key A sample pool key for validation
-     * @dev Validates the new logic contract implements required interface
+     * @param newLogic The new logic contract address.
+     * @param key A sample pool key for validation.
+     * @dev Validates the new logic contract implements required interface.
      */
     function setLogic(address newLogic, PoolKey calldata key) external;
 
     /**
      * @notice Pause the contract.
-     * @dev Only callable by owner, prevents most contract operations
+     * @dev Only callable by owner, prevents most contract operations.
      */
     function pause() external;
 
     /**
      * @notice Unpause the contract.
-     * @dev Only callable by owner, restores normal contract operations
+     * @dev Only callable by owner, restores normal contract operations.
      */
     function unpause() external;
 
@@ -75,7 +75,7 @@ interface IAlphix {
 
     /**
      * @notice Get the current logic contract address.
-     * @return currentLogic The address of the current logic contract
+     * @return currentLogic The address of the current logic contract.
      */
     function getLogic() external view returns (address currentLogic);
 }

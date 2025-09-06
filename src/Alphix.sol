@@ -47,7 +47,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     }
 
     /**
-     * @notice Enforce sender logic to be logic
+     * @notice Enforce sender logic to be logic.
      */
     modifier onlyLogic() {
         if (msg.sender != logic) {
