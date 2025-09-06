@@ -14,6 +14,9 @@ import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
+import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
@@ -128,6 +131,84 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         returns (bytes4)
     {
         return IAlphixLogic(logic).afterInitialize(sender, key, sqrtPriceX96, tick);
+    }
+
+    /**
+     * @dev See {BaseHook-_beforeAddLiquidity}.
+     */
+    function _beforeAddLiquidity(
+        address sender,
+        PoolKey calldata key,
+        ModifyLiquidityParams calldata params,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4) {
+        return IAlphixLogic(logic).beforeAddLiquidity(sender, key, params, hookData);
+    }
+
+    /**
+     * @dev See {BaseHook-_beforeRemoveLiquidity}.
+     */
+    function _beforeRemoveLiquidity(
+        address sender,
+        PoolKey calldata key,
+        ModifyLiquidityParams calldata params,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4) {
+        return IAlphixLogic(logic).beforeRemoveLiquidity(sender, key, params, hookData);
+    }
+
+    /**
+     * @dev See {BaseHook-_afterAddLiquidity}.
+     */
+    function _afterAddLiquidity(
+        address sender,
+        PoolKey calldata key,
+        ModifyLiquidityParams calldata params,
+        BalanceDelta delta0,
+        BalanceDelta delta1,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4, BalanceDelta) {
+        return IAlphixLogic(logic).afterAddLiquidity(sender, key, params, delta0, delta1, hookData);
+    }
+
+    /**
+     * @dev See {BaseHook-_afterRemoveLiquidity}.
+     */
+    function _afterRemoveLiquidity(
+        address sender,
+        PoolKey calldata key,
+        ModifyLiquidityParams calldata params,
+        BalanceDelta delta0,
+        BalanceDelta delta1,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4, BalanceDelta) {
+        return IAlphixLogic(logic).afterRemoveLiquidity(sender, key, params, delta0, delta1, hookData);
+    }
+
+    /**
+     * @dev See {BaseHook-_beforeSwap}.
+     */
+    function _beforeSwap(address sender, PoolKey calldata key, SwapParams calldata params, bytes calldata hookData)
+        internal
+        override
+        validLogic
+        whenNotPaused
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        return IAlphixLogic(logic).beforeSwap(sender, key, params, hookData);
+    }
+
+    /**
+     * @dev See {BaseHook-_afterSwap}.
+     */
+    function _afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4, int128) {
+        return IAlphixLogic(logic).afterSwap(sender, key, params, delta, hookData);
     }
 
     /* ADMIN FUNCTIONS */

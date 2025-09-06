@@ -13,6 +13,9 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
+import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
 
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
@@ -99,7 +102,7 @@ contract AlphixLogic is
     }
 
     /**
-     * @dev See {BaseHook-afterInitialize}.
+     * @dev See {IAlphixLogic-afterInitialize}.
      */
     function afterInitialize(address, PoolKey calldata key, uint160, int24)
         external
@@ -110,6 +113,86 @@ contract AlphixLogic is
         if (!key.fee.isDynamicFee()) revert BaseDynamicFee.NotDynamicFee();
         BaseDynamicFee(alphixHook).poke(key);
         return BaseHook.afterInitialize.selector;
+    }
+
+    /**
+     * @dev See {IAlphixLogic-beforeAddLiquidity}.
+     */
+    function beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        returns (bytes4)
+    {
+        return BaseHook.beforeAddLiquidity.selector;
+    }
+
+    /**
+     * @dev See {IAlphixLogic-beforeRemoveLiquidity}.
+     */
+    function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        returns (bytes4)
+    {
+        return BaseHook.beforeRemoveLiquidity.selector;
+    }
+
+    /**
+     * @dev See {IAlphixLogic-afterAddLiquidity}.
+     */
+    function afterAddLiquidity(
+        address,
+        PoolKey calldata,
+        ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) external view override onlyAlphixHook returns (bytes4, BalanceDelta) {
+        return (BaseHook.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+    }
+
+    /**
+     * @dev See {IAlphixLogic-afterRemoveLiquidity}.
+     */
+    function afterRemoveLiquidity(
+        address,
+        PoolKey calldata,
+        ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) external view override onlyAlphixHook returns (bytes4, BalanceDelta) {
+        return (BaseHook.afterRemoveLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+    }
+
+    /**
+     * @dev See {IAlphixLogic-beforeSwap}.
+     */
+    function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    /**
+     * @dev See {IAlphixLogic-afterSwap}.
+     */
+    function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        returns (bytes4, int128)
+    {
+        return (BaseHook.afterSwap.selector, 0);
     }
 
     /**
