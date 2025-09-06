@@ -29,7 +29,7 @@ interface IAlphix {
     event LogicUpdated(address oldLogic, address newLogic);
 
     /* ERRORS */
-    
+
     /**
      * @dev Thrown when logic contract is not set.
      */

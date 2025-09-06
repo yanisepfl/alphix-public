@@ -167,13 +167,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     /**
      * @dev See {BaseDynamicFee-poke}.
      */
-    function poke(PoolKey calldata key)
-        external
-        override
-        onlyValidPools(key.hooks)
-        onlyLogic
-        nonReentrant
-    {
+    function poke(PoolKey calldata key) external override onlyValidPools(key.hooks) onlyLogic nonReentrant {
         uint24 newFee = _getFee(key);
         _setDynamicFee(key, newFee);
     }
@@ -188,7 +182,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     }
 
     /* INTERNAL FUNCTIONS */
-    
+
     /**
      * @notice Setter for the initial logic.
      * @param newLogic The initial logic address.

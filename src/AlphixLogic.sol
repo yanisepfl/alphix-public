@@ -36,6 +36,7 @@ contract AlphixLogic is
     /**
      * @dev The address of the Alphix Hook.
      */
+
     address private alphixHook;
     /**
      * @dev Base fee e.g. 3000 = 0.3%.
@@ -94,12 +95,16 @@ contract AlphixLogic is
     /**
      * @dev See {BaseHook-afterInitialize}.
      */
-    function afterInitialize(address, PoolKey calldata key, uint160, int24) external override onlyAlphixHook returns (bytes4) {
+    function afterInitialize(address, PoolKey calldata key, uint160, int24)
+        external
+        override
+        onlyAlphixHook
+        returns (bytes4)
+    {
         if (!key.fee.isDynamicFee()) revert BaseDynamicFee.NotDynamicFee();
         BaseDynamicFee(alphixHook).poke(key);
         return BaseHook.afterInitialize.selector;
     }
-    
 
     /**
      * @dev See {IAlphixLogic-getFee}.

@@ -28,5 +28,7 @@ interface IAlphixLogic {
 
     /* HOOK ENTRY POINTS */
     function beforeInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96) external returns (bytes4);
-    function afterInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96, int24 tick) external returns (bytes4);
+    function afterInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96, int24 tick)
+        external
+        returns (bytes4);
 }
