@@ -6,89 +6,136 @@ import {BaseDynamicFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseDynamicFee
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
+import {IAlphix} from "./interfaces/IAlphix.sol";
 
 /**
- * @title Alphix
+ * @title Alphix.
  * @notice Uniswap v4 Dynamic Fee Hook delegating logic to AlphixLogic.
  * @dev Uses OpenZeppelin 5 security patterns.
  */
-contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable {
+contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Initializable, IAlphix {
     using StateLibrary for IPoolManager;
 
     /* STORAGE */
+
     /**
      * @dev Upgradeable logic of Alphix.
      */
     address private logic;
 
-    /* EVENTS */
-    /**
-     * @dev Emitted at every fee change.
-     */
-    event FeeUpdated(PoolId indexed poolId, uint24 oldFee, uint24 newFee);
-
-    /**
-     * @dev Emitted upon logic change.
-     */
-    event LogicUpdated(address oldLogic, address newLogic);
-
-    /* ERRORS */
-    error LogicNotSet();
-    error InvalidAddress();
-
     /* MODIFIERS */
+
     /**
      * @notice Enforce logic to be not null.
      */
-    modifier ValidLogic() {
+    modifier validLogic() {
         if (logic == address(0)) {
             revert LogicNotSet();
         }
         _;
     }
 
+    /**
+     * @notice Enforce sender logic to be logic
+     */
+    modifier onlyLogic() {
+        if (msg.sender != logic) {
+            revert IAlphixLogic.InvalidCaller();
+        }
+        _;
+    }
+
     /* CONSTRUCTOR */
+
     /**
      * @dev Initialize with PoolManager and alphixManager addresses.
      */
     constructor(IPoolManager _poolManager, address _alphixManager)
         BaseDynamicFee(_poolManager)
         Ownable(_alphixManager)
-    {}
-
-    /* ADMIN FUNCTIONS */
-    /**
-     * @dev See {BaseDynamicFee-poke}.
-     */
-    function poke(PoolKey calldata key)
-        external
-        override
-        onlyValidPools(key.hooks)
-        onlyOwner
-        nonReentrant
-        whenNotPaused
     {
-        PoolId poolId = key.toId();
-        (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
-        uint24 newFee = _getFee(key);
-        poolManager.updateDynamicLPFee(key, newFee);
-        emit FeeUpdated(poolId, oldFee, newFee);
+        pause();
+    }
+
+    /* INITIALIZER */
+
+    /**
+     * @dev See {IAlphix-initialize}.
+     */
+    function initialize(address _logic) public override onlyOwner initializer {
+        _setInitialLogic(_logic);
+        unpause();
+    }
+
+    /* HOOK PERMISSIONS */
+
+    /**
+     * @dev See {BaseDynamicFee-getHookPermissions}.
+     */
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory permissions) {
+        return Hooks.Permissions({
+            beforeInitialize: true,
+            afterInitialize: true,
+            beforeAddLiquidity: true,
+            afterAddLiquidity: true,
+            beforeRemoveLiquidity: true,
+            afterRemoveLiquidity: true,
+            beforeSwap: true,
+            afterSwap: true,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: false,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    /* HOOK ENTRY POINTS */
+
+    /**
+     * @dev See {BaseHook-_beforeInitialize}.
+     */
+    function _beforeInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96)
+        internal
+        override
+        validLogic
+        whenNotPaused
+        returns (bytes4)
+    {
+        return IAlphixLogic(logic).beforeInitialize(sender, key, sqrtPriceX96);
     }
 
     /**
-     * @notice Setter for the logic.
-     * @param newLogic The new logic address.
+     * @dev See {BaseHook-_afterInitialize}.
      */
-    function setLogic(address newLogic, PoolKey calldata key) external onlyOwner nonReentrant {
+    function _afterInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96, int24 tick)
+        internal
+        override
+        validLogic
+        whenNotPaused
+        returns (bytes4)
+    {
+        return IAlphixLogic(logic).afterInitialize(sender, key, sqrtPriceX96, tick);
+    }
+
+    /* ADMIN FUNCTIONS */
+
+    /**
+     * @dev See {IAlphix-setLogic}.
+     */
+    function setLogic(address newLogic, PoolKey calldata key) external override onlyOwner nonReentrant {
         if (newLogic == address(0)) {
             revert InvalidAddress();
         }
@@ -102,33 +149,74 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice Pause the contract.
+     * @dev See {IAlphix-pause}.
      */
-    function pause() external onlyOwner {
+    function pause() public override onlyOwner {
         _pause();
     }
 
     /**
-     * @notice Unpause the contract.
+     * @dev See {IAlphix-unpause}.
      */
-    function unpause() external onlyOwner {
+    function unpause() public override onlyOwner {
         _unpause();
     }
 
-    /* GETTERS */
+    /* LOGIC FUNCTIONS */
+
     /**
-     * @notice Getter for the logic.
-     * @return currentLogic The current logic address.
+     * @dev See {BaseDynamicFee-poke}.
      */
-    function getLogic() external view returns (address) {
+    function poke(PoolKey calldata key)
+        external
+        override
+        onlyValidPools(key.hooks)
+        onlyLogic
+        nonReentrant
+    {
+        uint24 newFee = _getFee(key);
+        _setDynamicFee(key, newFee);
+    }
+
+    /* GETTERS */
+
+    /**
+     * @dev See {IAlphix-getLogic}.
+     */
+    function getLogic() external view override returns (address) {
         return logic;
     }
 
     /* INTERNAL FUNCTIONS */
+    
+    /**
+     * @notice Setter for the initial logic.
+     * @param newLogic The initial logic address.
+     */
+    function _setInitialLogic(address newLogic) internal {
+        if (newLogic == address(0)) {
+            revert InvalidAddress();
+        }
+        logic = newLogic;
+        emit LogicUpdated(address(0), newLogic);
+    }
+
+    /**
+     * @notice Setter for the fee of a key.
+     * @param key The key to set the fee for.
+     * @param newFee The fee to set.
+     */
+    function _setDynamicFee(PoolKey calldata key, uint24 newFee) internal whenNotPaused {
+        PoolId poolId = key.toId();
+        (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
+        poolManager.updateDynamicLPFee(key, newFee);
+        emit FeeUpdated(poolId, oldFee, newFee);
+    }
+
     /**
      * @dev See {BaseDynamicFee-_getFee}.
      */
-    function _getFee(PoolKey calldata key) internal view override ValidLogic returns (uint24 fee) {
+    function _getFee(PoolKey calldata key) internal view override validLogic returns (uint24 fee) {
         return IAlphixLogic(logic).getFee(key);
     }
 }
