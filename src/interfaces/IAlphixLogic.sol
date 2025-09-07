@@ -44,35 +44,7 @@ interface IAlphixLogic {
     error PoolAlreadyConfigured();
     error PoolNotConfigured();
 
-    /* CORE FUNCTIONS */
-
-    /**
-     * @notice Activate pool and configure it with initial parameters.
-     * @param key The key of the pool to activate and configure.
-     * @param _initialFee The initial fee of the pool to configure.
-     * @param _initialTargetRatio The initial target ratio of the pool to configure.
-     * @param _poolType The pool type of the pool to configure.
-     */
-    function activateAndConfigurePool(
-        PoolKey calldata key,
-        uint24 _initialFee,
-        uint256 _initialTargetRatio,
-        PoolType _poolType
-    ) external;
-
-    /**
-     * @notice Deactivate pool.
-     * @param key The key of the pool to activate.
-     */
-    function activatePool(PoolKey calldata key) external;
-
-    /**
-     * @notice Deactivate pool.
-     * @param key The key of the pool to deactivate.
-     */
-    function deactivatePool(PoolKey calldata key) external;
-
-    /* HOOK ENTRY POINTS */
+    /* CORE HOOK LOGIC */
 
     /**
      * @notice The hook called before the state of a pool is initialized.
@@ -197,7 +169,47 @@ interface IAlphixLogic {
         bytes calldata hookData
     ) external returns (bytes4, int128);
 
-    /* VIEW FUNCTIONS */
+    /**
+     * @notice Activate pool and configure it with initial parameters.
+     * @param key The key of the pool to activate and configure.
+     * @param _initialFee The initial fee of the pool to configure.
+     * @param _initialTargetRatio The initial target ratio of the pool to configure.
+     * @param _poolType The pool type of the pool to configure.
+     */
+    function activateAndConfigurePool(
+        PoolKey calldata key,
+        uint24 _initialFee,
+        uint256 _initialTargetRatio,
+        PoolType _poolType
+    ) external;
+
+    /**
+     * @notice Deactivate pool.
+     * @param key The key of the pool to activate.
+     */
+    function activatePool(PoolKey calldata key) external;
+
+    /**
+     * @notice Deactivate pool.
+     * @param key The key of the pool to deactivate.
+     */
+    function deactivatePool(PoolKey calldata key) external;
+
+    /**
+     * @notice Check if fee is valid for pool type.
+     * @param poolType The pool type.
+     * @param fee The fee to validate.
+     * @return isValid True if fee is within bounds.
+     */
+    function isValidFeeForPoolType(PoolType poolType, uint24 fee) external view returns (bool isValid);
+
+    /* GETTERS */
+
+    /**
+     * @notice Get the Alphix Hook address.
+     * @return hookAddress The address of the main Alphix hook contract.
+     */
+    function getAlphixHook() external view returns (address hookAddress);
 
     /**
      * @notice Getter for the fee of a given pool.
@@ -221,12 +233,4 @@ interface IAlphixLogic {
      * @return bounds The fee bounds for the pool type.
      */
     function getPoolTypeBounds(PoolType poolType) external view returns (PoolTypeBounds memory bounds);
-
-    /**
-     * @notice Check if fee is valid for pool type.
-     * @param poolType The pool type.
-     * @param fee The fee to validate.
-     * @return isValid True if fee is within bounds.
-     */
-    function isValidFeeForPoolType(PoolType poolType, uint24 fee) external view returns (bool isValid);
 }

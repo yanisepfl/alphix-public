@@ -336,6 +336,13 @@ contract AlphixLogic is
     /* GETTERS */
 
     /**
+     * @dev See {IAlphixLogic-getAlphixHook}.
+     */
+    function getAlphixHook() external view override returns (address) {
+        return alphixHook;
+    }
+
+    /**
      * @dev See {IAlphixLogic-getFee}.
      */
     function getFee(PoolKey calldata) external view returns (uint24) {
