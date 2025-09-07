@@ -11,7 +11,7 @@ import {IAlphixLogic} from "./IAlphixLogic.sol";
 /**
  * @title IAlphix.
  * @notice Interface for the Alphix Uniswap v4 Hook.
- * @dev Defines the external API for the hook.
+ * @dev All user-facing operations go through this contract.
  */
 interface IAlphix {
     /* EVENTS */
@@ -30,6 +30,29 @@ interface IAlphix {
      * @param newLogic The new logic contract address.
      */
     event LogicUpdated(address oldLogic, address newLogic);
+
+    /**
+     * @dev Emitted upon pool configuration.
+     * @param poolId The pool ID of the pool that has been configured.
+     * @param initialFee The initial fee of the pool that has been configured.
+     * @param initialTargetRatio The initial target ratio of the pool that has been configured.
+     * @param poolType The pool type of the pool that has been configured.
+     */
+    event PoolConfigured(
+        PoolId indexed poolId, uint24 initialFee, uint256 initialTargetRatio, IAlphixLogic.PoolType poolType
+    );
+
+    /**
+     * @dev Emitted upon pool activation.
+     * @param poolId The pool ID of the pool that has been activated.
+     */
+    event PoolActivated(PoolId indexed poolId);
+
+    /**
+     * @dev Emitted upon pool deactivation.
+     * @param poolId The pool ID of the pool that has been deactivated.
+     */
+    event PoolDeactivated(PoolId indexed poolId);
 
     /* ERRORS */
 
@@ -75,6 +98,18 @@ interface IAlphix {
         uint256 _initialTargetRatio,
         IAlphixLogic.PoolType _poolType
     ) external;
+
+    /**
+     * @notice Deactivate pool.
+     * @param key The key of the pool to activate.
+     */
+    function activatePool(PoolKey calldata key) external;
+
+    /**
+     * @notice Deactivate pool.
+     * @param key The key of the pool to deactivate.
+     */
+    function deactivatePool(PoolKey calldata key) external;
 
     /**
      * @notice Pause the contract.

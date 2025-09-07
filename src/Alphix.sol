@@ -243,6 +243,20 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     }
 
     /**
+     * @dev See {IAlphix-activatePool}.
+     */
+    function activatePool(PoolKey calldata key) external override onlyOwner whenNotPaused {
+        IAlphixLogic(logic).activatePool(key);
+    }
+
+    /**
+     * @dev See {IAlphix-deactivatePool}.
+     */
+    function deactivatePool(PoolKey calldata key) external override onlyOwner whenNotPaused {
+        IAlphixLogic(logic).deactivatePool(key);
+    }
+
+    /**
      * @dev See {IAlphix-pause}.
      */
     function pause() public override onlyOwner {

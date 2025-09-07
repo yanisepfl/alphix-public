@@ -266,6 +266,22 @@ contract AlphixLogic is
         poolActive[poolId] = true;
     }
 
+    /**
+     * @dev See {IAlphixLogic-activatePool}.
+     */
+    function activatePool(PoolKey calldata key) external override onlyAlphixHook whenNotPaused poolConfigured(key) {
+        PoolId poolId = key.toId();
+        poolActive[poolId] = true;
+    }
+
+    /**
+     * @dev See {IAlphixLogic-deactivatePool}.
+     */
+    function deactivatePool(PoolKey calldata key) external override onlyAlphixHook whenNotPaused {
+        PoolId poolId = key.toId();
+        poolActive[poolId] = false;
+    }
+
     /* GETTERS */
 
     /**
@@ -285,22 +301,6 @@ contract AlphixLogic is
     }
 
     /* ADMIN FUNCTIONS */
-
-    /**
-     * @dev See {IAlphixLogic-activatePool}.
-     */
-    function activatePool(PoolKey calldata key) external override onlyOwner whenNotPaused poolConfigured(key) {
-        PoolId poolId = key.toId();
-        poolActive[poolId] = true;
-    }
-
-    /**
-     * @dev See {IAlphixLogic-deactivatePool}.
-     */
-    function deactivatePool(PoolKey calldata key) external override onlyOwner whenNotPaused {
-        PoolId poolId = key.toId();
-        poolActive[poolId] = false;
-    }
 
     /**
      * @notice Pause the contract.
