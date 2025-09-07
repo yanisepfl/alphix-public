@@ -58,6 +58,11 @@ contract AlphixLogic is
      */
     mapping(PoolId => PoolConfig) private poolConfig;
 
+    /**
+     * @dev Fee bounds per pool type.
+     */
+    mapping(PoolType => PoolTypeBounds) private poolTypeBounds;
+
     /* STORAGE GAP */
 
     uint256[50] private __gap;
@@ -118,7 +123,14 @@ contract AlphixLogic is
 
     /* INITIALIZER */
 
-    function initialize(address _owner, address _alphixHook, uint24 _baseFee) public initializer {
+    function initialize(
+        address _owner,
+        address _alphixHook,
+        uint24 _baseFee,
+        PoolTypeBounds memory _stableBounds,
+        PoolTypeBounds memory _standardBounds,
+        PoolTypeBounds memory _volatileBounds
+    ) public initializer {
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
@@ -128,6 +140,11 @@ contract AlphixLogic is
 
         alphixHook = _alphixHook;
         baseFee = _baseFee;
+
+        // Initialize fee bounds for each pool type
+        poolTypeBounds[PoolType.STABLE] = _stableBounds;
+        poolTypeBounds[PoolType.STANDARD] = _standardBounds;
+        poolTypeBounds[PoolType.VOLATILE] = _volatileBounds;
     }
 
     /* CORE HOOK LOGIC */
@@ -282,22 +299,18 @@ contract AlphixLogic is
         poolActive[poolId] = false;
     }
 
-    /* GETTERS */
-
     /**
-     * @dev See {IAlphixLogic-getFee}.
+     * @dev See {IAlphixLogic-isValidFeeForPoolType}.
      */
-    function getFee(PoolKey calldata) external view returns (uint24) {
-        // Example: return baseFee directly
-        return baseFee;
-    }
-
-    /**
-     * @dev Temporary function.
-     */
-    function getFee() external view returns (uint24) {
-        // Example: return baseFee directly
-        return baseFee;
+    function isValidFeeForPoolType(PoolType poolType, uint24 fee)
+        external
+        view
+        override
+        onlyAlphixHook
+        returns (bool)
+    {
+        PoolTypeBounds memory bounds = poolTypeBounds[poolType];
+        return fee >= bounds.minFee && fee <= bounds.maxFee;
     }
 
     /* ADMIN FUNCTIONS */
@@ -318,6 +331,38 @@ contract AlphixLogic is
 
     function setParams(uint24 _baseFee) external onlyOwner {
         baseFee = _baseFee;
+    }
+
+    /* GETTERS */
+
+    /**
+     * @dev See {IAlphixLogic-getFee}.
+     */
+    function getFee(PoolKey calldata) external view returns (uint24) {
+        // Example: return baseFee directly
+        return baseFee;
+    }
+
+    /**
+     * @dev Temporary function.
+     */
+    function getFee() external view returns (uint24) {
+        // Example: return baseFee directly
+        return baseFee;
+    }
+
+    /**
+     * @dev See {IAlphixLogic-getPoolConfig}.
+     */
+    function getPoolConfig(PoolId poolId) external view override returns (PoolConfig memory) {
+        return poolConfig[poolId];
+    }
+
+    /**
+     * @dev See {IAlphixLogic-getPoolTypeBounds}.
+     */
+    function getPoolTypeBounds(PoolType poolType) external view override returns (PoolTypeBounds memory) {
+        return poolTypeBounds[poolType];
     }
 
     /* UUPS AUTHORIZATION */

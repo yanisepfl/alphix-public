@@ -238,6 +238,9 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         uint256 _initialTargetRatio,
         IAlphixLogic.PoolType _poolType
     ) external override onlyOwner nonReentrant whenNotPaused {
+        if (!IAlphixLogic(logic).isValidFeeForPoolType(_poolType, _initialFee)) {
+            revert InvalidFeeForPoolType(_poolType, _initialFee);
+        }
         IAlphixLogic(logic).activateAndConfigurePool(key, _initialFee, _initialTargetRatio, _poolType);
         _setDynamicFee(key, _initialFee);
         PoolId poolId = key.toId();
@@ -293,6 +296,14 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
      */
     function getLogic() external view override returns (address) {
         return logic;
+    }
+
+    /**
+     * @dev See {IAlphix-getPoolTypeBounds}.
+     */
+    function getPoolBounds(PoolId poolId) external view returns (IAlphixLogic.PoolTypeBounds memory) {
+        IAlphixLogic.PoolType poolType = IAlphixLogic(logic).getPoolConfig(poolId).poolType;
+        return IAlphixLogic(logic).getPoolTypeBounds(poolType);
     }
 
     /* INTERNAL FUNCTIONS */

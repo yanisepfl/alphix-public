@@ -6,6 +6,7 @@ import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId} from "v4-core/src/types/PoolId.sol";
 
 /**
  * @title IAlphixLogic.
@@ -30,6 +31,11 @@ interface IAlphixLogic {
         bool isConfigured;
     }
 
+    struct PoolTypeBounds {
+        uint24 minFee;
+        uint24 maxFee;
+    }
+
     /* ERRORS */
 
     error InvalidLogicContract();
@@ -39,15 +45,6 @@ interface IAlphixLogic {
     error PoolNotConfigured();
 
     /* CORE FUNCTIONS */
-
-    /**
-     * @notice Getter for the fee of a given pool.
-     * @param key The key of the pool to retrieve the fee of.
-     * @return The fee of the given pool.
-     */
-    function getFee(PoolKey calldata key) external view returns (uint24);
-
-    function getFee() external view returns (uint24);
 
     /**
      * @notice Activate pool and configure it with initial parameters.
@@ -199,4 +196,37 @@ interface IAlphixLogic {
         BalanceDelta delta,
         bytes calldata hookData
     ) external returns (bytes4, int128);
+
+    /* VIEW FUNCTIONS */
+
+    /**
+     * @notice Getter for the fee of a given pool.
+     * @param key The key of the pool to retrieve the fee of.
+     * @return The fee of the given pool.
+     */
+    function getFee(PoolKey calldata key) external view returns (uint24);
+
+    function getFee() external view returns (uint24);
+
+    /**
+     * @notice Get pool config for a specific pool.
+     * @param poolId The pool ID of the pool to get configs for.
+     * @return poolConfig The configs for the given pool.
+     */
+    function getPoolConfig(PoolId poolId) external view returns (PoolConfig memory poolConfig);
+
+    /**
+     * @notice Get fee bounds for a specific pool type.
+     * @param poolType The pool type to get bounds for.
+     * @return bounds The fee bounds for the pool type.
+     */
+    function getPoolTypeBounds(PoolType poolType) external view returns (PoolTypeBounds memory bounds);
+
+    /**
+     * @notice Check if fee is valid for pool type.
+     * @param poolType The pool type.
+     * @param fee The fee to validate.
+     * @return isValid True if fee is within bounds.
+     */
+    function isValidFeeForPoolType(PoolType poolType, uint24 fee) external view returns (bool isValid);
 }

@@ -66,6 +66,11 @@ interface IAlphix {
      */
     error InvalidAddress();
 
+    /**
+     * @dev Thrown when fee is invalid for the pool type.
+     */
+    error InvalidFeeForPoolType(IAlphixLogic.PoolType poolType, uint24 fee);
+
     /* INITIALIZER */
 
     /**
