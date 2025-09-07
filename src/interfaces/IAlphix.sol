@@ -5,6 +5,9 @@ pragma solidity ^0.8.26;
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 
+/* LOCAL IMPORTS */
+import {IAlphixLogic} from "./IAlphixLogic.sol";
+
 /**
  * @title IAlphix.
  * @notice Interface for the Alphix Uniswap v4 Hook.
@@ -58,6 +61,20 @@ interface IAlphix {
      * @dev Validates the new logic contract implements required interface.
      */
     function setLogic(address newLogic, PoolKey calldata key) external;
+
+    /**
+     * @notice Initialize pool by activating and configuring it, and sets its initial fee.
+     * @param key The key of the pool to initialize.
+     * @param _initialFee The initial fee of the pool to initialize.
+     * @param _initialTargetRatio The initial target ratio of the pool to initialize.
+     * @param _poolType The pool type of the pool to initialize.
+     */
+    function initializePool(
+        PoolKey calldata key,
+        uint24 _initialFee,
+        uint256 _initialTargetRatio,
+        IAlphixLogic.PoolType _poolType
+    ) external;
 
     /**
      * @notice Pause the contract.

@@ -12,6 +12,7 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
@@ -47,6 +48,16 @@ contract AlphixLogic is
      */
     uint24 private baseFee;
 
+    /**
+     * @dev Per-pool active status.
+     */
+    mapping(PoolId => bool) private poolActive;
+
+    /**
+     * @dev Per-pool config.
+     */
+    mapping(PoolId => PoolConfig) private poolConfig;
+
     /* STORAGE GAP */
 
     uint256[50] private __gap;
@@ -59,6 +70,39 @@ contract AlphixLogic is
     modifier onlyAlphixHook() {
         if (msg.sender != alphixHook) {
             revert InvalidCaller();
+        }
+        _;
+    }
+
+    /**
+     * @notice Check if pool is not paused.
+     */
+    modifier poolActivated(PoolKey calldata key) {
+        PoolId poolId = key.toId();
+        if (!poolActive[poolId]) {
+            revert PoolPaused();
+        }
+        _;
+    }
+
+    /**
+     * @notice Check if pool has not already been configured.
+     */
+    modifier poolUnconfigured(PoolKey calldata key) {
+        PoolId poolId = key.toId();
+        if (poolConfig[poolId].isConfigured) {
+            revert PoolAlreadyConfigured();
+        }
+        _;
+    }
+
+    /**
+     * @notice Check if pool has already been configured.
+     */
+    modifier poolConfigured(PoolKey calldata key) {
+        PoolId poolId = key.toId();
+        if (!poolConfig[poolId].isConfigured) {
+            revert PoolNotConfigured();
         }
         _;
     }
@@ -96,6 +140,7 @@ contract AlphixLogic is
         view
         override
         onlyAlphixHook
+        whenNotPaused
         returns (bytes4)
     {
         return BaseHook.beforeInitialize.selector;
@@ -106,23 +151,26 @@ contract AlphixLogic is
      */
     function afterInitialize(address, PoolKey calldata key, uint160, int24)
         external
+        view
         override
         onlyAlphixHook
+        whenNotPaused
         returns (bytes4)
     {
         if (!key.fee.isDynamicFee()) revert BaseDynamicFee.NotDynamicFee();
-        BaseDynamicFee(alphixHook).poke(key);
         return BaseHook.afterInitialize.selector;
     }
 
     /**
      * @dev See {IAlphixLogic-beforeAddLiquidity}.
      */
-    function beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+    function beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
         external
         view
         override
         onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
         returns (bytes4)
     {
         return BaseHook.beforeAddLiquidity.selector;
@@ -131,11 +179,13 @@ contract AlphixLogic is
     /**
      * @dev See {IAlphixLogic-beforeRemoveLiquidity}.
      */
-    function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+    function beforeRemoveLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
         external
         view
         override
         onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
         returns (bytes4)
     {
         return BaseHook.beforeRemoveLiquidity.selector;
@@ -146,12 +196,12 @@ contract AlphixLogic is
      */
     function afterAddLiquidity(
         address,
-        PoolKey calldata,
+        PoolKey calldata key,
         ModifyLiquidityParams calldata,
         BalanceDelta,
         BalanceDelta,
         bytes calldata
-    ) external view override onlyAlphixHook returns (bytes4, BalanceDelta) {
+    ) external view override onlyAlphixHook poolActivated(key) whenNotPaused returns (bytes4, BalanceDelta) {
         return (BaseHook.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
     }
 
@@ -160,23 +210,25 @@ contract AlphixLogic is
      */
     function afterRemoveLiquidity(
         address,
-        PoolKey calldata,
+        PoolKey calldata key,
         ModifyLiquidityParams calldata,
         BalanceDelta,
         BalanceDelta,
         bytes calldata
-    ) external view override onlyAlphixHook returns (bytes4, BalanceDelta) {
+    ) external view override onlyAlphixHook poolActivated(key) whenNotPaused returns (bytes4, BalanceDelta) {
         return (BaseHook.afterRemoveLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
     }
 
     /**
      * @dev See {IAlphixLogic-beforeSwap}.
      */
-    function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+    function beforeSwap(address, PoolKey calldata key, SwapParams calldata, bytes calldata)
         external
         view
         override
         onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -185,15 +237,36 @@ contract AlphixLogic is
     /**
      * @dev See {IAlphixLogic-afterSwap}.
      */
-    function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+    function afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
         external
         view
         override
         onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
         returns (bytes4, int128)
     {
         return (BaseHook.afterSwap.selector, 0);
     }
+
+    /**
+     * @dev See {IAlphixLogic-activateAndConfigurePool}.
+     */
+    function activateAndConfigurePool(
+        PoolKey calldata key,
+        uint24 _initialFee,
+        uint256 _initialTargetRatio,
+        PoolType _poolType
+    ) external override onlyAlphixHook poolUnconfigured(key) whenNotPaused {
+        PoolId poolId = key.toId();
+        poolConfig[poolId].initialFee = _initialFee;
+        poolConfig[poolId].initialTargetRatio = _initialTargetRatio;
+        poolConfig[poolId].poolType = _poolType;
+        poolConfig[poolId].isConfigured = true;
+        poolActive[poolId] = true;
+    }
+
+    /* GETTERS */
 
     /**
      * @dev See {IAlphixLogic-getFee}.
@@ -212,6 +285,22 @@ contract AlphixLogic is
     }
 
     /* ADMIN FUNCTIONS */
+
+    /**
+     * @dev See {IAlphixLogic-activatePool}.
+     */
+    function activatePool(PoolKey calldata key) external override onlyOwner whenNotPaused poolConfigured(key) {
+        PoolId poolId = key.toId();
+        poolActive[poolId] = true;
+    }
+
+    /**
+     * @dev See {IAlphixLogic-deactivatePool}.
+     */
+    function deactivatePool(PoolKey calldata key) external override onlyOwner whenNotPaused {
+        PoolId poolId = key.toId();
+        poolActive[poolId] = false;
+    }
 
     /**
      * @notice Pause the contract.

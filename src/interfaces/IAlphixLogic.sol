@@ -13,10 +13,30 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
  * @dev Defines the external API for the upgradeable Hook logic.
  */
 interface IAlphixLogic {
+    /* ENUMS */
+
+    enum PoolType {
+        STABLE,
+        STANDARD,
+        VOLATILE
+    }
+
+    /* STRUCTS */
+
+    struct PoolConfig {
+        uint24 initialFee;
+        uint256 initialTargetRatio;
+        PoolType poolType;
+        bool isConfigured;
+    }
+
     /* ERRORS */
 
     error InvalidLogicContract();
     error InvalidCaller();
+    error PoolPaused();
+    error PoolAlreadyConfigured();
+    error PoolNotConfigured();
 
     /* CORE FUNCTIONS */
 
@@ -28,6 +48,32 @@ interface IAlphixLogic {
     function getFee(PoolKey calldata key) external view returns (uint24);
 
     function getFee() external view returns (uint24);
+
+    /**
+     * @notice Activate pool and configure it with initial parameters.
+     * @param key The key of the pool to activate and configure.
+     * @param _initialFee The initial fee of the pool to configure.
+     * @param _initialTargetRatio The initial target ratio of the pool to configure.
+     * @param _poolType The pool type of the pool to configure.
+     */
+    function activateAndConfigurePool(
+        PoolKey calldata key,
+        uint24 _initialFee,
+        uint256 _initialTargetRatio,
+        PoolType _poolType
+    ) external;
+
+    /**
+     * @notice Deactivate pool.
+     * @param key The key of the pool to activate.
+     */
+    function activatePool(PoolKey calldata key) external;
+
+    /**
+     * @notice Deactivate pool.
+     * @param key The key of the pool to deactivate.
+     */
+    function deactivatePool(PoolKey calldata key) external;
 
     /* HOOK ENTRY POINTS */
 
