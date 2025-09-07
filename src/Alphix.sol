@@ -240,6 +240,8 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     ) external override onlyOwner nonReentrant whenNotPaused {
         IAlphixLogic(logic).activateAndConfigurePool(key, _initialFee, _initialTargetRatio, _poolType);
         _setDynamicFee(key, _initialFee);
+        PoolId poolId = key.toId();
+        emit PoolConfigured(poolId, _initialFee, _initialTargetRatio, _poolType);
     }
 
     /**
@@ -247,6 +249,8 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
      */
     function activatePool(PoolKey calldata key) external override onlyOwner whenNotPaused {
         IAlphixLogic(logic).activatePool(key);
+        PoolId poolId = key.toId();
+        emit PoolActivated(poolId);
     }
 
     /**
@@ -254,6 +258,8 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
      */
     function deactivatePool(PoolKey calldata key) external override onlyOwner whenNotPaused {
         IAlphixLogic(logic).deactivatePool(key);
+        PoolId poolId = key.toId();
+        emit PoolDeactivated(poolId);
     }
 
     /**
