@@ -135,4 +135,10 @@ interface IAlphix {
      * @return currentLogic The address of the current logic contract.
      */
     function getLogic() external view returns (address currentLogic);
+
+    /**
+     * @notice Get the registry address.
+     * @return registry The address of the registry.
+     */
+    function getRegistry() external view returns (address registry);
 }

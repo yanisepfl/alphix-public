@@ -21,6 +21,7 @@ import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 import {IAlphix} from "./interfaces/IAlphix.sol";
+import {IRegistry} from "./interfaces/IRegistry.sol";
 
 /**
  * @title Alphix.
@@ -36,6 +37,11 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
      * @dev Upgradeable logic of Alphix.
      */
     address private logic;
+
+    /**
+     * @dev Address of the registry.
+     */
+    address private registry;
 
     /* MODIFIERS */
 
@@ -64,10 +70,15 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     /**
      * @dev Initialize with PoolManager and alphixManager addresses.
      */
-    constructor(IPoolManager _poolManager, address _alphixManager)
+    constructor(IPoolManager _poolManager, address _alphixManager, address _registry)
         BaseDynamicFee(_poolManager)
         Ownable(_alphixManager)
     {
+        if (address(_poolManager) == address(0) || _alphixManager == address(0) || _registry == address(0)) {
+            revert InvalidAddress();
+        }
+        registry = _registry;
+        IRegistry(registry).registerContract(IRegistry.ContractKey.Alphix, address(this));
         pause();
     }
 
@@ -77,7 +88,11 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
      * @dev See {IAlphix-initialize}.
      */
     function initialize(address _logic) public override onlyOwner initializer {
+        if (_logic == address(0)) {
+            revert InvalidAddress();
+        }
         _setInitialLogic(_logic);
+        IRegistry(registry).registerContract(IRegistry.ContractKey.AlphixLogic, _logic);
         unpause();
     }
 
@@ -244,6 +259,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         IAlphixLogic(logic).activateAndConfigurePool(key, _initialFee, _initialTargetRatio, _poolType);
         _setDynamicFee(key, _initialFee);
         PoolId poolId = key.toId();
+        IRegistry(registry).registerPool(key, _poolType, _initialFee, _initialTargetRatio);
         emit PoolConfigured(poolId, _initialFee, _initialTargetRatio, _poolType);
     }
 
@@ -296,6 +312,13 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
      */
     function getLogic() external view override returns (address) {
         return logic;
+    }
+
+    /**
+     * @dev See {IAlphix-getRegistry}.
+     */
+    function getRegistry() external view override returns (address) {
+        return registry;
     }
 
     /**
