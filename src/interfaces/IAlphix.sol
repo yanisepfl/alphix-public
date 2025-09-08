@@ -32,6 +32,13 @@ interface IAlphix {
     event LogicUpdated(address oldLogic, address newLogic);
 
     /**
+     * @dev Emitted upon registry change.
+     * @param oldRegistry The previous registry contract address.
+     * @param newRegistry The new registry contract address.
+     */
+    event RegistryUpdated(address oldRegistry, address newRegistry);
+
+    /**
      * @dev Emitted upon pool configuration.
      * @param poolId The pool ID of the pool that has been configured.
      * @param initialFee The initial fee of the pool that has been configured.
@@ -89,6 +96,13 @@ interface IAlphix {
      * @dev Validates the new logic contract implements required interface.
      */
     function setLogic(address newLogic, PoolKey calldata key) external;
+
+    /**
+     * @notice Set a new registry contract address.
+     * @param newRegistry The new logic contract address.
+     * @dev Also register Alphix Hook and logic contracts.
+     */
+    function setRegistry(address newRegistry) external;
 
     /**
      * @notice Initialize pool by activating and configuring it, and sets its initial fee.

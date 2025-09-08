@@ -245,6 +245,20 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     }
 
     /**
+     * @dev See {IAlphix-setRegistry}.
+     */
+    function setRegistry(address newRegistry) external override onlyOwner nonReentrant {
+        if (newRegistry == address(0)) {
+            revert InvalidAddress();
+        }
+        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.Alphix, address(this));
+        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
+        address oldRegistry = registry;
+        registry = newRegistry;
+        emit RegistryUpdated(oldRegistry, newRegistry);
+    }
+
+    /**
      * @dev See {IAlphix-initializePool}.
      */
     function initializePool(
