@@ -74,14 +74,14 @@ interface IAlphix {
     error InvalidAddress();
 
     /**
+     * @dev Thrown when a function argument is invalid.
+     */
+    error NullArgument();
+
+    /**
      * @dev Thrown when fee is invalid for the pool type.
      */
     error InvalidFeeForPoolType(IAlphixLogic.PoolType poolType, uint24 fee);
-
-    /**
-     * @dev Thrown when a function argument is null.
-     */
-    error NullArgument();
 
     /* INITIALIZER */
 
@@ -110,6 +110,13 @@ interface IAlphix {
     function setRegistry(address newRegistry) external;
 
     /**
+     * @notice Set per-pool type bounds.
+     * @param poolType The pool type to set bounds of.
+     * @param bounds The bounds to set.
+     */
+    function setPoolTypeBounds(IAlphixLogic.PoolType poolType, IAlphixLogic.PoolTypeBounds calldata bounds) external;
+
+    /**
      * @notice Initialize pool by activating and configuring it, and sets its initial fee.
      * @param key The key of the pool to initialize.
      * @param _initialFee The initial fee of the pool to initialize.
@@ -124,7 +131,7 @@ interface IAlphix {
     ) external;
 
     /**
-     * @notice Deactivate pool.
+     * @notice Activate pool.
      * @param key The key of the pool to activate.
      */
     function activatePool(PoolKey calldata key) external;
@@ -160,4 +167,19 @@ interface IAlphix {
      * @return registry The address of the registry.
      */
     function getRegistry() external view returns (address registry);
+
+    /**
+     * @notice Get the given pool bounds.
+     * @return poolId The pool ID to get the bounds of.
+     */
+    function getPoolBounds(PoolId poolId) external view returns (IAlphixLogic.PoolTypeBounds memory);
+
+    /**
+     * @notice Get the given pool type bounds.
+     * @return poolType The pool type to get the bounds of.
+     */
+    function getPoolTypeBounds(IAlphixLogic.PoolType poolType)
+        external
+        view
+        returns (IAlphixLogic.PoolTypeBounds memory);
 }

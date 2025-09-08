@@ -36,6 +36,16 @@ interface IAlphixLogic {
         uint24 maxFee;
     }
 
+    /* EVENTS */
+
+    /**
+     * @dev Emitted at every pool type bounds change.
+     * @param poolType The pool type to change bounds of.
+     * @param minFee The min fee value.
+     * @param maxFee The max fee value.
+     */
+    event PoolTypeBoundsUpdated(PoolType indexed poolType, uint24 minFee, uint24 maxFee);
+
     /* ERRORS */
 
     error InvalidLogicContract();
@@ -43,6 +53,7 @@ interface IAlphixLogic {
     error PoolPaused();
     error PoolAlreadyConfigured();
     error PoolNotConfigured();
+    error InvalidFeeBounds(uint24 minFee, uint24 maxFee);
 
     /* CORE HOOK LOGIC */
 
@@ -194,6 +205,13 @@ interface IAlphixLogic {
      * @param key The key of the pool to deactivate.
      */
     function deactivatePool(PoolKey calldata key) external;
+
+    /**
+     * @notice Set per-pool type bounds.
+     * @param poolType The pool type to set bounds of.
+     * @param bounds The bounds to set.
+     */
+    function setPoolTypeBounds(PoolType poolType, PoolTypeBounds calldata bounds) external;
 
     /**
      * @notice Check if fee is valid for pool type.

@@ -142,9 +142,9 @@ contract AlphixLogic is
         baseFee = _baseFee;
 
         // Initialize fee bounds for each pool type
-        poolTypeBounds[PoolType.STABLE] = _stableBounds;
-        poolTypeBounds[PoolType.STANDARD] = _standardBounds;
-        poolTypeBounds[PoolType.VOLATILE] = _volatileBounds;
+        _setPoolTypeBounds(PoolType.STABLE, _stableBounds);
+        _setPoolTypeBounds(PoolType.STANDARD, _standardBounds);
+        _setPoolTypeBounds(PoolType.VOLATILE, _volatileBounds);
     }
 
     /* CORE HOOK LOGIC */
@@ -300,6 +300,18 @@ contract AlphixLogic is
     }
 
     /**
+     * @dev See {IAlphixLogic-setPoolTypeBounds}.
+     */
+    function setPoolTypeBounds(PoolType poolType, PoolTypeBounds calldata bounds)
+        external
+        override
+        onlyAlphixHook
+        whenNotPaused
+    {
+        _setPoolTypeBounds(poolType, bounds);
+    }
+
+    /**
      * @dev See {IAlphixLogic-isValidFeeForPoolType}.
      */
     function isValidFeeForPoolType(PoolType poolType, uint24 fee)
@@ -370,6 +382,19 @@ contract AlphixLogic is
      */
     function getPoolTypeBounds(PoolType poolType) external view override returns (PoolTypeBounds memory) {
         return poolTypeBounds[poolType];
+    }
+
+    /* INTERNAL FUNCTIONS */
+
+    /**
+     * @notice Internal function to set per-pool type bounds.
+     * @param poolType The pool type to set bounds of.
+     * @param bounds The bounds to set.
+     */
+    function _setPoolTypeBounds(PoolType poolType, PoolTypeBounds memory bounds) internal {
+        if (bounds.minFee > bounds.maxFee) revert InvalidFeeBounds(bounds.minFee, bounds.maxFee);
+        poolTypeBounds[poolType] = bounds;
+        emit PoolTypeBoundsUpdated(poolType, bounds.minFee, bounds.maxFee);
     }
 
     /* UUPS AUTHORIZATION */
