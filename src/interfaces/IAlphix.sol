@@ -78,6 +78,11 @@ interface IAlphix {
      */
     error InvalidFeeForPoolType(IAlphixLogic.PoolType poolType, uint24 fee);
 
+    /**
+     * @dev Thrown when a function argument is null.
+     */
+    error NullArgument();
+
     /* INITIALIZER */
 
     /**

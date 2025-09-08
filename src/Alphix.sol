@@ -270,6 +270,9 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         if (!IAlphixLogic(logic).isValidFeeForPoolType(_poolType, _initialFee)) {
             revert InvalidFeeForPoolType(_poolType, _initialFee);
         }
+        if (_initialTargetRatio == 0) {
+            revert NullArgument();
+        }
         IAlphixLogic(logic).activateAndConfigurePool(key, _initialFee, _initialTargetRatio, _poolType);
         _setDynamicFee(key, _initialFee);
         PoolId poolId = key.toId();
