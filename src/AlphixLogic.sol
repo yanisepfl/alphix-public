@@ -37,6 +37,11 @@ contract AlphixLogic is
 {
     using LPFeeLibrary for uint24;
 
+    /**
+     * @dev Unique signature to verify Alphix-compatible logic contracts.
+     */
+    bytes32 public constant LOGIC_SIGNATURE = keccak256("ALPHIX_LOGIC");
+
     /* STORAGE */
 
     /**
@@ -135,6 +140,10 @@ contract AlphixLogic is
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Pausable_init();
+
+        if (_owner == address(0) || _alphixHook == address(0)) {
+            revert InvalidAddress();
+        }
 
         _transferOwnership(_owner);
 
@@ -341,10 +350,6 @@ contract AlphixLogic is
         _unpause();
     }
 
-    function setParams(uint24 _baseFee) external onlyOwner {
-        baseFee = _baseFee;
-    }
-
     /* GETTERS */
 
     /**
@@ -359,15 +364,7 @@ contract AlphixLogic is
      */
     function getFee(PoolKey calldata) external view returns (uint24) {
         // Example: return baseFee directly
-        return baseFee;
-    }
-
-    /**
-     * @dev Temporary function.
-     */
-    function getFee() external view returns (uint24) {
-        // Example: return baseFee directly
-        return baseFee;
+        return 3000;
     }
 
     /**
@@ -392,7 +389,7 @@ contract AlphixLogic is
      * @param bounds The bounds to set.
      */
     function _setPoolTypeBounds(PoolType poolType, PoolTypeBounds memory bounds) internal {
-        if (bounds.minFee > bounds.maxFee) revert InvalidFeeBounds(bounds.minFee, bounds.maxFee);
+        if (bounds.minFee > bounds.maxFee || bounds.maxFee > LPFeeLibrary.MAX_LP_FEE) revert InvalidFeeBounds(bounds.minFee, bounds.maxFee);
         poolTypeBounds[poolType] = bounds;
         emit PoolTypeBoundsUpdated(poolType, bounds.minFee, bounds.maxFee);
     }
@@ -400,8 +397,7 @@ contract AlphixLogic is
     /* UUPS AUTHORIZATION */
 
     function _authorizeUpgrade(address newImplementation) internal view override onlyOwner {
-        try IAlphixLogic(newImplementation).getFee() returns (uint24) {}
-        catch {
+        if (IAlphixLogic(newImplementation).LOGIC_SIGNATURE() != keccak256("ALPHIX_LOGIC")) {
             revert InvalidLogicContract();
         }
     }

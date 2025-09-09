@@ -48,12 +48,40 @@ interface IAlphixLogic {
 
     /* ERRORS */
 
+    /**
+     * @dev Thrown when the implementation of the logic contract is invalid.
+     */
     error InvalidLogicContract();
+
+    /**
+     * @dev Thrown when the caller is not as expected.
+     */
     error InvalidCaller();
+
+    /**
+     * @dev Thrown when a pool is paused.
+     */
     error PoolPaused();
+
+    /**
+     * @dev Thrown when a pool is already configured.
+     */
     error PoolAlreadyConfigured();
+
+    /**
+     * @dev Thrown when a pool is not configured.
+     */
     error PoolNotConfigured();
+
+    /**
+     * @dev Thrown when fee bounds are invalid.
+     */
     error InvalidFeeBounds(uint24 minFee, uint24 maxFee);
+
+    /**
+     * @dev Thrown when an invalid address (e.g. 0) is provided.
+     */
+    error InvalidAddress();
 
     /* CORE HOOK LOGIC */
 
@@ -235,8 +263,6 @@ interface IAlphixLogic {
      * @return The fee of the given pool.
      */
     function getFee(PoolKey calldata key) external view returns (uint24);
-
-    function getFee() external view returns (uint24);
 
     /**
      * @notice Get pool config for a specific pool.
