@@ -31,9 +31,21 @@ contract Registry is Ownable2Step, IRegistry {
     mapping(PoolId => PoolInfo) private pools;
 
     /**
+     * @dev Addresses authorized to register contract and pools.
+     */
+    mapping(address => bool) public authorizedRegistrars;
+
+    /**
      * @dev All registered pools.
      */
     PoolId[] private allPools;
+
+    /* MODIFIERS */
+
+    modifier onlyOwnerOrRegistrar() {
+        if (msg.sender != owner() && !authorizedRegistrars[msg.sender]) revert UnauthorizedCaller();
+        _;
+    }
 
     /* CONSTRUCTOR */
 
@@ -45,9 +57,29 @@ contract Registry is Ownable2Step, IRegistry {
     /* ADMIN FUNCTIONS */
 
     /**
+     * @dev See {IRegistry-addRegistrar}.
+     */
+    function addRegistrar(address registrar) external override onlyOwner {
+        if (registrar == address(0)) revert InvalidAddress();
+        authorizedRegistrars[registrar] = true;
+        emit AuthorizedRegistrarAdded(registrar);
+    }
+
+    /**
+     * @dev See {IRegistry-removeRegistrar}.
+     */
+    function removeRegistrar(address registrar) external override onlyOwner {
+        if (registrar == address(0)) revert InvalidAddress();
+        authorizedRegistrars[registrar] = false;
+        emit AuthorizedRegistrarRemoved(registrar);
+    }
+
+    /* ADMIN & REGISTRAR FUNCTIONS */
+
+    /**
      * @dev See {IRegistry-registerContract}.
      */
-    function registerContract(ContractKey key, address contractAddress) external override onlyOwner {
+    function registerContract(ContractKey key, address contractAddress) external override onlyOwnerOrRegistrar {
         if (contractAddress == address(0)) revert InvalidAddress();
         contracts[key] = contractAddress;
         emit ContractRegistered(key, contractAddress);
@@ -61,7 +93,7 @@ contract Registry is Ownable2Step, IRegistry {
         IAlphixLogic.PoolType poolType,
         uint24 _initialFee,
         uint256 _initialTargetRatio
-    ) external override onlyOwner {
+    ) external override onlyOwnerOrRegistrar {
         PoolId poolId = key.toId();
         if (pools[poolId].timestamp != 0) {
             revert PoolAlreadyRegistered(poolId);

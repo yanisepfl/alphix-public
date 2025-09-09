@@ -45,6 +45,18 @@ interface IRegistry {
         IAlphixLogic.PoolType poolType
     );
 
+    /**
+     * @dev Emitted when an address is added to authorized registrars.
+     * @param addedRegistrar The address of the added registrar.
+     */
+    event AuthorizedRegistrarAdded(address indexed addedRegistrar);
+
+    /**
+     * @dev Emitted when an address is removed to authorized registrars.
+     * @param removedRegistrar The address of the removed registrar.
+     */
+    event AuthorizedRegistrarRemoved(address indexed removedRegistrar);
+
     /* ERRORS */
 
     /**
@@ -56,6 +68,11 @@ interface IRegistry {
      * @dev Thrown when registering an already registered pool.
      */
     error PoolAlreadyRegistered(PoolId poolId);
+
+    /**
+     * @dev Thrown when caller is unauthorized to perform an action (e.g. registering a pool).
+     */
+    error UnauthorizedCaller();
 
     /* STRUCTS */
 
@@ -75,6 +92,20 @@ interface IRegistry {
     }
 
     /* ADMIN FUNCTIONS */
+
+    /**
+     * @notice Add an address from authorized registrars.
+     * @param registrar The address to remove from authorized registrars.
+     */
+    function addRegistrar(address registrar) external;
+
+    /**
+     * @notice Remove an address from authorized registrars.
+     * @param registrar The address to remove from authorized registrars.
+     */
+    function removeRegistrar(address registrar) external;
+
+    /* ADMIN & REGISTRAR FUNCTIONS */
 
     /**
      * @notice Register an important contract by key.
