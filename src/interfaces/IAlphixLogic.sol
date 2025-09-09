@@ -277,4 +277,9 @@ interface IAlphixLogic {
      * @return bounds The fee bounds for the pool type.
      */
     function getPoolTypeBounds(PoolType poolType) external view returns (PoolTypeBounds memory bounds);
+
+    /**
+     * @dev Unique signature to verify Alphix-compatible logic contracts.
+     */
+    function LOGIC_SIGNATURE() external pure returns (bytes32);
 }

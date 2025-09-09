@@ -97,10 +97,9 @@ interface IAlphix {
     /**
      * @notice Set a new logic contract address.
      * @param newLogic The new logic contract address.
-     * @param key A sample pool key for validation.
-     * @dev Validates the new logic contract implements required interface.
+     * @dev Validates the new logic contract implements required constant signature.
      */
-    function setLogic(address newLogic, PoolKey calldata key) external;
+    function setLogic(address newLogic) external;
 
     /**
      * @notice Set a new registry contract address.

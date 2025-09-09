@@ -231,11 +231,11 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     /**
      * @dev See {IAlphix-setLogic}.
      */
-    function setLogic(address newLogic, PoolKey calldata key) external override onlyOwner nonReentrant {
+    function setLogic(address newLogic) external override onlyOwner nonReentrant {
         if (newLogic == address(0)) {
             revert InvalidAddress();
         }
-        if (IAlphixLogic(newImplementation).LOGIC_SIGNATURE() != keccak256("ALPHIX_LOGIC")) {
+        if (IAlphixLogic(newLogic).LOGIC_SIGNATURE() != keccak256("ALPHIX_LOGIC")) {
             revert IAlphixLogic.InvalidLogicContract();
         }
         address oldLogic = logic;

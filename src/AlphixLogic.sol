@@ -362,7 +362,7 @@ contract AlphixLogic is
     /**
      * @dev See {IAlphixLogic-getFee}.
      */
-    function getFee(PoolKey calldata) external view returns (uint24) {
+    function getFee(PoolKey calldata) external pure returns (uint24) {
         // Example: return baseFee directly
         return 3000;
     }
@@ -389,7 +389,9 @@ contract AlphixLogic is
      * @param bounds The bounds to set.
      */
     function _setPoolTypeBounds(PoolType poolType, PoolTypeBounds memory bounds) internal {
-        if (bounds.minFee > bounds.maxFee || bounds.maxFee > LPFeeLibrary.MAX_LP_FEE) revert InvalidFeeBounds(bounds.minFee, bounds.maxFee);
+        if (bounds.minFee > bounds.maxFee || bounds.maxFee > LPFeeLibrary.MAX_LP_FEE) {
+            revert InvalidFeeBounds(bounds.minFee, bounds.maxFee);
+        }
         poolTypeBounds[poolType] = bounds;
         emit PoolTypeBoundsUpdated(poolType, bounds.minFee, bounds.maxFee);
     }
