@@ -91,7 +91,7 @@ interface IRegistry {
         IAlphixLogic.PoolType poolType;
     }
 
-    /* ADMIN & REGISTRAR FUNCTIONS */
+    /* REGISTRATION FUNCTIONS */
 
     /**
      * @notice Register an important contract by key.

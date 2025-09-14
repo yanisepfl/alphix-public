@@ -7,6 +7,7 @@ import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -235,7 +236,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         if (newLogic == address(0)) {
             revert InvalidAddress();
         }
-        if (IAlphixLogic(newLogic).LOGIC_SIGNATURE() != keccak256("ALPHIX_LOGIC")) {
+        if (!IERC165(newLogic).supportsInterface(type(IAlphixLogic).interfaceId)) {
             revert IAlphixLogic.InvalidLogicContract();
         }
         address oldLogic = logic;

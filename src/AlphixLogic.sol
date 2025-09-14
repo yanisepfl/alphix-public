@@ -9,6 +9,9 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {
+    ERC165Upgradeable, IERC165
+} from "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -20,7 +23,6 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeS
 
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
-import {IAlphix} from "./interfaces/IAlphix.sol";
 
 /**
  * @title AlphixLogic.
@@ -33,14 +35,10 @@ contract AlphixLogic is
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
     PausableUpgradeable,
+    ERC165Upgradeable,
     IAlphixLogic
 {
     using LPFeeLibrary for uint24;
-
-    /**
-     * @dev Unique signature to verify Alphix-compatible logic contracts.
-     */
-    bytes32 public constant LOGIC_SIGNATURE = keccak256("ALPHIX_LOGIC");
 
     /* STORAGE */
 
@@ -140,6 +138,7 @@ contract AlphixLogic is
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Pausable_init();
+        __ERC165_init();
 
         if (_owner == address(0) || _alphixHook == address(0)) {
             revert InvalidAddress();
@@ -154,6 +153,15 @@ contract AlphixLogic is
         _setPoolTypeBounds(PoolType.STABLE, _stableBounds);
         _setPoolTypeBounds(PoolType.STANDARD, _standardBounds);
         _setPoolTypeBounds(PoolType.VOLATILE, _volatileBounds);
+    }
+
+    /* ERC165 SUPPORT */
+
+    /**
+     * @dev See {IERC165-supportsInterface}.
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == type(IAlphixLogic).interfaceId || super.supportsInterface(interfaceId);
     }
 
     /* CORE HOOK LOGIC */
@@ -274,6 +282,8 @@ contract AlphixLogic is
     {
         return (BaseHook.afterSwap.selector, 0);
     }
+
+    /* POOL MANAGEMENT */
 
     /**
      * @dev See {IAlphixLogic-activateAndConfigurePool}.
@@ -399,7 +409,7 @@ contract AlphixLogic is
     /* UUPS AUTHORIZATION */
 
     function _authorizeUpgrade(address newImplementation) internal view override onlyOwner {
-        if (IAlphixLogic(newImplementation).LOGIC_SIGNATURE() != keccak256("ALPHIX_LOGIC")) {
+        if (!IERC165(newImplementation).supportsInterface(type(IAlphixLogic).interfaceId)) {
             revert InvalidLogicContract();
         }
     }
