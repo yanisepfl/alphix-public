@@ -27,7 +27,7 @@ jobs:
       #  run: grep -vE "^SF:(script|test|lib)" lcov.info > lcov-clean.info
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info # or lcov-clean.info if optional step followed
