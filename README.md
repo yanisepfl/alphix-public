@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/github/yanisepfl/alphix-atrium/graph/badge.svg?token=JX37PW6PZA)](https://codecov.io/github/yanisepfl/alphix-atrium)
+
 # Uniswap v4 Hook Template
 
 **A template for writing Uniswap v4 Hooks 🦄**

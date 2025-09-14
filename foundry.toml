@@ -10,3 +10,8 @@ via_ir = false
 
 [profile.lint]
 exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]
+
+[profile.coverage]
+include = ["src/**/*.sol"]
+exclude = ["lib/**", "test/**", "script/**"]
+report = "lcov"
