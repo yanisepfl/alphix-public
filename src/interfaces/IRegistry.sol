@@ -91,26 +91,13 @@ interface IRegistry {
         IAlphixLogic.PoolType poolType;
     }
 
-    /* ADMIN FUNCTIONS */
-
-    /**
-     * @notice Add an address from authorized registrars.
-     * @param registrar The address to remove from authorized registrars.
-     */
-    function addRegistrar(address registrar) external;
-
-    /**
-     * @notice Remove an address from authorized registrars.
-     * @param registrar The address to remove from authorized registrars.
-     */
-    function removeRegistrar(address registrar) external;
-
     /* ADMIN & REGISTRAR FUNCTIONS */
 
     /**
      * @notice Register an important contract by key.
      * @param key The key of the registered contract.
      * @param contractAddress The address to register.
+     * @dev Restricted function - requires appropriate role via AccessManager.
      */
     function registerContract(ContractKey key, address contractAddress) external;
 
@@ -120,6 +107,7 @@ interface IRegistry {
      * @param poolType The type of the pool to register.
      * @param _initialFee The initial fee of the pool to register.
      * @param _initialTargetRatio The initial target ratio of the pool to register.
+     * @dev Restricted function - requires appropriate role via AccessManager.
      */
     function registerPool(
         PoolKey calldata key,
