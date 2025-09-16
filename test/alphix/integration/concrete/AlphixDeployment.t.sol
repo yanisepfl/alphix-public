@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test} from "forge-std/Test.sol";
+import {Test, console} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
@@ -12,8 +12,11 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* OZ IMPORTS */
-import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
+import {AccessManager, IAccessManaged} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
@@ -22,89 +25,247 @@ import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {Registry} from "../../../../src/Registry.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
+import {MockERC165} from "../../../utils/mocks/MockERC165.sol";
 
-/**
- * @title AlphixDeploymentTest
- * @notice Integration tests for Alphix constructor, initialize, and admin functions.
- * @dev Inherits BaseAlphixTest for shared setup and helper functions.
- */
 contract AlphixDeploymentTest is BaseAlphixTest {
     /**
-     * @notice Verifies Hook is paused by constructor and unpaused by initialize().
+     * @notice Verifies Alphix Hook is paused by constructor and unpaused by initialize.
      */
     function test_constructor_pauseThenInitializeUnpause() public {
         vm.startPrank(owner);
-        // Deploy fresh hook instance
-        Alphix freshHook = _deployAlphixHook();
-        // After construction, hook must be paused
-        assertTrue(freshHook.paused(), "Hook should be paused by constructor");
-        // Initialize unpauses
-        freshHook.initialize(address(logic));
-        assertFalse(freshHook.paused(), "Hook should be unpaused after initialize");
+        Alphix testHook = _deployAlphixHook(poolManager, owner, accessManager, registry);
+        assertTrue(testHook.paused(), "Hook should be paused by constructor");
+        testHook.initialize(address(logic));
+        assertFalse(testHook.paused(), "Hook should be unpaused after initialize");
         vm.stopPrank();
     }
 
     /**
-     * @notice constructor should revert if poolManager is zero.
+     * @notice Constructor should revert if poolManager is zero.
      */
     function test_constructor_revertsOnZeroPoolManager() public {
-        // Predict the address of the next contract created
-        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
-        // Expect Uniswap’s Hook‐address validation to revert
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Hooks.HookAddressNotValid.selector,
-                predicted // the address of the new Alphix contract
-            )
-        );
+        vm.startPrank(owner);
+        // Reverts because the Hook address has not been mined as per Uniswap V4's requirement
+        address predicted = vm.computeCreateAddress(owner, vm.getNonce(owner));
+        vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, predicted));
         new Alphix(IPoolManager(address(0)), owner, address(registry));
+
+        // Reverts because of Alphix Hook constructor restriction
+        AccessManager testAm = new AccessManager(owner);
+        Registry testReg = new Registry(address(testAm));
+        address hookAddr = _computeNextHookAddress();
+        _setupAccessManagerRoles(hookAddr, testAm, testReg);
+        bytes memory ctor = abi.encode(IPoolManager(address(0)), owner, address(testReg));
+        vm.expectRevert(IAlphix.InvalidAddress.selector);
+        deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
+        vm.stopPrank();
     }
 
     /**
      * @notice constructor should revert if owner is zero.
      */
     function test_constructor_revertsOnZeroOwner() public {
-        vm.expectRevert(IAlphix.InvalidAddress.selector);
-        new Alphix(IPoolManager(address(poolManager)), address(0), address(registry));
+        vm.startPrank(owner);
+        // Reverts because the Hook address has not been mined as per Uniswap V4's requirement
+        address predicted = vm.computeCreateAddress(owner, vm.getNonce(owner));
+        vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, predicted));
+        new Alphix(poolManager, address(0), address(registry));
+
+        // Reverts because of Alphix Hook constructor restriction
+        AccessManager testAm = new AccessManager(owner);
+        Registry testReg = new Registry(address(testAm));
+        address hookAddr = _computeNextHookAddress();
+        _setupAccessManagerRoles(hookAddr, testAm, testReg);
+        bytes memory ctor = abi.encode(poolManager, address(0), address(testReg));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
+        deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
+        vm.stopPrank();
     }
 
     /**
      * @notice constructor should revert if registry is zero.
      */
     function test_constructor_revertsOnZeroRegistry() public {
+        vm.startPrank(owner);
+        // Reverts because the Hook address has not been mined as per Uniswap V4's requirement
+        address predicted = vm.computeCreateAddress(owner, vm.getNonce(owner));
+        vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, predicted));
+        new Alphix(poolManager, owner, address(0));
+
+        // Reverts because of Alphix Hook constructor restriction
+        AccessManager testAm = new AccessManager(owner);
+        address hookAddr = _computeNextHookAddress();
+        _setupAccessManagerRoles(hookAddr, testAm, Registry(address(0)));
+        bytes memory ctor = abi.encode(poolManager, owner, address(0));
         vm.expectRevert(IAlphix.InvalidAddress.selector);
-        new Alphix(IPoolManager(address(poolManager)), owner, address(0));
+        deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
+        vm.stopPrank();
     }
 
     /**
-     * @notice initialize should set logic and unpause the hook.
+     * @notice Constructor should revert if AccessManager hasn't granted registrar role the hook address.
      */
-    function test_initialize_success() public {
-        Alphix fresh = _deployAlphixHook();
-        vm.prank(owner);
-        fresh.initialize(address(logic));
-        assertEq(fresh.getLogic(), address(logic), "Logic not set");
-        assertFalse(fresh.paused(), "Hook should be unpaused");
+    function test_constructor_revertsOnBadAccessManager() public {
+        vm.startPrank(owner);
+        // Compute a valid hook address
+        address hookAddr = _computeNextHookAddress();
+        // Deploy a Registry governed by a fresh AccessManager that never granted roles
+        AccessManager badAm = new AccessManager(owner);
+        Registry badReg = new Registry(address(badAm));
+
+        // Expect revert from AccessManager when hook constructor calls registerContract
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, hookAddr));
+
+        // Deploy hook via CREATE2 at hookAddr; constructor will call registry.registerContract and revert
+        bytes memory ctor = abi.encode(poolManager, owner, address(badReg));
+        deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
+        vm.stopPrank();
     }
 
     /**
-     * @notice initialize should revert on zero logic address.
+     * @notice initialize should revert when called by a non-owner.
      */
-    function test_initialize_revertsOnZeroLogic() public {
-        Alphix fresh = _deployAlphixHook();
-        vm.prank(owner);
-        vm.expectRevert(IAlphix.InvalidAddress.selector);
-        fresh.initialize(address(0));
+    function test_initialize_revertsWithBadOwner() public {
+        vm.startPrank(owner);
+        // Deploy a test hook properly authorized
+        Alphix testHook = _deployAlphixHook(poolManager, owner, accessManager, registry);
+        vm.stopPrank();
+
+        // Attempt to initialize from an unauthorized account
+        vm.prank(unauthorized);
+        // Expect revert from Ownable when calling initialize
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, unauthorized));
+        testHook.initialize(address(logic));
     }
 
     /**
-     * @notice initialize should revert when caller is not owner.
+     * @notice Deploying Alphix Infrastructure works with user1.
      */
-    function test_initialize_revertsOnNonOwner() public {
-        Alphix fresh = _deployAlphixHook();
+    function test_deployAlphixInfrastructure_user1_success() public {
+        vm.startPrank(user1);
+        (, Registry testRegistry, Alphix testHook,,, IAlphixLogic testLogic) =
+            _deployAlphixInfrastructure(poolManager, user1);
+        assertEq(testHook.getLogic(), address(testLogic), "Logic not set");
+        assertEq(testHook.getRegistry(), address(testRegistry), "Registry not set");
+        assertFalse(testHook.paused(), "Hook should be unpaused");
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Tests that multiple initialization attempts are properly blocked.
+     * @dev Verifies protection against re-initialization attacks and concurrent initialization attempts.
+     */
+    function test_multipleInitializationRevert() public {
+        vm.startPrank(owner);
+
+        // Deploy a test hook that starts paused
+        Alphix testHook = _deployAlphixHook(poolManager, owner, accessManager, registry);
+        assertTrue(testHook.paused(), "Test hook should be paused");
+
+        // Deploy a test logic
+        (,, IAlphixLogic testLogic) = _deployAlphixLogic(owner, address(testHook));
+        assertTrue(testHook.paused(), "Hook should be paused after construction and before initialize");
+
+        // Normal initialization should succeed
+        testHook.initialize(address(testLogic));
+        assertFalse(testHook.paused(), "Hook should be unpaused after initialize");
+        assertEq(testHook.getLogic(), address(testLogic), "Logic should be set");
+
+        // Expect revert from Initializale when contract already initialized
+        vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
+        testHook.initialize(address(testLogic));
+        // testHook should remain unchanged
+        assertFalse(testHook.paused(), "Hook should be unpaused after initialize");
+        assertEq(testHook.getLogic(), address(testLogic), "Logic should be set");
+
+        // Try initialization with different logic address (should still revert)
+        (,, IAlphixLogic newLogic) = _deployAlphixLogic(owner, address(testHook));
+
+        vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
+        testHook.initialize(address(newLogic));
+
+        // Try initialization from unauthorized account (should revert even if not initialized)
+        Alphix testHook2 = _deployAlphixHook(poolManager, owner, accessManager, registry);
+        // Deploy a test logic
+        (,, testLogic) = _deployAlphixLogic(owner, address(testHook2));
+        assertTrue(testHook2.paused(), "Hook should be paused after construction and before initialize");
+        vm.stopPrank();
+
+        vm.prank(unauthorized);
+        // Expect revert from Ownable when calling initialize
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, unauthorized));
+        testHook2.initialize(address(testLogic));
+        assertTrue(testHook2.paused(), "Hook should still be paused");
+
+        // Try concurrent initialization attempts from different accounts
+        vm.startPrank(owner);
+        Alphix testHook3 = _deployAlphixHook(poolManager, owner, accessManager, registry);
+        // Deploy a test logic
+        (,, testLogic) = _deployAlphixLogic(owner, address(testHook3));
+        assertTrue(testHook3.paused(), "Hook should be paused after construction and before initialize");
+        vm.stopPrank();
+
+        // Simulate race condition: both user1 and owner try to initialize
         vm.prank(user1);
-        vm.expectRevert("Ownable2Step: caller is not the owner");
-        fresh.initialize(address(logic));
+        // Expect revert from Ownable when calling initialize
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        testHook3.initialize(address(testLogic));
+
+        // Owner should still be able to initialize normally after failed unauthorized attempt
+        vm.prank(owner);
+        testHook3.initialize(address(testLogic));
+        assertFalse(testHook3.paused(), "Hook should be unpaused");
+        assertEq(testHook3.getLogic(), address(testLogic), "Logic should be set");
+
+        // Verify that even after successful initialization, re-initialization is blocked
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
+        testHook3.initialize(address(testLogic));
+        // testHook3 should remain unchanged
+        assertFalse(testHook3.paused(), "Hook should be unpaused after initialize");
+        assertEq(testHook3.getLogic(), address(testLogic), "Logic should be set");
+    }
+
+    /**
+     * @notice Tests initialization with malicious logic contracts.
+     * @dev Verifies that only valid IAlphixLogic contracts can be set during initialization.
+     */
+    function test_initializationWithMaliciousLogic() public {
+        vm.startPrank(owner);
+
+        Alphix testHook = _deployAlphixHook(poolManager, owner, accessManager, registry);
+
+        // Try to initialize with a non-contract address
+        vm.expectRevert(IAlphix.InvalidAddress.selector);
+        testHook.initialize(address(0));
+
+        // Try to initialize with an EOA
+        vm.expectRevert(); // Should revert when trying to call supportsInterface on EOA
+        testHook.initialize(makeAddr("eoa"));
+
+        // Try to initialize with a contract that doesn't implement supportsInterface
+        MockERC20 maliciousToken = new MockERC20("Evil Token Contract", "ETC", 18);
+        vm.expectRevert();
+        testHook.initialize(address(maliciousToken));
+
+        // Try to initialize with a contract that fails to implement supportsInterface
+        MockERC165 maliciousContract = new MockERC165();
+        vm.expectRevert(IAlphixLogic.InvalidLogicContract.selector);
+        testHook.initialize(address(maliciousContract));
+
+        // Verify hook is still paused and uninitialized after failed attempts
+        assertTrue(testHook.paused(), "Hook should still be paused after failed initializations");
+        assertEq(testHook.getLogic(), address(0), "Logic should still be zero after failed initializations");
+
+        // Normal initialization should still work after failed attempts
+        // Deploy a test logic
+        (,, IAlphixLogic testLogic) = _deployAlphixLogic(owner, address(testHook));
+        assertTrue(testHook.paused(), "Hook should still be paused after logic deployment");
+        testHook.initialize(address(testLogic));
+        assertFalse(testHook.paused(), "Hook should be unpaused after successful initialization");
+        assertEq(testHook.getLogic(), address(testLogic), "Logic should be set correctly");
+
+        vm.stopPrank();
     }
 
     /**
@@ -115,8 +276,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         ERC1967Proxy newProxy = new ERC1967Proxy(
             address(newImpl),
             abi.encodeCall(
-                newImpl.initialize,
-                (owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
+                newImpl.initialize, (owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
             )
         );
         address oldLogic = hook.getLogic();
@@ -140,19 +300,34 @@ contract AlphixDeploymentTest is BaseAlphixTest {
      * @notice setLogic should revert on invalid logic contract.
      */
     function test_setLogic_revertsOnInvalidInterface() public {
-        MockERC20 bad = new MockERC20("Bad", "BAD", 18);
+        MockERC20 maliciousContract = new MockERC20("Malicious Contract", "MC", 18);
+        vm.prank(owner);
+        vm.expectRevert();
+        hook.setLogic(address(maliciousContract));
+
+        MockERC165 mockERC165 = new MockERC165();
         vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidLogicContract.selector);
-        hook.setLogic(address(bad));
+        hook.setLogic(address(mockERC165));
     }
 
     /**
      * @notice setLogic should revert when caller is not owner.
      */
     function test_setLogic_revertsOnNonOwner() public {
+        AlphixLogic newImpl = new AlphixLogic();
+        ERC1967Proxy newProxy = new ERC1967Proxy(
+            address(newImpl),
+            abi.encodeCall(
+                newImpl.initialize, (owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
+            )
+        );
+        address oldLogic = hook.getLogic();
         vm.prank(user1);
-        vm.expectRevert("Ownable2Step: caller is not the owner");
-        hook.setLogic(address(logic));
+        // Expect revert from Ownable when calling setLogic
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        hook.setLogic(address(newProxy));
+        assertEq(hook.getLogic(), address(oldLogic), "Logic not updated");
     }
 
     /**
@@ -160,12 +335,28 @@ contract AlphixDeploymentTest is BaseAlphixTest {
      */
     function test_setRegistry_success() public {
         Registry newReg = new Registry(address(accessManager));
+        vm.startPrank(owner);
+        _setupAccessManagerRoles(address(hook), accessManager, newReg);
+        vm.stopPrank();
         address oldRegistry = hook.getRegistry();
         vm.prank(owner);
         vm.expectEmit(true, true, false, true);
         emit IAlphix.RegistryUpdated(oldRegistry, address(newReg));
         hook.setRegistry(address(newReg));
         assertEq(hook.getRegistry(), address(newReg), "Registry not updated");
+    }
+
+    /**
+     * @notice setRegistry should revert when not adding hook as a registrar in the registry.
+     */
+    function test_setRegistryWithoutSettingRegistrarRole_revert() public {
+        Registry newReg = new Registry(address(accessManager));
+        address oldRegistry = hook.getRegistry();
+        vm.prank(owner);
+        // Expect revert from AccessManager when hook constructor calls setRegistry
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, address(hook)));
+        hook.setRegistry(address(newReg));
+        assertEq(hook.getRegistry(), oldRegistry, "Registry not updated");
     }
 
     /**
@@ -182,40 +373,76 @@ contract AlphixDeploymentTest is BaseAlphixTest {
      */
     function test_setRegistry_revertsOnNonOwner() public {
         vm.prank(user1);
-        vm.expectRevert("Ownable2Step: caller is not the owner");
+        // Expect revert from Ownable when calling setRegistry
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.setRegistry(address(registry));
     }
 
     /**
-     * @notice pause and unpause should work for owner only.
+     * @notice Pause and unpause should work when called by owner.
      */
     function test_pauseAndUnpause_owner() public {
-        vm.prank(owner);
-        hook.unpause();
+        assertFalse(hook.paused(), "Unpause failed");
         vm.prank(owner);
         hook.pause();
         assertTrue(hook.paused(), "Pause failed");
         vm.prank(owner);
         hook.unpause();
         assertFalse(hook.paused(), "Unpause failed");
+        vm.prank(owner);
+        hook.pause();
+        assertTrue(hook.paused(), "Pause failed");
     }
 
     /**
-     * @notice pause should revert when caller is not owner.
+     * @notice Pause should revert when caller is not owner.
      */
     function test_pause_revertsOnNonOwner() public {
+        assertFalse(hook.paused(), "Unpause failed");
         vm.prank(user1);
-        vm.expectRevert("Ownable2Step: caller is not the owner");
+        // Expect revert from Ownable when calling pause
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.pause();
+        assertFalse(hook.paused(), "Unpause failed");
     }
 
     /**
      * @notice unpause should revert when caller is not owner.
      */
     function test_unpause_revertsOnNonOwner() public {
+        assertFalse(hook.paused(), "Unpause failed");
         vm.prank(user1);
-        vm.expectRevert("Ownable2Step: caller is not the owner");
+        // Expect revert from Ownable when calling pause
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.unpause();
+        assertFalse(hook.paused(), "Unpause failed");
+    }
+
+    /**
+     * @notice unpause should revert when contract is unpaused already.
+     */
+    function test_unpauseWhenUnpaused_revert() public {
+        assertFalse(hook.paused(), "Unpause failed");
+        vm.prank(owner);
+        // Expect revert because the contract is already unpaused
+        vm.expectRevert(Pausable.ExpectedPause.selector);
+        hook.unpause();
+        assertFalse(hook.paused(), "Unpause failed");
+    }
+
+    /**
+     * @notice pause should revert when contract is paused already.
+     */
+    function test_pauseWhenpaused_revert() public {
+        assertFalse(hook.paused(), "Unpause failed");
+        vm.prank(owner);
+        hook.pause();
+        assertTrue(hook.paused(), "Unpause failed");
+        // Expect revert because the contract is already paused
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vm.prank(owner);
+        hook.pause();
+        assertTrue(hook.paused(), "Unpause failed");
     }
 
     /**

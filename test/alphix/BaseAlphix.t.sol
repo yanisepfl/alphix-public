@@ -36,14 +36,12 @@ import {Alphix} from "../../src/Alphix.sol";
 import {AlphixLogic} from "../../src/AlphixLogic.sol";
 import {Registry} from "../../src/Registry.sol";
 import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
-import {IAlphix} from "../../src/interfaces/IAlphix.sol";
-import {IRegistry} from "../../src/interfaces/IRegistry.sol";
 
 /**
  * @title BaseAlphixTest
  * @author Alphix
  * @notice Base test contract for Alphix following Uniswap v4-template pattern
- * @dev Provides common setup and helper functions for all Alphix tests.
+ * @dev Provides common setup and helper functions for all Alphix tests
  */
 abstract contract BaseAlphixTest is Test, Deployers {
     using EasyPosm for IPositionManager;
@@ -76,7 +74,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 constant INITIAL_TOKEN_AMOUNT = 1_000_000e18;
     uint24 constant INITIAL_FEE = 500; // 0.05%
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
-    uint256 constant UNIT = 1e18; // Base unit
+    uint256 constant UNIT = 1e18;
 
     // Test addresses
     address public owner;
@@ -84,13 +82,13 @@ abstract contract BaseAlphixTest is Test, Deployers {
     address public user2;
     address public unauthorized;
 
-    // Alphix contracts
+    // Alphix contracts (default stack wired in setUp)
     AccessManager public accessManager;
     Registry public registry;
+    Alphix public hook;
     AlphixLogic public logicImplementation;
     ERC1967Proxy public logicProxy;
     IAlphixLogic public logic;
-    Alphix public hook;
 
     // Default test tokens and pool
     Currency public currency0;
@@ -102,13 +100,13 @@ abstract contract BaseAlphixTest is Test, Deployers {
     int24 public tickUpper;
     int24 public defaultTickSpacing;
 
-    // Namespace so each hook salt/address is unique
-    uint16 private hookNamespace;
-
     // Pool type bounds
     IAlphixLogic.PoolTypeBounds public stableBounds;
     IAlphixLogic.PoolTypeBounds public standardBounds;
     IAlphixLogic.PoolTypeBounds public volatileBounds;
+
+    // Namespace so each hook salt/address is unique
+    uint16 private hookNamespace;
 
     /**
      * @notice Sets up the test environment with Alphix ecosystem
@@ -132,8 +130,9 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Setup pool type bounds
         _initializePoolTypeBounds();
 
-        // Deploy Alphix Infrastructure
-        _deployAlphixInfrastructure();
+        // Deploy a default Alphix Infrastructure (AccessManager, Registry, Hook, Logic)
+        (accessManager, registry, hook, logicImplementation, logicProxy, logic) =
+            _deployAlphixInfrastructure(poolManager, owner);
 
         // Setup default tokens and pool (18 decimals)
         (currency0, currency1) = deployCurrencyPairWithDecimals(18, 18);
@@ -160,104 +159,85 @@ abstract contract BaseAlphixTest is Test, Deployers {
      * @dev Sets up stable, standard, and volatile pool bounds
      */
     function _initializePoolTypeBounds() internal {
-        stableBounds = IAlphixLogic.PoolTypeBounds({
-            minFee: 100, // 0.01%
-            maxFee: 1000 // 0.1%
-        });
-
-        standardBounds = IAlphixLogic.PoolTypeBounds({
-            minFee: 500, // 0.05%
-            maxFee: 10000 // 1%
-        });
-
-        volatileBounds = IAlphixLogic.PoolTypeBounds({
-            minFee: 1000, // 0.1%
-            maxFee: 50000 // 5%
-        });
+        stableBounds = IAlphixLogic.PoolTypeBounds({minFee: 100, maxFee: 1000});
+        standardBounds = IAlphixLogic.PoolTypeBounds({minFee: 500, maxFee: 10000});
+        volatileBounds = IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 50000});
     }
 
     /**
-     * @notice Deploys the complete Alphix Infrastructure
-     * @dev Deploys AccessManager, Registry, Alphix Hook and Logic
+     * @notice Deploys a fresh Alphix Infrastructure
+     * @param pm The pool manager to wire into the hook
+     * @param alphixOwner The owner of the hook and logic proxy
+     * @return am AccessManager instance
+     * @return reg Registry instance
+     * @return newHook Alphix hook
+     * @return impl AlphixLogic implementation
+     * @return proxy ERC1967 proxy pointing to AlphixLogic
+     * @return newLogic IAlphixLogic interface for the proxy
      */
-    function _deployAlphixInfrastructure() internal {
-        // Deploy AccessManager
-        accessManager = new AccessManager(owner);
+    function _deployAlphixInfrastructure(IPoolManager pm, address alphixOwner)
+        internal
+        returns (
+            AccessManager am,
+            Registry reg,
+            Alphix newHook,
+            AlphixLogic impl,
+            ERC1967Proxy proxy,
+            IAlphixLogic newLogic
+        )
+    {
+        // AccessManager + Registry
+        am = new AccessManager(alphixOwner);
+        reg = new Registry(address(am));
 
-        // Deploy Registry
-        registry = new Registry(address(accessManager));
+        // Deploy Alphix Hook (CREATE2, + constructor pauses)
+        newHook = _deployAlphixHook(pm, alphixOwner, am, reg);
 
-        // Deploy Alphix Hook (following v4-template pattern) + Setup AccessManager roles
-        hook = _deployAlphixHook();
+        // Logic implementation + proxy
+        (impl, proxy, newLogic) = _deployAlphixLogic(alphixOwner, address(newHook));
 
-        // Deploy AlphixLogic
-        _deployAlphixLogic();
-
-        // Initialize hook with logic address
-        hook.initialize(address(logic));
+        // Finalize Hook initialization (unpauses)
+        newHook.initialize(address(newLogic));
     }
 
     /**
-     * @notice Deploys the Alphix Hook with required flags
-     * @dev Uses CREATE2 deployment pattern from v4-template
-     * @return The deployed Alphix Hook contract
+     * @notice Deploy an Alphix Hook
+     * @param pm The pool manager to wire into the hook
+     * @param alphixOwner The owner of the hook
+     * @param am The AccessManager instance
+     * @param reg The Registry instance
+     * @return newHook The deployed hook
      */
-    function _deployAlphixHook() internal returns (Alphix) {
-        // Namespace built to get a unique hook address
-        uint160 ns = uint160(hookNamespace) << 144;
-        hookNamespace++;
-        // Hook address built using flags (almost all are used for flexibility)
-        address hookAddr = address(
-            uint160(
-                Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                    | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
-                    | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-            ) ^ ns // Namespace to avoid collisions
+    function _deployAlphixHook(IPoolManager pm, address alphixOwner, AccessManager am, Registry reg)
+        internal
+        returns (Alphix newHook)
+    {
+        address hookAddr = _computeNextHookAddress();
+        _setupAccessManagerRoles(hookAddr, am, reg);
+        bytes memory ctor = abi.encode(pm, alphixOwner, address(reg));
+        deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
+        newHook = Alphix(hookAddr);
+    }
+
+    /**
+     * @notice Deploy Alphix Logic
+     * @dev Deploys implementation and proxy and initializes it with provided owner and hook
+     * @param alphixOwner The logic admin
+     * @param hookAddr The hook address to wire
+     * @return impl AlphixLogic implementation
+     * @return proxy ERC1967Proxy instance
+     * @return newLogic IAlphixLogic interface
+     */
+    function _deployAlphixLogic(address alphixOwner, address hookAddr)
+        internal
+        returns (AlphixLogic impl, ERC1967Proxy proxy, IAlphixLogic newLogic)
+    {
+        impl = new AlphixLogic();
+        bytes memory initData = abi.encodeCall(
+            impl.initialize, (alphixOwner, hookAddr, INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
         );
-
-        _setupAccessManagerRoles(hookAddr);
-
-        bytes memory constructorArgs = abi.encode(poolManager, owner, address(registry));
-        deployCodeTo("Alphix.sol:Alphix", constructorArgs, 0, hookAddr);
-        return Alphix(hookAddr);
-    }
-
-    /**
-     * @notice Deploys the AlphixLogic implementation and proxy
-     */
-    function _deployAlphixLogic() internal {
-        // Deploy AlphixLogic implementation
-        logicImplementation = new AlphixLogic();
-
-        // Deploy AlphixLogic proxy
-        bytes memory logicInitData = abi.encodeCall(
-            logicImplementation.initialize,
-            (owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
-        );
-
-        logicProxy = new ERC1967Proxy(address(logicImplementation), logicInitData);
-        logic = IAlphixLogic(address(logicProxy));
-    }
-
-    /**
-     * @notice Sets up AccessManager roles for the registry
-     * @dev Grants registrar role to Hook and sets function-level permissions
-     * @param hookAddr The address of the Hook to grantRole to
-     */
-    function _setupAccessManagerRoles(address hookAddr) internal {
-        uint64 REGISTRAR_ROLE = 1;
-
-        // Grant registrar role to hook
-        accessManager.grantRole(REGISTRAR_ROLE, address(hookAddr), 0);
-
-        // Wrap each selector in a bytes4[] array
-        bytes4[] memory contractSelectors = new bytes4[](1);
-        contractSelectors[0] = registry.registerContract.selector;
-        accessManager.setTargetFunctionRole(address(registry), contractSelectors, REGISTRAR_ROLE);
-
-        bytes4[] memory poolSelectors = new bytes4[](1);
-        poolSelectors[0] = registry.registerPool.selector;
-        accessManager.setTargetFunctionRole(address(registry), poolSelectors, REGISTRAR_ROLE);
+        proxy = new ERC1967Proxy(address(impl), initData);
+        newLogic = IAlphixLogic(address(proxy));
     }
 
     /**
@@ -269,7 +249,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
         tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
 
         uint128 liquidityAmount = 100e18;
-
         (uint256 amount0Expected, uint256 amount1Expected) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
             TickMath.getSqrtPriceAtTick(tickLower),
@@ -280,7 +259,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Handling Approvals with Permit2
         MockERC20(Currency.unwrap(currency0)).approve(address(permit2), amount0Expected + 1);
         MockERC20(Currency.unwrap(currency1)).approve(address(permit2), amount1Expected + 1);
-
         uint48 expiry = uint48(block.timestamp + 100);
         permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(amount0Expected + 1), expiry);
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1Expected + 1), expiry);
@@ -298,81 +276,52 @@ abstract contract BaseAlphixTest is Test, Deployers {
         );
     }
 
-    /// HELPER FUNCTIONS ///
+    /* HELPER FUNCTIONS */
 
     /**
      * @notice Deploys a currency pair with custom decimals
      * @dev Creates two MockERC20 tokens, sorts them, and mints tokens to test addresses
-     * @param decimals0 Number of decimals for the first token
-     * @param decimals1 Number of decimals for the second token
-     * @return currency0 The first sorted currency (lower address)
-     * @return currency1 The second sorted currency (higher address)
      */
     function deployCurrencyPairWithDecimals(uint8 decimals0, uint8 decimals1) internal returns (Currency, Currency) {
-        // Deploy test tokens
-        Currency _currency0 = Currency.wrap(address(new MockERC20("Alphix Test Token 0", "ATT0", decimals0)));
-        Currency _currency1 = Currency.wrap(address(new MockERC20("Alphix Test Token 1", "ATT1", decimals1)));
-
-        // Sort tokens by address
-        (Currency sortedCurrency0, Currency sortedCurrency1) =
-            SortTokens.sort(MockERC20(Currency.unwrap(_currency0)), MockERC20(Currency.unwrap(_currency1)));
-
-        // Mint tokens to all test addresses
-        MockERC20(Currency.unwrap(sortedCurrency0)).mint(owner, INITIAL_TOKEN_AMOUNT);
-        MockERC20(Currency.unwrap(sortedCurrency1)).mint(owner, INITIAL_TOKEN_AMOUNT);
-        MockERC20(Currency.unwrap(sortedCurrency0)).mint(user1, INITIAL_TOKEN_AMOUNT);
-        MockERC20(Currency.unwrap(sortedCurrency1)).mint(user1, INITIAL_TOKEN_AMOUNT);
-        MockERC20(Currency.unwrap(sortedCurrency0)).mint(user2, INITIAL_TOKEN_AMOUNT);
-        MockERC20(Currency.unwrap(sortedCurrency1)).mint(user2, INITIAL_TOKEN_AMOUNT);
-
-        return (sortedCurrency0, sortedCurrency1);
+        Currency raw0 = Currency.wrap(address(new MockERC20("Alphix Test Token 0", "ATT0", decimals0)));
+        Currency raw1 = Currency.wrap(address(new MockERC20("Alphix Test Token 1", "ATT1", decimals1)));
+        (Currency sorted0, Currency sorted1) =
+            SortTokens.sort(MockERC20(Currency.unwrap(raw0)), MockERC20(Currency.unwrap(raw1)));
+        MockERC20(Currency.unwrap(sorted0)).mint(owner, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(sorted1)).mint(owner, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(sorted0)).mint(user1, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(sorted1)).mint(user1, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(sorted0)).mint(user2, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(sorted1)).mint(user2, INITIAL_TOKEN_AMOUNT);
+        return (sorted0, sorted1);
     }
 
     /**
      * @notice Deploys a pool with custom token decimals and initializes it in Alphix
      * @dev Creates currencies, pool key, initializes in Uniswap, and configures in Alphix
-     * @param decimals0 Number of decimals for token0
-     * @param decimals1 Number of decimals for token1
-     * @param tickSpacing Tick spacing for the pool
-     * @param poolType Pool type for Alphix configuration
-     * @param initialFee Initial fee for the pool
-     * @param targetRatio Target ratio for the pool
-     * @return _key The created pool key
-     * @return _poolId The pool identifier
      */
     function deployPoolWithDecimals(
         uint8 decimals0,
         uint8 decimals1,
         int24 tickSpacing,
+        Alphix _hook,
         IAlphixLogic.PoolType poolType,
         uint24 initialFee,
         uint256 targetRatio
     ) internal returns (PoolKey memory _key, PoolId _poolId) {
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(decimals0, decimals1);
-
-        _key = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing, IHooks(hook));
+        _key = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing, IHooks(_hook));
         _poolId = _key.toId();
 
-        // Initialize pool in Uniswap
         poolManager.initialize(_key, Constants.SQRT_PRICE_1_1);
-
-        // Initialize pool in Alphix
         vm.prank(owner);
-        hook.initializePool(_key, initialFee, targetRatio, poolType);
-
+        _hook.initializePool(_key, initialFee, targetRatio, poolType);
         return (_key, _poolId);
     }
 
     /**
      * @notice Seeds liquidity to a pool with customizable parameters
      * @dev Supports both full-range and custom range liquidity positions
-     * @param _key The pool key to add liquidity to
-     * @param receiver Address that will receive the position NFT
-     * @param fullRange Whether to use full tick range
-     * @param rangePct Percentage range around current price (if not full range)
-     * @param amount0 Amount of token0 to add as liquidity
-     * @param amount1 Amount of token1 to add as liquidity
-     * @return newTokenId The NFT token ID of the created position
      */
     function seedLiquidity(
         PoolKey memory _key,
@@ -383,30 +332,24 @@ abstract contract BaseAlphixTest is Test, Deployers {
         uint256 amount1
     ) internal returns (uint256) {
         TestData memory data;
-
         data.tickSpacing = _key.tickSpacing;
         (data.currentPrice, data.currentTick,,) = poolManager.getSlot0(_key.toId());
 
         if (fullRange || rangePct >= UNIT) {
-            // Use full tick range
             data.lowerTick = TickMath.minUsableTick(data.tickSpacing);
             data.upperTick = TickMath.maxUsableTick(data.tickSpacing);
         } else {
-            // Calculate custom range around current price
-            data.priceRange = uint160(uint256(data.currentPrice).mulDiv(rangePct, UNIT));
+            data.priceRange = uint160(uint256(data.currentPrice) * rangePct / UNIT);
             data.lowerPrice = data.currentPrice - data.priceRange;
             data.upperPrice = data.currentPrice + data.priceRange;
             data._lowerTick = TickMath.getTickAtSqrtPrice(data.lowerPrice);
             data._upperTick = TickMath.getTickAtSqrtPrice(data.upperPrice);
-
-            // Round to nearest valid ticks
             unchecked {
                 data.lowerTick = int24((data._lowerTick / int256(data.tickSpacing)) * int256(data.tickSpacing));
                 data.upperTick = int24((data._upperTick / int256(data.tickSpacing)) * int256(data.tickSpacing));
             }
         }
 
-        // Calculate liquidity amount
         data.liquidityAmount = LiquidityAmounts.getLiquidityForAmounts(
             data.currentPrice,
             TickMath.getSqrtPriceAtTick(data.lowerTick),
@@ -415,15 +358,12 @@ abstract contract BaseAlphixTest is Test, Deployers {
             amount1
         );
 
-        // Handling Approvals with Permit2
         MockERC20(Currency.unwrap(_key.currency0)).approve(address(permit2), amount0 + 1);
         MockERC20(Currency.unwrap(_key.currency1)).approve(address(permit2), amount1 + 1);
-
         uint48 expiry = uint48(block.timestamp + 100);
         permit2.approve(Currency.unwrap(_key.currency0), address(positionManager), uint160(amount0 + 1), expiry);
         permit2.approve(Currency.unwrap(_key.currency1), address(positionManager), uint160(amount1 + 1), expiry);
 
-        // Mint the position
         (data.newTokenId,) = positionManager.mint(
             _key,
             data.lowerTick,
@@ -435,7 +375,42 @@ abstract contract BaseAlphixTest is Test, Deployers {
             block.timestamp,
             Constants.ZERO_BYTES
         );
-
         return data.newTokenId;
+    }
+
+    /* Internal */
+
+    /**
+     * @notice Compute a unique, permission-correct hook address
+     * @dev Encodes v4 hook permissions into the low bits and namespaces the high bits to avoid collisions
+     */
+    function _computeNextHookAddress() internal returns (address) {
+        uint160 flags = uint160(
+            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
+                | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG
+                | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+        );
+        uint160 ns = uint160(hookNamespace++) << 144;
+        return address(flags ^ ns);
+    }
+
+    /**
+     * @notice Sets up AccessManager roles for the registry
+     * @dev Grants registrar role to Hook and sets function-level permissions
+     */
+    function _setupAccessManagerRoles(address hookAddr, AccessManager am, Registry reg) internal {
+        uint64 REGISTRAR_ROLE = 1;
+
+        // Grant registrar role to hook
+        am.grantRole(REGISTRAR_ROLE, hookAddr, 0);
+
+        // Assign role to specific functions on Registry
+        bytes4[] memory contractSelectors = new bytes4[](1);
+        contractSelectors[0] = reg.registerContract.selector;
+        am.setTargetFunctionRole(address(reg), contractSelectors, REGISTRAR_ROLE);
+
+        bytes4[] memory poolSelectors = new bytes4[](1);
+        poolSelectors[0] = reg.registerPool.selector;
+        am.setTargetFunctionRole(address(reg), poolSelectors, REGISTRAR_ROLE);
     }
 }
