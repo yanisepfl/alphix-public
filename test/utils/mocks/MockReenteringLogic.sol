@@ -21,7 +21,7 @@ contract MockReenteringLogic is IERC165 {
     /**
      * @dev Pretend to support IAlphixLogic for ERC165 checks if any
      */
-    function supportsInterface(bytes4) external pure returns (bool) {
+    function supportsInterface(bytes4) external pure override returns (bool) {
         return true;
     }
 

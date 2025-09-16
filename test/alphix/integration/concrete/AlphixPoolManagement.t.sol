@@ -493,10 +493,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         internal
         returns (PoolKey memory k, PoolId id)
     {
-        (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(d0, d1);
-        k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, spacing, IHooks(hook));
-        id = k.toId();
-        poolManager.initialize(k, initialPrice);
+        return _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, hook);
     }
 
     /**
@@ -511,8 +508,6 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         int24 spacing,
         uint160 initialPrice
     ) internal returns (PoolKey memory k, PoolId id) {
-        (k, id) = _newUninitializedPool(d0, d1, spacing, initialPrice);
-        vm.prank(owner);
-        hook.initializePool(k, fee, ratio, ptype);
+        return _initPoolWithHook(ptype, fee, ratio, d0, d1, spacing, initialPrice, hook);
     }
 }

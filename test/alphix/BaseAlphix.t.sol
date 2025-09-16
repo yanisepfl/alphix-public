@@ -413,4 +413,48 @@ abstract contract BaseAlphixTest is Test, Deployers {
         poolSelectors[0] = reg.registerPool.selector;
         am.setTargetFunctionRole(address(reg), poolSelectors, REGISTRAR_ROLE);
     }
+
+    /**
+     * @notice Create a new Uniswap pool bound to a given hook without configuring it.
+     * @param d0 Decimals for token0
+     * @param d1 Decimals for token1
+     * @param spacing Tick spacing for the pool
+     * @param initialPrice Sqrt price at initialization (X96)
+     * @param _hook Hook to bind in the PoolKey (IHooks)
+     */
+    function _newUninitializedPoolWithHook(uint8 d0, uint8 d1, int24 spacing, uint160 initialPrice, Alphix _hook)
+        internal
+        returns (PoolKey memory k, PoolId id)
+    {
+        (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(d0, d1);
+        k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, spacing, IHooks(_hook));
+        id = k.toId();
+        poolManager.initialize(k, initialPrice);
+    }
+
+    /**
+     * @notice Create and initialize a pool in Alphix for a given hook with supplied params.
+     * @param ptype Pool type for Alphix configuration
+     * @param fee Initial dynamic LP fee
+     * @param ratio Initial target ratio
+     * @param d0 Decimals for token0
+     * @param d1 Decimals for token1
+     * @param spacing Tick spacing for the pool
+     * @param initialPrice Sqrt price at initialization (X96)
+     * @param _hook Hook to bind in the PoolKey (IHooks)
+     */
+    function _initPoolWithHook(
+        IAlphixLogic.PoolType ptype,
+        uint24 fee,
+        uint256 ratio,
+        uint8 d0,
+        uint8 d1,
+        int24 spacing,
+        uint160 initialPrice,
+        Alphix _hook
+    ) internal returns (PoolKey memory k, PoolId id) {
+        (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, _hook);
+        vm.prank(_hook.owner());
+        _hook.initializePool(k, fee, ratio, ptype);
+    }
 }
