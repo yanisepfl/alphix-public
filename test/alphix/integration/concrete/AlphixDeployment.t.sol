@@ -28,6 +28,8 @@ import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {MockERC165} from "../../../utils/mocks/MockERC165.sol";
 
 contract AlphixDeploymentTest is BaseAlphixTest {
+    /* TESTS */
+
     /**
      * @notice Verifies Alphix Hook is paused by constructor and unpaused by initialize.
      */

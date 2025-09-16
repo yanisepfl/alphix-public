@@ -278,7 +278,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         uint24 _initialFee,
         uint256 _initialTargetRatio,
         IAlphixLogic.PoolType _poolType
-    ) external override onlyOwner nonReentrant whenNotPaused {
+    ) external override onlyOwner nonReentrant whenNotPaused validLogic {
         if (!IAlphixLogic(logic).isValidFeeForPoolType(_poolType, _initialFee)) {
             revert InvalidFeeForPoolType(_poolType, _initialFee);
         }
