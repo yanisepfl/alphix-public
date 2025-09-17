@@ -457,4 +457,62 @@ abstract contract BaseAlphixTest is Test, Deployers {
         vm.prank(_hook.owner());
         _hook.initializePool(k, fee, ratio, ptype);
     }
+
+
+    /**
+     * @notice Calls modifyLiquidities expecting a specific revert.
+     * @dev Mirrors PositionManager mint internals to ensure the next external call is the failing one.
+     */
+    function _expectRevertOnModifyLiquiditiesMint(
+        PoolKey memory k,
+        int24 tl,
+        int24 tu,
+        uint256 liquidityAmount,
+        uint256 amt0Max,
+        uint256 amt1Max,
+        address recipient
+    ) internal {
+        // Build actions and params like the wrapper
+        bytes memory actions = abi.encodePacked(
+            uint8(0), // Actions.MINT_POSITION
+            uint8(4), // Actions.SETTLE_PAIR
+            uint8(5), // Actions.SWEEP
+            uint8(5)  // Actions.SWEEP
+        );
+        bytes[] memory params = new bytes[](4);
+        params[0] = abi.encode(k, tl, tu, liquidityAmount, amt0Max, amt1Max, recipient, Constants.ZERO_BYTES);
+        params[1] = abi.encode(k.currency0, k.currency1);
+        params[2] = abi.encode(k.currency0, recipient);
+        params[3] = abi.encode(k.currency1, recipient);
+
+        vm.expectRevert();
+        positionManager.modifyLiquidities(abi.encode(actions, params), block.timestamp + 1);
+    }
+
+    /**
+     * @notice Expects decreaseLiquidity path to revert with a specific selector by calling modifyLiquidities directly
+     * @dev Mirrors PositionManager.decreaseLiquidity internals (Actions.DECREASE_LIQUIDITY + TAKE_PAIR)
+     */
+    function _expectRevertOnModifyLiquiditiesDecrease(
+        uint256 _tokenId,
+        uint256 liquidityToRemove,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        address recipient
+    ) internal {
+        // Resolve token currencies for tokenId
+        (Currency c0, Currency c1) = positionManager.getCurrencies(_tokenId); // implement if needed or inline logic
+
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(_tokenId, liquidityToRemove, amount0Min, amount1Min, Constants.ZERO_BYTES);
+        params[1] = abi.encode(c0, c1, recipient);
+
+        bytes memory actions = abi.encodePacked(
+            uint8(1), // Actions.DECREASE_LIQUIDITY
+            uint8(7)  // Actions.TAKE_PAIR
+        );
+
+        vm.expectRevert();
+        positionManager.modifyLiquidities(abi.encode(actions, params), block.timestamp + 1);
+    }
 }
