@@ -53,10 +53,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         // Validate pool is active by invoking a guarded path that requires activation (no revert expected)
         vm.prank(address(hook));
         logic.beforeAddLiquidity(
-            user1,
-            freshKey,
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}),
-            ""
+            user1, freshKey, ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}), ""
         );
     }
 
@@ -129,10 +126,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         // Should not revert on guarded path when active
         vm.prank(address(hook));
         logic.beforeAddLiquidity(
-            user1,
-            freshKey,
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}),
-            ""
+            user1, freshKey, ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}), ""
         );
     }
 
@@ -196,19 +190,13 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
         logic.beforeAddLiquidity(
-            user1,
-            freshKey,
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}),
-            ""
+            user1, freshKey, ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}), ""
         );
 
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
         logic.beforeRemoveLiquidity(
-            user1,
-            freshKey,
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: -1000, salt: 0}),
-            ""
+            user1, freshKey, ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: -1000, salt: 0}), ""
         );
     }
 
@@ -248,16 +236,14 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice setPoolTypeBounds updates bounds and emits event for STANDARD type
      */
     function test_setPoolTypeBounds_success() public {
-        IAlphixLogic.PoolTypeBounds memory newBounds =
-            IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 5000});
+        IAlphixLogic.PoolTypeBounds memory newBounds = IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 5000});
 
         vm.prank(address(hook));
         vm.expectEmit(true, false, false, true);
         emit IAlphixLogic.PoolTypeBoundsUpdated(IAlphixLogic.PoolType.STANDARD, 1000, 5000);
         logic.setPoolTypeBounds(IAlphixLogic.PoolType.STANDARD, newBounds);
 
-        IAlphixLogic.PoolTypeBounds memory retrieved =
-            logic.getPoolTypeBounds(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolTypeBounds memory retrieved = logic.getPoolTypeBounds(IAlphixLogic.PoolType.STANDARD);
         assertEq(retrieved.minFee, newBounds.minFee, "minFee mismatch");
         assertEq(retrieved.maxFee, newBounds.maxFee, "maxFee mismatch");
     }
@@ -266,8 +252,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice setPoolTypeBounds reverts when minFee > maxFee
      */
     function test_setPoolTypeBounds_revertsOnInvalidBounds() public {
-        IAlphixLogic.PoolTypeBounds memory invalidBounds =
-            IAlphixLogic.PoolTypeBounds({minFee: 5000, maxFee: 1000});
+        IAlphixLogic.PoolTypeBounds memory invalidBounds = IAlphixLogic.PoolTypeBounds({minFee: 5000, maxFee: 1000});
 
         vm.prank(address(hook));
         vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, 5000, 1000));
@@ -279,8 +264,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      */
     function test_setPoolTypeBounds_revertsOnExcessiveMaxFee() public {
         uint24 tooHigh = uint24(LPFeeLibrary.MAX_LP_FEE + 1);
-        IAlphixLogic.PoolTypeBounds memory invalidBounds =
-            IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: tooHigh});
+        IAlphixLogic.PoolTypeBounds memory invalidBounds = IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: tooHigh});
 
         vm.prank(address(hook));
         vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, 1000, tooHigh));
@@ -291,8 +275,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice setPoolTypeBounds reverts for non-hook callers
      */
     function test_setPoolTypeBounds_revertsOnNonHook() public {
-        IAlphixLogic.PoolTypeBounds memory newBounds =
-            IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 5000});
+        IAlphixLogic.PoolTypeBounds memory newBounds = IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 5000});
 
         vm.prank(user1);
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
@@ -306,8 +289,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         vm.prank(owner);
         AlphixLogic(address(logicProxy)).pause();
 
-        IAlphixLogic.PoolTypeBounds memory newBounds =
-            IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 5000});
+        IAlphixLogic.PoolTypeBounds memory newBounds = IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 5000});
 
         vm.prank(address(hook));
         vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
@@ -333,14 +315,10 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      */
     function test_isValidFeeForPoolType_returnsFalseForInvalidFees() public {
         vm.prank(address(hook));
-        assertFalse(
-            logic.isValidFeeForPoolType(IAlphixLogic.PoolType.STANDARD, standardBounds.minFee - 1)
-        ); // below
+        assertFalse(logic.isValidFeeForPoolType(IAlphixLogic.PoolType.STANDARD, standardBounds.minFee - 1)); // below
 
         vm.prank(address(hook));
-        assertFalse(
-            logic.isValidFeeForPoolType(IAlphixLogic.PoolType.STANDARD, standardBounds.maxFee + 1)
-        ); // above
+        assertFalse(logic.isValidFeeForPoolType(IAlphixLogic.PoolType.STANDARD, standardBounds.maxFee + 1)); // above
     }
 
     /**
@@ -375,8 +353,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      */
     function test_getPoolConfig_unconfiguredPool() public {
         // Use a fresh pool to avoid side effects from setUp default pool
-        (, PoolId freshId) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+        (, PoolId freshId) = _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
         IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(freshId);
         assertEq(config.initialFee, 0, "initialFee should be 0");
         assertEq(config.initialTargetRatio, 0, "initialTargetRatio should be 0");
