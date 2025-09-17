@@ -6,11 +6,11 @@ import {Test, console} from "forge-std/Test.sol";
 
 /* OZ IMPORTS (Upgradeable + Proxy) */
 import {
-    Ownable2StepUpgradeable,
-    OwnableUpgradeable
+    Ownable2StepUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
@@ -22,7 +22,6 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {MockAlphixLogic} from "../../../utils/mocks/MockAlphixLogic.sol";
@@ -42,7 +41,7 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
      */
     function test_constructor_disablesInitializers() public {
         AlphixLogic freshImpl = new AlphixLogic();
-        vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
         freshImpl.initialize(owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds);
     }
 
