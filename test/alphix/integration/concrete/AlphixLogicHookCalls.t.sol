@@ -55,7 +55,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         AlphixLogic(address(logicProxy)).pause();
 
         vm.prank(address(hook));
-        vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+        vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         logic.beforeInitialize(user1, key, Constants.SQRT_PRICE_1_1);
     }
 
@@ -88,7 +88,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         AlphixLogic(address(logicProxy)).pause();
 
         vm.prank(address(hook));
-        vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+        vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         logic.afterInitialize(user1, key, Constants.SQRT_PRICE_1_1, 0);
     }
 
@@ -107,8 +107,10 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
             hook
         );
 
+        int24 lower = -int24(3 * defaultTickSpacing);
+        int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0});
+            ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
         vm.prank(address(hook));
         bytes4 result = logic.beforeAddLiquidity(user1, kFresh, params, "");
@@ -131,8 +133,10 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         logic.deactivatePool(kFresh);
 
+        int24 lower = -int24(3 * defaultTickSpacing);
+        int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0});
+            ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
@@ -152,8 +156,10 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
             hook
         );
 
+        int24 lower = -int24(3 * defaultTickSpacing);
+        int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: -1000, salt: 0});
+            ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
         vm.prank(address(hook));
         bytes4 result = logic.beforeRemoveLiquidity(user1, kFresh, params, "");
@@ -173,8 +179,10 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
             hook
         );
 
+        int24 lower = -int24(3 * defaultTickSpacing);
+        int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0});
+            ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
         BalanceDelta zero = BalanceDelta.wrap(0);
 
@@ -197,8 +205,10 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
             hook
         );
 
+        int24 lower = -int24(3 * defaultTickSpacing);
+        int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: -1000, salt: 0});
+            ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
         BalanceDelta zero = BalanceDelta.wrap(0);
 
@@ -322,8 +332,10 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
             hook
         );
 
+        int24 lower = -int24(3 * defaultTickSpacing);
+        int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory lpParams =
-            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0});
+            ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
         SwapParams memory swapParams =
             SwapParams({zeroForOne: true, amountSpecified: -1000, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});

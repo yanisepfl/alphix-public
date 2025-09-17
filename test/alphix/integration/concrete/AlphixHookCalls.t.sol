@@ -86,8 +86,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
             Constants.SQRT_PRICE_1_1, TickMath.getSqrtPriceAtTick(tl), TickMath.getSqrtPriceAtTick(tu), liquidityAmount
         );
 
-        // Approvals via Permit2 for this contract as payer
-        // Note: BaseAlphixTest minted tokens to owner, user1, user2; this test uses this contract's balance
+        // Note: BaseAlphixTest minted tokens to owner, user1, user2; this test uses user1's balance
         vm.startPrank(user1);
 
         // Approve Permit2 and downstream allowance to positionManager
@@ -115,7 +114,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
     /**
      * @notice addLiquidity reverts when pool deactivated via logic, observed through positionManager mint
      */
-    function test_user_add_liquidity_reverts_when_pauseOrdeactivated() public {
+    function test_user_add_liquidity_reverts_when_pauseOrDeactivated() public {
         // New configured pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
             IAlphixLogic.PoolType.STANDARD,
@@ -155,7 +154,10 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         logic.beforeAddLiquidity(
-            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
+            owner,
+            kFresh,
+            ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
+            ""
         );
 
         // Unpause pool logic
@@ -173,7 +175,10 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
         logic.beforeAddLiquidity(
-            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
+            owner,
+            kFresh,
+            ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
+            ""
         );
     }
 
@@ -201,7 +206,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
 
         // Reduce some liquidity (active path)
         uint256 liqToRemove = 1e18;
-        positionManager.decreaseLiquidity(posId, liqToRemove, 0, 0, owner, block.timestamp, Constants.ZERO_BYTES);
+        positionManager.decreaseLiquidity(
+            posId, uint128(liqToRemove), 0, 0, owner, block.timestamp, Constants.ZERO_BYTES
+        );
 
         // Pause logic at the proxy (all hook calls should revert)
         AlphixLogic(address(logicProxy)).pause();
@@ -217,7 +224,10 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         logic.beforeRemoveLiquidity(
-            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
+            owner,
+            kFresh,
+            ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
+            ""
         );
 
         vm.startPrank(owner);
@@ -237,7 +247,10 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
         logic.beforeRemoveLiquidity(
-            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
+            owner,
+            kFresh,
+            ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
+            ""
         );
     }
 
@@ -278,6 +291,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
 
         // Validate spent token0 (negative delta for token0)
         assertEq(int256(swapDelta.amount0()), -int256(amountIn), "amount0 spent mismatch");
+        assertTrue(int256(swapDelta.amount1()) > 0, "amount1 received mismatch");
 
         // Deactivate pool then expect swap to revert with PoolPaused
         hook.deactivatePool(kFresh);

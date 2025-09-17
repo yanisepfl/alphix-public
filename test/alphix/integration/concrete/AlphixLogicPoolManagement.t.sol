@@ -314,8 +314,10 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice isValidFeeForPoolType returns false for fees outside [min,max]
      */
     function test_isValidFeeForPoolType_returnsFalseForInvalidFees() public {
-        vm.prank(address(hook));
-        assertFalse(logic.isValidFeeForPoolType(IAlphixLogic.PoolType.STANDARD, standardBounds.minFee - 1)); // below
+        if (standardBounds.minFee > 0) {
+            vm.prank(address(hook));
+            assertFalse(logic.isValidFeeForPoolType(IAlphixLogic.PoolType.STANDARD, standardBounds.minFee - 1)); // below
+        }
 
         vm.prank(address(hook));
         assertFalse(logic.isValidFeeForPoolType(IAlphixLogic.PoolType.STANDARD, standardBounds.maxFee + 1)); // above
