@@ -67,8 +67,16 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      */
     function test_user_add_liquidity_success_via_positionManager() public {
         // New configured pool (active)
-        (PoolKey memory kFresh,) =
-            _initPoolWithHook(IAlphixLogic.PoolType.STANDARD, INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+        (PoolKey memory kFresh,) = _initPoolWithHook(
+            IAlphixLogic.PoolType.STANDARD,
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            hook
+        );
 
         // Choose a full-range LP and compute required amounts
         int24 tl = TickMath.minUsableTick(kFresh.tickSpacing);
@@ -97,9 +105,8 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Verify pool active by calling a guarded path through the hook->logic
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e15)), salt: 0
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e15)), salt: 0});
         vm.prank(address(hook));
         bytes4 sel = logic.beforeAddLiquidity(user1, kFresh, params, "");
         assertEq(sel, BaseHook.beforeAddLiquidity.selector, "selector mismatch");
@@ -110,8 +117,16 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      */
     function test_user_add_liquidity_reverts_when_pauseOrdeactivated() public {
         // New configured pool
-        (PoolKey memory kFresh,) =
-            _initPoolWithHook(IAlphixLogic.PoolType.STANDARD, INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+        (PoolKey memory kFresh,) = _initPoolWithHook(
+            IAlphixLogic.PoolType.STANDARD,
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            hook
+        );
 
         // Try minting liquidity, hook.beforeAddLiquidity should revert with PoolPaused
         int24 tl = TickMath.minUsableTick(kFresh.tickSpacing);
@@ -127,20 +142,12 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         uint48 expiry = uint48(block.timestamp + 100);
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
-        
+
         // Pause logic proxy -> delegatecalls, toggles the paused state in proxy storage, and emits the event.
         AlphixLogic(address(logicProxy)).pause();
 
         // Expect revert on the exact next external call (because of PausableUpgradeable.EnforcedPause.selector)
-        _expectRevertOnModifyLiquiditiesMint(
-            kFresh,
-            tl,
-            tu,
-            liquidityAmount,
-            amt0 + 1,
-            amt1 + 1,
-            owner
-        );
+        _expectRevertOnModifyLiquiditiesMint(kFresh, tl, tu, liquidityAmount, amt0 + 1, amt1 + 1, owner);
 
         vm.stopPrank();
 
@@ -148,10 +155,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         logic.beforeAddLiquidity(
-            owner,
-            kFresh,
-            ModifyLiquidityParams({ tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0 }),
-            ""
+            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
         );
 
         // Unpause pool logic
@@ -162,25 +166,14 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         hook.deactivatePool(kFresh);
 
         // Expect revert on the exact next external call (because of IAlphixLogic.PoolPaused.selector)
-        _expectRevertOnModifyLiquiditiesMint(
-            kFresh,
-            tl,
-            tu,
-            liquidityAmount,
-            amt0 + 1,
-            amt1 + 1,
-            owner
-        );
+        _expectRevertOnModifyLiquiditiesMint(kFresh, tl, tu, liquidityAmount, amt0 + 1, amt1 + 1, owner);
         vm.stopPrank();
 
         // Now call the logic’s beforeAddLiquidity entrypoint and expect the PoolPaused selector
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
         logic.beforeAddLiquidity(
-            owner,
-            kFresh,
-            ModifyLiquidityParams({ tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0 }),
-            ""
+            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
         );
     }
 
@@ -189,34 +182,32 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      */
     function test_user_remove_liquidity_success_and_reverts_when_pausedOrDeactivated() public {
         // Fresh configured pool and seed a position for this contract
-        (PoolKey memory kFresh,) =
-            _initPoolWithHook(IAlphixLogic.PoolType.STANDARD, INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+        (PoolKey memory kFresh,) = _initPoolWithHook(
+            IAlphixLogic.PoolType.STANDARD,
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            hook
+        );
 
         vm.startPrank(owner);
 
         // Seed the newly created pool with liquidity (full range == true)
-        uint256 posId = seedLiquidity(
-            kFresh, owner, true, UNIT, 10_000e18, 10_000e18
-        );
+        uint256 posId = seedLiquidity(kFresh, owner, true, UNIT, 10_000e18, 10_000e18);
         assertTrue(posId != 0, "failed to mint position");
 
         // Reduce some liquidity (active path)
         uint256 liqToRemove = 1e18;
-        positionManager.decreaseLiquidity(
-            posId, liqToRemove, 0, 0, owner, block.timestamp, Constants.ZERO_BYTES
-        );
+        positionManager.decreaseLiquidity(posId, liqToRemove, 0, 0, owner, block.timestamp, Constants.ZERO_BYTES);
 
         // Pause logic at the proxy (all hook calls should revert)
         AlphixLogic(address(logicProxy)).pause();
 
         // Expect revert on the exact next external call (because of PausableUpgradeable.EnforcedPause.selector)
-        _expectRevertOnModifyLiquiditiesDecrease(
-            posId,
-            liqToRemove,
-            0,
-            0,
-            owner
-        );
+        _expectRevertOnModifyLiquiditiesDecrease(posId, liqToRemove, 0, 0, owner);
         vm.stopPrank();
 
         // Liquidity was seeded with full range so we can infer tick lower and upper:
@@ -226,10 +217,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         logic.beforeRemoveLiquidity(
-            owner,
-            kFresh,
-            ModifyLiquidityParams({ tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0 }),
-            ""
+            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
         );
 
         vm.startPrank(owner);
@@ -241,13 +229,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         hook.deactivatePool(kFresh);
 
         // Expect revert on the exact next external call (because of IAlphixLogic.PoolPaused.selector)
-        _expectRevertOnModifyLiquiditiesDecrease(
-            posId,
-            liqToRemove,
-            0,
-            0,
-            owner
-        );
+        _expectRevertOnModifyLiquiditiesDecrease(posId, liqToRemove, 0, 0, owner);
 
         vm.stopPrank();
 
@@ -255,10 +237,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
         logic.beforeRemoveLiquidity(
-            owner,
-            kFresh,
-            ModifyLiquidityParams({ tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0 }),
-            ""
+            owner, kFresh, ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: 1e18, salt: 0}), ""
         );
     }
 
@@ -267,8 +246,16 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      */
     function test_user_swaps_success_and_reverts_on_deactivate_or_pause() public {
         // Fresh configured pool
-        (PoolKey memory kFresh,) =
-            _initPoolWithHook(IAlphixLogic.PoolType.STANDARD, INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+        (PoolKey memory kFresh,) = _initPoolWithHook(
+            IAlphixLogic.PoolType.STANDARD,
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            hook
+        );
 
         vm.startPrank(owner);
         // Provide some liquidity so a swap can execute
@@ -314,7 +301,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        logic.beforeSwap(owner, kFresh, SwapParams({ zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0 }), "");
+        logic.beforeSwap(
+            owner, kFresh, SwapParams({zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0}), ""
+        );
 
         vm.startPrank(owner);
         // Re-activate, then pause the logic globally and expect enforced pause
@@ -339,7 +328,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
         vm.prank(address(hook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-        logic.beforeSwap(owner, kFresh, SwapParams({ zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0 }), "");
+        logic.beforeSwap(
+            owner, kFresh, SwapParams({zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0}), ""
+        );
     }
 
     /**

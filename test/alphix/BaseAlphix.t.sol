@@ -458,7 +458,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
         _hook.initializePool(k, fee, ratio, ptype);
     }
 
-
     /**
      * @notice Calls modifyLiquidities expecting a specific revert.
      * @dev Mirrors PositionManager mint internals to ensure the next external call is the failing one.
@@ -477,7 +476,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
             uint8(0), // Actions.MINT_POSITION
             uint8(4), // Actions.SETTLE_PAIR
             uint8(5), // Actions.SWEEP
-            uint8(5)  // Actions.SWEEP
+            uint8(5) // Actions.SWEEP
         );
         bytes[] memory params = new bytes[](4);
         params[0] = abi.encode(k, tl, tu, liquidityAmount, amt0Max, amt1Max, recipient, Constants.ZERO_BYTES);
@@ -509,7 +508,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
         bytes memory actions = abi.encodePacked(
             uint8(1), // Actions.DECREASE_LIQUIDITY
-            uint8(7)  // Actions.TAKE_PAIR
+            uint8(7) // Actions.TAKE_PAIR
         );
 
         vm.expectRevert();
