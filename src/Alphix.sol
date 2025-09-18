@@ -69,13 +69,14 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     /* CONSTRUCTOR */
 
     /**
-     * @dev Initialize with PoolManager and alphixManager addresses.
+     * @notice Initialize with PoolManager and alphixManager addresses.
+     * @dev Check for _alphixManager != address(0) is done in Ownable.
      */
     constructor(IPoolManager _poolManager, address _alphixManager, address _registry)
         BaseDynamicFee(_poolManager)
         Ownable(_alphixManager)
     {
-        if (address(_poolManager) == address(0) || _alphixManager == address(0) || _registry == address(0)) {
+        if (address(_poolManager) == address(0) || _registry == address(0)) {
             revert InvalidAddress();
         }
         registry = _registry;
@@ -277,7 +278,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         uint24 _initialFee,
         uint256 _initialTargetRatio,
         IAlphixLogic.PoolType _poolType
-    ) external override onlyOwner nonReentrant whenNotPaused {
+    ) external override onlyOwner nonReentrant whenNotPaused validLogic {
         if (!IAlphixLogic(logic).isValidFeeForPoolType(_poolType, _initialFee)) {
             revert InvalidFeeForPoolType(_poolType, _initialFee);
         }
@@ -378,6 +379,9 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     function _setInitialLogic(address newLogic) internal {
         if (newLogic == address(0)) {
             revert InvalidAddress();
+        }
+        if (!IERC165(newLogic).supportsInterface(type(IAlphixLogic).interfaceId)) {
+            revert IAlphixLogic.InvalidLogicContract();
         }
         logic = newLogic;
         emit LogicUpdated(address(0), newLogic);
