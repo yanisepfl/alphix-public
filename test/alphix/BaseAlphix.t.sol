@@ -75,6 +75,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint24 constant INITIAL_FEE = 500; // 0.05%
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
+    uint64 constant REGISTRAR_ROLE = 1;
 
     // Test addresses
     address public owner;
@@ -399,8 +400,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
      * @dev Grants registrar role to Hook and sets function-level permissions
      */
     function _setupAccessManagerRoles(address hookAddr, AccessManager am, Registry reg) internal {
-        uint64 REGISTRAR_ROLE = 1;
-
         // Grant registrar role to hook
         am.grantRole(REGISTRAR_ROLE, hookAddr, 0);
 

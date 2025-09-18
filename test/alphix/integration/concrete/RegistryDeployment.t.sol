@@ -87,7 +87,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         vm.prank(owner);
-        am2.grantRole(uint64(1), owner, 0);
+        am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         vm.prank(owner);
         vm.expectEmit(true, true, false, true);
@@ -105,7 +105,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         vm.prank(owner);
-        am2.grantRole(uint64(1), owner, 0);
+        am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         vm.prank(owner);
         vm.expectRevert(IRegistry.InvalidAddress.selector);
@@ -132,7 +132,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         vm.prank(owner);
-        am2.grantRole(uint64(1), owner, 0);
+        am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         vm.prank(owner);
         reg2.registerContract(IRegistry.ContractKey.Alphix, address(hook));
@@ -154,7 +154,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         vm.prank(owner);
-        am2.grantRole(uint64(1), owner, 0);
+        am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         // Create a fresh pool key bound to the same hook
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
@@ -189,7 +189,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         vm.prank(owner);
-        am2.grantRole(uint64(1), owner, 0);
+        am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
         PoolKey memory kFresh = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 30, IHooks(hook));
@@ -226,7 +226,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         vm.prank(owner);
-        am2.grantRole(uint64(1), owner, 0);
+        am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         // First pool
         (Currency a0, Currency a1) = deployCurrencyPairWithDecimals(18, 18);
@@ -258,7 +258,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         vm.prank(owner);
-        am2.grantRole(uint64(1), owner, 0);
+        am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         vm.prank(owner);
         reg2.registerContract(IRegistry.ContractKey.Alphix, address(hook));

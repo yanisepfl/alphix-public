@@ -5,10 +5,8 @@ pragma solidity ^0.8.26;
 import {Test, console} from "forge-std/Test.sol";
 
 /* OZ IMPORTS */
-import {
-    Ownable2StepUpgradeable,
-    OwnableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 /* UNISWAP V4 IMPORTS */
@@ -108,6 +106,11 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
         vm.prank(newOwner);
         AlphixLogic(address(logicProxy)).upgradeToAndCall(address(newImpl), bytes(""));
 
+        // Verify EIP-1967 implementation slot updated
+        bytes32 implSlot = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
+        address impl = address(uint160(uint256(vm.load(address(logicProxy), implSlot))));
+        assertEq(impl, address(newImpl), "logic proxy impl not updated");
+
         // Old owner cannot upgrade
         AlphixLogic newerImpl = new AlphixLogic();
         vm.prank(owner);
@@ -119,8 +122,6 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
      * @notice AccessManager: only REGISTRAR_ROLE can register contracts and pools; role transfer and revocation works
      */
     function test_access_manager_roles_and_revocation() public {
-        uint64 REGISTRAR_ROLE = 1;
-
         // Grant role to owner
         vm.prank(owner);
         accessManager.grantRole(REGISTRAR_ROLE, owner, 0);
