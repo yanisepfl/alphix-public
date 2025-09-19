@@ -7,6 +7,7 @@ import {PoolId} from "v4-core/src/types/PoolId.sol";
 
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "./IAlphixLogic.sol";
+import {DynamicFeeLib} from "../libraries/DynamicFee.sol";
 
 /**
  * @title IAlphix.
@@ -22,7 +23,14 @@ interface IAlphix {
      * @param oldFee The previous fee value.
      * @param newFee The new fee value.
      */
-    event FeeUpdated(PoolId indexed poolId, uint24 oldFee, uint24 newFee);
+    event FeeUpdated(
+        PoolId indexed poolId,
+        uint24 oldFee,
+        uint24 newFee,
+        uint256 oldTargetRatio,
+        uint256 currentRatio,
+        uint256 newTargetRatio
+    );
 
     /**
      * @dev Emitted upon logic change.
@@ -109,11 +117,17 @@ interface IAlphix {
     function setRegistry(address newRegistry) external;
 
     /**
-     * @notice Set per-pool type bounds.
-     * @param poolType The pool type to set bounds of.
-     * @param bounds The bounds to set.
+     * @notice Set per-pool type params.
+     * @param poolType The pool type to set params to.
+     * @param params The params to set.
      */
-    function setPoolTypeBounds(IAlphixLogic.PoolType poolType, IAlphixLogic.PoolTypeBounds calldata bounds) external;
+    function setPoolTypeParams(IAlphixLogic.PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params) external;
+
+    /**
+     * @notice Set global max adjustment rate.
+     * @param _globalMaxAdjRate The global max adjustment rate to set.
+     */
+    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external;
 
     /**
      * @notice Initialize pool by activating and configuring it, and sets its initial fee.
@@ -168,17 +182,24 @@ interface IAlphix {
     function getRegistry() external view returns (address registry);
 
     /**
-     * @notice Get the given pool bounds.
-     * @return poolId The pool ID to get the bounds of.
+     * @notice Get the given key's current fee.
+     * @param key The key of the pool to get the current fee from.
+     * @return fee The current fee of the given pool.
      */
-    function getPoolBounds(PoolId poolId) external view returns (IAlphixLogic.PoolTypeBounds memory);
+    function getFee(PoolKey calldata key) external view returns (uint24 fee);
 
     /**
-     * @notice Get the given pool type bounds.
-     * @return poolType The pool type to get the bounds of.
+     * @notice Get the given pool params.
+     * @return poolId The pool ID to get the params of.
      */
-    function getPoolTypeBounds(IAlphixLogic.PoolType poolType)
+    function getPoolParams(PoolId poolId) external view returns (DynamicFeeLib.PoolTypeParams memory);
+
+    /**
+     * @notice Get the given pool type params.
+     * @return poolType The pool type to get the params of.
+     */
+    function getPoolTypeParams(IAlphixLogic.PoolType poolType)
         external
         view
-        returns (IAlphixLogic.PoolTypeBounds memory);
+        returns (DynamicFeeLib.PoolTypeParams memory);
 }

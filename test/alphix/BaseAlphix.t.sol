@@ -31,11 +31,11 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 /* LOCAL IMPORTS */
 import {EasyPosm} from "../utils/libraries/EasyPosm.sol";
 import {Deployers} from "../utils/Deployers.sol";
-
 import {Alphix} from "../../src/Alphix.sol";
 import {AlphixLogic} from "../../src/AlphixLogic.sol";
 import {Registry} from "../../src/Registry.sol";
 import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
+import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
 
 /**
  * @title BaseAlphixTest
@@ -77,6 +77,9 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 constant UNIT = 1e18;
     uint64 constant REGISTRAR_ROLE = 1;
 
+    // Optional: derived safe cap if tests ever want to override logic default
+    uint256 constant GLOBAL_MAX_ADJ_RATE_SAFE = (uint256(type(uint24).max) * 1e18) / uint256(LPFeeLibrary.MAX_LP_FEE);
+
     // Test addresses
     address public owner;
     address public user1;
@@ -101,10 +104,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
     int24 public tickUpper;
     int24 public defaultTickSpacing;
 
-    // Pool type bounds
-    IAlphixLogic.PoolTypeBounds public stableBounds;
-    IAlphixLogic.PoolTypeBounds public standardBounds;
-    IAlphixLogic.PoolTypeBounds public volatileBounds;
+    // Unified per-pool-type parameters
+    DynamicFeeLib.PoolTypeParams public stableParams;
+    DynamicFeeLib.PoolTypeParams public standardParams;
+    DynamicFeeLib.PoolTypeParams public volatileParams;
 
     // Namespace so each hook salt/address is unique
     uint16 private hookNamespace;
@@ -128,8 +131,8 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
         vm.startPrank(owner);
 
-        // Setup pool type bounds
-        _initializePoolTypeBounds();
+        // Setup unified PoolTypeParams
+        _initializePoolTypeParams();
 
         // Deploy a default Alphix Infrastructure (AccessManager, Registry, Hook, Logic)
         (accessManager, registry, hook, logicImplementation, logicProxy, logic) =
@@ -156,13 +159,45 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
-     * @notice Initializes the fee bounds for different pool types
-     * @dev Sets up stable, standard, and volatile pool bounds
+     * @notice Initializes the unified parameters for different pool types
+     * @dev Sets up stable, standard, and volatile pool params with e.g. fee bounds, lookbackPeriod etc.
      */
-    function _initializePoolTypeBounds() internal {
-        stableBounds = IAlphixLogic.PoolTypeBounds({minFee: 100, maxFee: 1000});
-        standardBounds = IAlphixLogic.PoolTypeBounds({minFee: 500, maxFee: 10000});
-        volatileBounds = IAlphixLogic.PoolTypeBounds({minFee: 1000, maxFee: 50000});
+    function _initializePoolTypeParams() internal {
+        stableParams = DynamicFeeLib.PoolTypeParams({
+            minFee: 1,
+            maxFee: 5001,
+            baseMaxFeeDelta: 25,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 5e15,
+            linearSlope: 2e18,
+            upperSideFactor: 1e18,
+            lowerSideFactor: 2e18
+        });
+
+        standardParams = DynamicFeeLib.PoolTypeParams({
+            minFee: 99,
+            maxFee: 10001,
+            baseMaxFeeDelta: 50,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 5e16,
+            linearSlope: 1e18,
+            upperSideFactor: 1e18,
+            lowerSideFactor: 2e18
+        });
+
+        volatileParams = DynamicFeeLib.PoolTypeParams({
+            minFee: 499,
+            maxFee: 100001,
+            baseMaxFeeDelta: 500,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 1e16,
+            linearSlope: 5e17,
+            upperSideFactor: 1e18,
+            lowerSideFactor: 2e18
+        });
     }
 
     /**
@@ -194,7 +229,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Deploy Alphix Hook (CREATE2, + constructor pauses)
         newHook = _deployAlphixHook(pm, alphixOwner, am, reg);
 
-        // Logic implementation + proxy
+        // Logic implementation + proxy (initialize sets per-type params and default global max adj rate)
         (impl, proxy, newLogic) = _deployAlphixLogic(alphixOwner, address(newHook));
 
         // Finalize Hook initialization (unpauses)
@@ -222,7 +257,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
     /**
      * @notice Deploy Alphix Logic
-     * @dev Deploys implementation and proxy and initializes it with provided owner and hook
+     * @dev Deploys implementation and proxy and initializes it with provided owner, hook, base fee, and per-type params
      * @param alphixOwner The logic admin
      * @param hookAddr The hook address to wire
      * @return impl AlphixLogic implementation
@@ -234,9 +269,11 @@ abstract contract BaseAlphixTest is Test, Deployers {
         returns (AlphixLogic impl, ERC1967Proxy proxy, IAlphixLogic newLogic)
     {
         impl = new AlphixLogic();
-        bytes memory initData = abi.encodeCall(
-            impl.initialize, (alphixOwner, hookAddr, INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
-        );
+
+        // AlphixLogic.initialize(owner, hook, baseFee, stable, standard, volatile)
+        bytes memory initData =
+            abi.encodeCall(impl.initialize, (alphixOwner, hookAddr, stableParams, standardParams, volatileParams));
+
         proxy = new ERC1967Proxy(address(impl), initData);
         newLogic = IAlphixLogic(address(proxy));
     }
@@ -470,7 +507,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
         uint256 amt1Max,
         address recipient
     ) internal {
-        // Build actions and params like the wrapper
         bytes memory actions = abi.encodePacked(
             uint8(0), // Actions.MINT_POSITION
             uint8(4), // Actions.SETTLE_PAIR
@@ -498,8 +534,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         uint256 amount1Min,
         address recipient
     ) internal {
-        // Resolve token currencies for tokenId
-        (Currency c0, Currency c1) = positionManager.getCurrencies(_tokenId); // implement if needed or inline logic
+        (Currency c0, Currency c1) = positionManager.getCurrencies(_tokenId);
 
         bytes[] memory params = new bytes[](2);
         params[0] = abi.encode(_tokenId, liquidityToRemove, amount0Min, amount1Min, Constants.ZERO_BYTES);

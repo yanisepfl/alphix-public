@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* OZ IMPORTS */
-import {BaseDynamicFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseDynamicFee.sol";
 import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -14,15 +13,20 @@ import {
 } from "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
 
 /* UNISWAP V4 IMPORTS */
+import {BaseDynamicFee} from "./BaseDynamicFee.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* LOCAL IMPORTS */
+import {IAlphix} from "./interfaces/IAlphix.sol";
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
+import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
 
 /**
  * @title AlphixLogic.
@@ -39,32 +43,63 @@ contract AlphixLogic is
     IAlphixLogic
 {
     using LPFeeLibrary for uint24;
+    using StateLibrary for IPoolManager;
+
+    /**
+     * @dev Strict Global Bounds.
+     */
+    uint256 internal constant ONE = 1e18;
+    uint256 internal constant TEN = 1e19;
+    uint256 private constant MAX_ADJUSTMENT_RATE =
+        (uint256(type(uint24).max) * ONE) / uint256(LPFeeLibrary.MAX_LP_FEE) - 1; // ~ 1.67e19, enforced to protect when casting: uint24(uint256(currentFee).mulDiv(adjustmentRate, ONE))
+    uint256 internal constant MIN_PERIOD = 1 hours;
+    uint256 internal constant MIN_RATIO_TOLERANCE = 1e15;
+    uint256 internal constant MIN_LINEAR_SLOPE = 1e17;
+    uint24 internal constant MIN_LOOKBACK_PERIOD = 7;
+    uint24 internal constant MAX_LOOKBACK_PERIOD = 365;
+    uint24 internal constant MIN_FEE = 1;
 
     /* STORAGE */
+
+    /**
+     * @dev The global max adjustment rate value (shared to all pools).
+     */
+    uint256 private globalMaxAdjRate;
 
     /**
      * @dev The address of the Alphix Hook.
      */
     address private alphixHook;
-    /**
-     * @dev Base fee e.g. 3000 = 0.3%.
-     */
-    uint24 private baseFee;
 
     /**
-     * @dev Per-pool active status.
+     * @dev Store per-pool active status.
      */
     mapping(PoolId => bool) private poolActive;
 
     /**
-     * @dev Per-pool config.
+     * @dev Store per-pool config.
      */
     mapping(PoolId => PoolConfig) private poolConfig;
 
     /**
-     * @dev Fee bounds per pool type.
+     * @dev Store per-pool Out-Of-Bound state.
      */
-    mapping(PoolType => PoolTypeBounds) private poolTypeBounds;
+    mapping(PoolId => DynamicFeeLib.OOBState) private oobState;
+
+    /**
+     * @dev Store per-pool current target ratio.
+     */
+    mapping(PoolId => uint256) private targetRatio;
+
+    /**
+     * @dev Store per-pool last fee update.
+     */
+    mapping(PoolId => uint256) private lastFeeUpdate;
+
+    /**
+     * @dev Store per-pool-type parameters.
+     */
+    mapping(PoolType => DynamicFeeLib.PoolTypeParams) private poolTypeParams;
 
     /* STORAGE GAP */
 
@@ -129,10 +164,9 @@ contract AlphixLogic is
     function initialize(
         address _owner,
         address _alphixHook,
-        uint24 _baseFee,
-        PoolTypeBounds memory _stableBounds,
-        PoolTypeBounds memory _standardBounds,
-        PoolTypeBounds memory _volatileBounds
+        DynamicFeeLib.PoolTypeParams memory _stableParams,
+        DynamicFeeLib.PoolTypeParams memory _standardParams,
+        DynamicFeeLib.PoolTypeParams memory _volatileParams
     ) public initializer {
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
@@ -147,12 +181,14 @@ contract AlphixLogic is
         _transferOwnership(_owner);
 
         alphixHook = _alphixHook;
-        baseFee = _baseFee;
 
-        // Initialize fee bounds for each pool type
-        _setPoolTypeBounds(PoolType.STABLE, _stableBounds);
-        _setPoolTypeBounds(PoolType.STANDARD, _standardBounds);
-        _setPoolTypeBounds(PoolType.VOLATILE, _volatileBounds);
+        // Sets the default globalMaxAdjustmentRate
+        _setGlobalMaxAdjRate(TEN);
+
+        // Initialize params for each pool type
+        _setPoolTypeParams(PoolType.STABLE, _stableParams);
+        _setPoolTypeParams(PoolType.STANDARD, _standardParams);
+        _setPoolTypeParams(PoolType.VOLATILE, _volatileParams);
     }
 
     /* ERC165 SUPPORT */
@@ -283,6 +319,61 @@ contract AlphixLogic is
         return (BaseHook.afterSwap.selector, 0);
     }
 
+    /**
+     * @dev See {IAlphixLogic-computeFeeAndTargetRatio}.
+     */
+    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
+        external
+        view
+        override
+        onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
+        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut)
+    {
+        PoolId poolId = key.toId();
+        PoolConfig memory cfg = poolConfig[poolId];
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+
+        // Revert if cooldown not elapsed
+        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs);
+
+        (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
+        oldTargetRatio = targetRatio[poolId];
+
+        // Compute the new fee (the newFee is clamped as per its pool type)
+        (newFee, sOut) = DynamicFeeLib.computeNewFee(
+            currentFee, currentRatio, oldTargetRatio, globalMaxAdjRate, pp, oobState[poolId]
+        );
+
+        // Apply EMA for targetRatio update
+        newTargetRatio = DynamicFeeLib.ema(currentRatio, oldTargetRatio, pp.lookbackPeriod);
+    }
+
+    /**
+     * @dev See {IAlphixLogic-finalizeAfterFeeUpdate}.
+     */
+    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OOBState calldata sOut)
+        external
+        override
+        onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
+        nonReentrant
+    {
+        PoolId poolId = key.toId();
+
+        // Update targetRatio
+        targetRatio[poolId] = newTargetRatio;
+
+        // Update OOB state
+        oobState[poolId] = sOut;
+
+        // Update last fee update timestamp
+        lastFeeUpdate[poolId] = block.timestamp;
+    }
+
     /* POOL MANAGEMENT */
 
     /**
@@ -295,6 +386,8 @@ contract AlphixLogic is
         PoolType _poolType
     ) external override onlyAlphixHook poolUnconfigured(key) whenNotPaused {
         PoolId poolId = key.toId();
+        lastFeeUpdate[poolId] = block.timestamp;
+        targetRatio[poolId] = _initialTargetRatio;
         poolConfig[poolId].initialFee = _initialFee;
         poolConfig[poolId].initialTargetRatio = _initialTargetRatio;
         poolConfig[poolId].poolType = _poolType;
@@ -319,15 +412,22 @@ contract AlphixLogic is
     }
 
     /**
-     * @dev See {IAlphixLogic-setPoolTypeBounds}.
+     * @dev See {IAlphixLogic-setPoolTypeParams}.
      */
-    function setPoolTypeBounds(PoolType poolType, PoolTypeBounds calldata bounds)
+    function setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
         external
         override
         onlyAlphixHook
         whenNotPaused
     {
-        _setPoolTypeBounds(poolType, bounds);
+        _setPoolTypeParams(poolType, params);
+    }
+
+    /**
+     * @dev See {IAlphixLogic-setGlobalMaxAdjRate}.
+     */
+    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyAlphixHook whenNotPaused {
+        _setGlobalMaxAdjRate(_globalMaxAdjRate);
     }
 
     /**
@@ -340,8 +440,8 @@ contract AlphixLogic is
         onlyAlphixHook
         returns (bool)
     {
-        PoolTypeBounds memory bounds = poolTypeBounds[poolType];
-        return fee >= bounds.minFee && fee <= bounds.maxFee;
+        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
+        return fee >= params.minFee && fee <= params.maxFee;
     }
 
     /* ADMIN FUNCTIONS */
@@ -370,14 +470,6 @@ contract AlphixLogic is
     }
 
     /**
-     * @dev See {IAlphixLogic-getFee}.
-     */
-    function getFee(PoolKey calldata) external pure returns (uint24) {
-        // Example: return baseFee directly
-        return 3000;
-    }
-
-    /**
      * @dev See {IAlphixLogic-getPoolConfig}.
      */
     function getPoolConfig(PoolId poolId) external view override returns (PoolConfig memory) {
@@ -385,25 +477,85 @@ contract AlphixLogic is
     }
 
     /**
-     * @dev See {IAlphixLogic-getPoolTypeBounds}.
+     * @dev See {IAlphixLogic-getPoolTypeParams}.
      */
-    function getPoolTypeBounds(PoolType poolType) external view override returns (PoolTypeBounds memory) {
-        return poolTypeBounds[poolType];
+    function getPoolTypeParams(PoolType poolType)
+        external
+        view
+        override
+        returns (DynamicFeeLib.PoolTypeParams memory)
+    {
+        return poolTypeParams[poolType];
+    }
+
+    /**
+     * @dev See {IAlphixLogic-getGlobalMaxAdjRate}.
+     */
+    function getGlobalMaxAdjRate() external view override returns (uint256) {
+        return globalMaxAdjRate;
     }
 
     /* INTERNAL FUNCTIONS */
 
     /**
-     * @notice Internal function to set per-pool type bounds.
-     * @param poolType The pool type to set bounds of.
-     * @param bounds The bounds to set.
+     * @notice Internal function to set per-pool type params.
+     * @param poolType The pool type to set params to.
+     * @param params The params to set.
      */
-    function _setPoolTypeBounds(PoolType poolType, PoolTypeBounds memory bounds) internal {
-        if (bounds.minFee > bounds.maxFee || bounds.maxFee > LPFeeLibrary.MAX_LP_FEE) {
-            revert InvalidFeeBounds(bounds.minFee, bounds.maxFee);
+    function _setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams memory params) internal {
+        // Fee bounds checks
+        if (params.minFee < MIN_FEE || params.minFee > params.maxFee || params.maxFee > LPFeeLibrary.MAX_LP_FEE) {
+            revert InvalidFeeBounds(params.minFee, params.maxFee);
         }
-        poolTypeBounds[poolType] = bounds;
-        emit PoolTypeBoundsUpdated(poolType, bounds.minFee, bounds.maxFee);
+
+        // baseMaxFeeDelta checks
+        if (params.baseMaxFeeDelta < MIN_FEE || params.baseMaxFeeDelta > LPFeeLibrary.MAX_LP_FEE) {
+            revert InvalidParameter();
+        }
+
+        // minPeriod checks
+        if (params.minPeriod < MIN_PERIOD) revert InvalidParameter();
+
+        // lookbackPeriod checks
+        if (params.lookbackPeriod < MIN_LOOKBACK_PERIOD || params.lookbackPeriod > MAX_LOOKBACK_PERIOD) {
+            revert InvalidParameter();
+        }
+
+        // ratioTolerance checks
+        if (params.ratioTolerance < MIN_RATIO_TOLERANCE || params.ratioTolerance > TEN) revert InvalidParameter();
+
+        // linearSlope checks
+        if (params.linearSlope < MIN_LINEAR_SLOPE || params.linearSlope > TEN) revert InvalidParameter();
+
+        // side multipliers checks
+        if (params.upperSideFactor < ONE || params.upperSideFactor > TEN) revert InvalidParameter();
+        if (params.lowerSideFactor < ONE || params.lowerSideFactor > TEN) revert InvalidParameter();
+
+        poolTypeParams[poolType] = params;
+        emit PoolTypeParamsUpdated(
+            poolType,
+            params.minFee,
+            params.maxFee,
+            params.lookbackPeriod,
+            params.minPeriod,
+            params.ratioTolerance,
+            params.linearSlope,
+            params.lowerSideFactor,
+            params.upperSideFactor
+        );
+    }
+
+    /**
+     * @notice Internal function to set the global max adjustment rate.
+     * @param _globalMaxAdjRate The global max adjustment rate to set.
+     */
+    function _setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) internal {
+        if (_globalMaxAdjRate == 0 || _globalMaxAdjRate > MAX_ADJUSTMENT_RATE) {
+            revert InvalidParameter();
+        }
+        uint256 oldGlobalMaxAdjRate = globalMaxAdjRate;
+        globalMaxAdjRate = _globalMaxAdjRate;
+        emit GlobalMaxAdjRateUpdated(oldGlobalMaxAdjRate, globalMaxAdjRate);
     }
 
     /* UUPS AUTHORIZATION */

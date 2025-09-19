@@ -6,7 +6,9 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 
 /* OZ IMPORTS */
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {BaseDynamicFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseDynamicFee.sol";
+
+/* LOCAL IMPORTS */
+import {BaseDynamicFee} from "../../../src/BaseDynamicFee.sol";
 
 /**
  * @dev Minimal logic that supports IAlphixLogic and tries to re-enter hook.poke from getFee
@@ -26,11 +28,11 @@ contract MockReenteringLogic is IERC165 {
     }
 
     /**
-     * @dev Signature matches IAlphixLogic.getFee, but implementation attempts a re-entrancy
+     * @dev Signature matches IAlphixLogic.computeFeeAndTargetRatio, but implementation attempts a re-entrancy
      */
-    function getFee(PoolKey calldata key) external returns (uint24) {
+    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio) external returns (uint24) {
         // Attempt to re-enter poke
-        BaseDynamicFee(hook).poke(key);
+        BaseDynamicFee(hook).poke(key, currentRatio);
         return 3000;
     }
 }

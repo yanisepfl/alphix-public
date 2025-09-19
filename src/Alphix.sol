@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* OZ IMPORTS */
-import {BaseDynamicFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseDynamicFee.sol";
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -20,9 +19,11 @@ import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation
 import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 
 /* LOCAL IMPORTS */
+import {BaseDynamicFee} from "./BaseDynamicFee.sol";
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 import {IAlphix} from "./interfaces/IAlphix.sol";
 import {IRegistry} from "./interfaces/IRegistry.sol";
+import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
 
 /**
  * @title Alphix.
@@ -93,7 +94,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         if (_logic == address(0)) {
             revert InvalidAddress();
         }
-        _setInitialLogic(_logic);
+        _setLogic(_logic);
         IRegistry(registry).registerContract(IRegistry.ContractKey.AlphixLogic, _logic);
         unpause();
     }
@@ -231,18 +232,41 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     /* ADMIN FUNCTIONS */
 
     /**
+     * @dev See {BaseDynamicFee-poke}.
+     */
+    function poke(PoolKey calldata key, uint256 currentRatio)
+        external
+        override
+        onlyValidPools(key.hooks)
+        onlyOwner
+        nonReentrant
+        whenNotPaused
+    {
+        if (currentRatio == 0) {
+            revert NullArgument();
+        }
+
+        PoolId poolId = key.toId();
+        (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
+
+        // Compute new fee and target ratio
+        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut) =
+            _getFee(key, currentRatio);
+
+        // Update the fee
+        _setDynamicFee(key, newFee);
+
+        // Update the storage
+        IAlphixLogic(logic).finalizeAfterFeeUpdate(key, newTargetRatio, sOut);
+
+        emit FeeUpdated(poolId, oldFee, newFee, oldTargetRatio, currentRatio, newTargetRatio);
+    }
+
+    /**
      * @dev See {IAlphix-setLogic}.
      */
     function setLogic(address newLogic) external override onlyOwner nonReentrant {
-        if (newLogic == address(0)) {
-            revert InvalidAddress();
-        }
-        if (!IERC165(newLogic).supportsInterface(type(IAlphixLogic).interfaceId)) {
-            revert IAlphixLogic.InvalidLogicContract();
-        }
-        address oldLogic = logic;
-        logic = newLogic;
-        emit LogicUpdated(oldLogic, newLogic);
+        _setLogic(newLogic);
     }
 
     /**
@@ -260,14 +284,21 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     }
 
     /**
-     * @dev See {IAlphix-setPoolTypeBounds}.
+     * @dev See {IAlphix-setPoolTypeParams}.
      */
-    function setPoolTypeBounds(IAlphixLogic.PoolType poolType, IAlphixLogic.PoolTypeBounds calldata bounds)
+    function setPoolTypeParams(IAlphixLogic.PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
         external
         override
         onlyOwner
     {
-        IAlphixLogic(logic).setPoolTypeBounds(poolType, bounds);
+        IAlphixLogic(logic).setPoolTypeParams(poolType, params);
+    }
+
+    /**
+     * @dev See {IAlphix-setGlobalMaxAdjRate}.
+     */
+    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyOwner {
+        IAlphixLogic(logic).setGlobalMaxAdjRate(_globalMaxAdjRate);
     }
 
     /**
@@ -289,6 +320,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         _setDynamicFee(key, _initialFee);
         PoolId poolId = key.toId();
         IRegistry(registry).registerPool(key, _poolType, _initialFee, _initialTargetRatio);
+        emit FeeUpdated(poolId, 0, _initialFee, _initialTargetRatio, 0, 0);
         emit PoolConfigured(poolId, _initialFee, _initialTargetRatio, _poolType);
     }
 
@@ -324,16 +356,6 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         _unpause();
     }
 
-    /* LOGIC FUNCTIONS */
-
-    /**
-     * @dev See {BaseDynamicFee-poke}.
-     */
-    function poke(PoolKey calldata key) external override onlyValidPools(key.hooks) onlyLogic nonReentrant {
-        uint24 newFee = _getFee(key);
-        _setDynamicFee(key, newFee);
-    }
-
     /* GETTERS */
 
     /**
@@ -351,40 +373,49 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     }
 
     /**
-     * @dev See {IAlphix-getPoolBounds}.
+     * @dev See {IAlphix-getFee}.
      */
-    function getPoolBounds(PoolId poolId) external view override returns (IAlphixLogic.PoolTypeBounds memory) {
-        IAlphixLogic.PoolType poolType = IAlphixLogic(logic).getPoolConfig(poolId).poolType;
-        return getPoolTypeBounds(poolType);
+    function getFee(PoolKey calldata key) external view override returns (uint24 fee) {
+        PoolId poolId = key.toId();
+        (,,, fee) = poolManager.getSlot0(poolId);
     }
 
     /**
-     * @dev See {IAlphix-getPoolTypeBounds}.
+     * @dev See {IAlphix-getPoolParams}.
      */
-    function getPoolTypeBounds(IAlphixLogic.PoolType poolType)
+    function getPoolParams(PoolId poolId) external view override returns (DynamicFeeLib.PoolTypeParams memory) {
+        IAlphixLogic.PoolType poolType = IAlphixLogic(logic).getPoolConfig(poolId).poolType;
+        return getPoolTypeParams(poolType);
+    }
+
+    /**
+     * @dev See {IAlphix-getPoolTypeParams}.
+     */
+    function getPoolTypeParams(IAlphixLogic.PoolType poolType)
         public
         view
         override
-        returns (IAlphixLogic.PoolTypeBounds memory)
+        returns (DynamicFeeLib.PoolTypeParams memory)
     {
-        return IAlphixLogic(logic).getPoolTypeBounds(poolType);
+        return IAlphixLogic(logic).getPoolTypeParams(poolType);
     }
 
     /* INTERNAL FUNCTIONS */
 
     /**
-     * @notice Setter for the initial logic.
-     * @param newLogic The initial logic address.
+     * @notice Setter for the logic.
+     * @param newLogic The logic address.
      */
-    function _setInitialLogic(address newLogic) internal {
+    function _setLogic(address newLogic) internal {
         if (newLogic == address(0)) {
             revert InvalidAddress();
         }
         if (!IERC165(newLogic).supportsInterface(type(IAlphixLogic).interfaceId)) {
             revert IAlphixLogic.InvalidLogicContract();
         }
+        address oldLogic = logic;
         logic = newLogic;
-        emit LogicUpdated(address(0), newLogic);
+        emit LogicUpdated(oldLogic, newLogic);
     }
 
     /**
@@ -395,14 +426,21 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
     function _setDynamicFee(PoolKey calldata key, uint24 newFee) internal whenNotPaused {
         PoolId poolId = key.toId();
         (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
-        poolManager.updateDynamicLPFee(key, newFee);
-        emit FeeUpdated(poolId, oldFee, newFee);
+        if (oldFee != newFee) {
+            poolManager.updateDynamicLPFee(key, newFee);
+        }
     }
 
     /**
      * @dev See {BaseDynamicFee-_getFee}.
      */
-    function _getFee(PoolKey calldata key) internal view override validLogic returns (uint24 fee) {
-        return IAlphixLogic(logic).getFee(key);
+    function _getFee(PoolKey calldata key, uint256 currentRatio)
+        internal
+        view
+        override
+        validLogic
+        returns (uint24 fee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut)
+    {
+        return IAlphixLogic(logic).computeFeeAndTargetRatio(key, currentRatio);
     }
 }

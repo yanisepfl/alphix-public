@@ -8,6 +8,9 @@ import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 
+/* LOCAL IMPORTS */
+import {DynamicFeeLib} from "../libraries/DynamicFee.sol";
+
 /**
  * @title IAlphixLogic.
  * @notice Interface for the Alphix Hook logic.
@@ -31,20 +34,38 @@ interface IAlphixLogic {
         bool isConfigured;
     }
 
-    struct PoolTypeBounds {
-        uint24 minFee;
-        uint24 maxFee;
-    }
-
     /* EVENTS */
 
     /**
-     * @dev Emitted at every pool type bounds change.
+     * @dev Emitted at every pool type params change.
      * @param poolType The pool type to change bounds of.
      * @param minFee The min fee value.
      * @param maxFee The max fee value.
+     * @param lookbackPeriod The lookbackPeriod to consider for the EMA smoothing factor (expressed in days).
+     * @param minPeriod The minimum period between 2 fee updates (expressed in s).
+     * @param ratioTolerance The tolerated difference in ratio between current and target ratio to not be considered out of bounds.
+     * @param linearSlope The linear slope to consider for the dynamic fee algorithm.
+     * @param lowerSideFactor The downward multiplier to throttle our dynamic fee algorithm by side.
+     * @param upperSideFactor The upward multiplier to throttle our dynamic fee algorithm by side.
      */
-    event PoolTypeBoundsUpdated(PoolType indexed poolType, uint24 minFee, uint24 maxFee);
+    event PoolTypeParamsUpdated(
+        PoolType indexed poolType,
+        uint24 minFee,
+        uint24 maxFee,
+        uint24 lookbackPeriod,
+        uint256 minPeriod,
+        uint256 ratioTolerance,
+        uint256 linearSlope,
+        uint256 lowerSideFactor,
+        uint256 upperSideFactor
+    );
+
+    /**
+     * @dev Emitted at every global max adjustment rate change.
+     * @param oldGlobalMaxAdjRate The old global max adjustment rate.
+     * @param newGlobalMaxAdjRate The new global max adjustment rate.
+     */
+    event GlobalMaxAdjRateUpdated(uint256 oldGlobalMaxAdjRate, uint256 newGlobalMaxAdjRate);
 
     /* ERRORS */
 
@@ -79,9 +100,19 @@ interface IAlphixLogic {
     error InvalidFeeBounds(uint24 minFee, uint24 maxFee);
 
     /**
+     * @dev Thrown when another parameter than fee bounds is invalid.
+     */
+    error InvalidParameter();
+
+    /**
      * @dev Thrown when an invalid address (e.g. 0) is provided.
      */
     error InvalidAddress();
+
+    /**
+     * @dev Thrown when the time elapsed since the pool's last fee update happened is less than minPeriod.
+     */
+    error CooldownNotElapsed(PoolId poolId, uint256 nextEligibleTimestamp);
 
     /* CORE HOOK LOGIC */
 
@@ -235,11 +266,17 @@ interface IAlphixLogic {
     function deactivatePool(PoolKey calldata key) external;
 
     /**
-     * @notice Set per-pool type bounds.
-     * @param poolType The pool type to set bounds of.
-     * @param bounds The bounds to set.
+     * @notice Set per-pool type params.
+     * @param poolType The pool type to set params to.
+     * @param params The parameters to set.
      */
-    function setPoolTypeBounds(PoolType poolType, PoolTypeBounds calldata bounds) external;
+    function setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params) external;
+
+    /**
+     * @notice Set the global max adjustment rate (common to all pools).
+     * @param _globalMaxAdjRate The global max adjustment rate to set.
+     */
+    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external;
 
     /**
      * @notice Check if fee is valid for pool type.
@@ -258,11 +295,27 @@ interface IAlphixLogic {
     function getAlphixHook() external view returns (address hookAddress);
 
     /**
-     * @notice Getter for the fee of a given pool.
-     * @param key The key of the pool to retrieve the fee of.
-     * @return The fee of the given pool.
+     * @notice Compute the new fee and target ratio of a given pool given its current ratio.
+     * @param key The key of the pool.
+     * @param currentRatio The current ratio of the pool.
+     * @return newFee The new fee of the pool.
+     * @return oldTargetRatio The old target ratio of the pool.
+     * @return newTargetRatio The new target ratio of the pool.
+     * @return sOut The OOBState of the pool.
      */
-    function getFee(PoolKey calldata key) external view returns (uint24);
+    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
+        external
+        view
+        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut);
+
+    /**
+     * @notice Store new values right after a fee update.
+     * @param key The key of the pool.
+     * @param newTargetRatio The new target ratio of the pool.
+     * @param sOut The OOBState of the pool.
+     */
+    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OOBState calldata sOut)
+        external;
 
     /**
      * @notice Get pool config for a specific pool.
@@ -272,9 +325,15 @@ interface IAlphixLogic {
     function getPoolConfig(PoolId poolId) external view returns (PoolConfig memory poolConfig);
 
     /**
-     * @notice Get fee bounds for a specific pool type.
-     * @param poolType The pool type to get bounds for.
-     * @return bounds The fee bounds for the pool type.
+     * @notice Get parameters of a specific pool type.
+     * @param poolType The pool type to get parameters of.
+     * @return params The parameters of the pool type.
      */
-    function getPoolTypeBounds(PoolType poolType) external view returns (PoolTypeBounds memory bounds);
+    function getPoolTypeParams(PoolType poolType) external view returns (DynamicFeeLib.PoolTypeParams memory params);
+
+    /**
+     * @notice Get the global max adjustment rate (common to all pools).
+     * @return The global max adjustment rate.
+     */
+    function getGlobalMaxAdjRate() external view returns (uint256);
 }

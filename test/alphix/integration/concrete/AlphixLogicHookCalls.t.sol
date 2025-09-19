@@ -7,7 +7,6 @@ import {Test, console} from "forge-std/Test.sol";
 /* OZ IMPORTS */
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
-import {BaseDynamicFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseDynamicFee.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -20,6 +19,7 @@ import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 
 /* LOCAL IMPORTS */
+import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
