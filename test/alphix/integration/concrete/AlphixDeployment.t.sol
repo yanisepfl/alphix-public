@@ -26,6 +26,7 @@ import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {Registry} from "../../../../src/Registry.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {MockERC165} from "../../../utils/mocks/MockERC165.sol";
+import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 
 contract AlphixDeploymentTest is BaseAlphixTest {
     /* TESTS */
@@ -173,7 +174,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertFalse(testHook.paused(), "Hook should be unpaused after initialize");
         assertEq(testHook.getLogic(), address(testLogic), "Logic should be set");
 
-        // Expect revert from Initializale when contract already initialized
+        // Expect revert from Initializable when contract already initialized
         vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
         testHook.initialize(address(testLogic));
         // testHook should remain unchanged
@@ -242,7 +243,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         testHook.initialize(address(0));
 
         // Try to initialize with an EOA
-        vm.expectRevert(); // Should revert when trying to call supportsInterface on EOA
+        vm.expectRevert(); // supportsInterface call on EOA
         testHook.initialize(makeAddr("eoa"));
 
         // Try to initialize with a contract that doesn't implement supportsInterface
@@ -260,7 +261,6 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertEq(testHook.getLogic(), address(0), "Logic should still be zero after failed initializations");
 
         // Normal initialization should still work after failed attempts
-        // Deploy a test logic
         (,, IAlphixLogic testLogic) = _deployAlphixLogic(owner, address(testHook));
         assertTrue(testHook.paused(), "Hook should still be paused after logic deployment");
         testHook.initialize(address(testLogic));
@@ -272,14 +272,13 @@ contract AlphixDeploymentTest is BaseAlphixTest {
 
     /**
      * @notice setLogic should update logic and emit LogicUpdated.
+     * @dev Initializes the replacement logic with unified params.
      */
     function test_setLogic_success() public {
         AlphixLogic newImpl = new AlphixLogic();
         ERC1967Proxy newProxy = new ERC1967Proxy(
             address(newImpl),
-            abi.encodeCall(
-                newImpl.initialize, (owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
-            )
+            abi.encodeCall(newImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
         );
         address oldLogic = hook.getLogic();
         vm.prank(owner);
@@ -320,16 +319,14 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         AlphixLogic newImpl = new AlphixLogic();
         ERC1967Proxy newProxy = new ERC1967Proxy(
             address(newImpl),
-            abi.encodeCall(
-                newImpl.initialize, (owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
-            )
+            abi.encodeCall(newImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
         );
         address oldLogic = hook.getLogic();
         vm.prank(user1);
         // Expect revert from Ownable when calling setLogic
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.setLogic(address(newProxy));
-        assertEq(hook.getLogic(), address(oldLogic), "Logic not updated");
+        assertEq(hook.getLogic(), address(oldLogic), "Logic should not update on non-owner");
     }
 
     /**
@@ -414,7 +411,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     function test_unpause_revertsOnNonOwner() public {
         assertFalse(hook.paused(), "Unpause failed");
         vm.prank(user1);
-        // Expect revert from Ownable when calling pause
+        // Expect revert from Ownable when calling unpause
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.unpause();
         assertFalse(hook.paused(), "Unpause failed");
@@ -439,12 +436,12 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertFalse(hook.paused(), "Unpause failed");
         vm.prank(owner);
         hook.pause();
-        assertTrue(hook.paused(), "Unpause failed");
+        assertTrue(hook.paused(), "Pause failed");
         // Expect revert because the contract is already paused
         vm.expectRevert(Pausable.EnforcedPause.selector);
         vm.prank(owner);
         hook.pause();
-        assertTrue(hook.paused(), "Unpause failed");
+        assertTrue(hook.paused(), "Pause failed");
     }
 
     /**
@@ -453,5 +450,29 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     function test_getters() public view {
         assertEq(hook.getLogic(), address(logic), "getLogic mismatch");
         assertEq(hook.getRegistry(), address(registry), "getRegistry mismatch");
+    }
+
+    /**
+     * @notice After initialize, per-pool-type unified params should be set and a default global max adj rate should be applied.
+     * @dev Verifies logic.initialize consumed the initializer args for STABLE/STANDARD/VOLATILE and set a sane global cap.
+     */
+    function test_initialize_setsUnifiedParamsAndDefaultCap() public view {
+        // Verify STABLE params match initializer arguments
+        IAlphixLogic.PoolType ptStable = IAlphixLogic.PoolType.STABLE;
+        DynamicFeeLib.PoolTypeParams memory ps = logic.getPoolTypeParams(ptStable);
+        assertEq(ps.minFee, stableParams.minFee, "minFee mismatch (STABLE)");
+        assertEq(ps.maxFee, stableParams.maxFee, "maxFee mismatch (STABLE)");
+        assertEq(ps.baseMaxFeeDelta, stableParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch (STABLE)");
+        assertEq(ps.lookbackPeriod, stableParams.lookbackPeriod, "lookbackPeriod mismatch (STABLE)");
+        assertEq(ps.minPeriod, stableParams.minPeriod, "minPeriod mismatch (STABLE)");
+        assertEq(ps.ratioTolerance, stableParams.ratioTolerance, "ratioTolerance mismatch (STABLE)");
+        assertEq(ps.linearSlope, stableParams.linearSlope, "linearSlope mismatch (STABLE)");
+        assertEq(ps.upperSideFactor, stableParams.upperSideFactor, "upperSideFactor mismatch (STABLE)");
+        assertEq(ps.lowerSideFactor, stableParams.lowerSideFactor, "lowerSideFactor mismatch (STABLE)");
+
+        // Verify a default global cap is set inside logic and is within safe bound
+        uint256 cap = logic.getGlobalMaxAdjRate();
+        assertTrue(cap > 0, "global cap should be set");
+        assertTrue(cap <= GLOBAL_MAX_ADJ_RATE_SAFE, "global cap should be <= safe bound");
     }
 }

@@ -17,19 +17,25 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {MockAlphixLogic} from "../../../utils/mocks/MockAlphixLogic.sol";
+import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 
 /**
  * @title AlphixLogicDeploymentTest
  * @author Alphix
  * @notice Tests for AlphixLogic deployment, initialization, UUPS upgrades and admin paths
+ * @dev Updated to unified PoolTypeParams and ratio-aware compute/finalize flow
  */
 contract AlphixLogicDeploymentTest is BaseAlphixTest {
+    using StateLibrary for IPoolManager;
+
     /* TESTS */
 
     /* Alphix Logic Initialization */
@@ -40,30 +46,35 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
     function test_constructor_disablesInitializers() public {
         AlphixLogic freshImpl = new AlphixLogic();
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        freshImpl.initialize(owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds);
+        // initialize(owner, hook, baseFee, stable, standard, volatile)
+        freshImpl.initialize(owner, address(hook), stableParams, standardParams, volatileParams);
     }
 
     /**
      * @notice Properly deploying a new logic and checks it behaves as expected.
+     * @dev Verifies per-type params seeded from initializer and owner is correct.
      */
     function test_initialize_success() public {
         AlphixLogic freshImpl = new AlphixLogic();
         ERC1967Proxy freshProxy = new ERC1967Proxy(
             address(freshImpl),
-            abi.encodeCall(
-                freshImpl.initialize, (owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
-            )
+            abi.encodeCall(freshImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
         );
-
         IAlphixLogic freshLogic = IAlphixLogic(address(freshProxy));
 
-        assertEq(freshLogic.getAlphixHook(), address(hook));
-        assertEq(freshLogic.getFee(key), 3000);
-        assertEq(Ownable2StepUpgradeable(address(freshProxy)).owner(), owner);
+        assertEq(freshLogic.getAlphixHook(), address(hook), "hook mismatch");
+        assertEq(Ownable2StepUpgradeable(address(freshProxy)).owner(), owner, "owner mismatch");
 
-        IAlphixLogic.PoolTypeBounds memory stable = freshLogic.getPoolTypeBounds(IAlphixLogic.PoolType.STABLE);
-        assertEq(stable.minFee, stableBounds.minFee);
-        assertEq(stable.maxFee, stableBounds.maxFee);
+        DynamicFeeLib.PoolTypeParams memory ps = freshLogic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+        assertEq(ps.minFee, stableParams.minFee, "minFee mismatch");
+        assertEq(ps.maxFee, stableParams.maxFee, "maxFee mismatch");
+        assertEq(ps.baseMaxFeeDelta, stableParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch");
+        assertEq(ps.lookbackPeriod, stableParams.lookbackPeriod, "lookbackPeriod mismatch");
+        assertEq(ps.minPeriod, stableParams.minPeriod, "minPeriod mismatch");
+        assertEq(ps.ratioTolerance, stableParams.ratioTolerance, "ratioTolerance mismatch");
+        assertEq(ps.linearSlope, stableParams.linearSlope, "linearSlope mismatch");
+        assertEq(ps.upperSideFactor, stableParams.upperSideFactor, "upperSideFactor mismatch");
+        assertEq(ps.lowerSideFactor, stableParams.lowerSideFactor, "lowerSideFactor mismatch");
     }
 
     /**
@@ -76,8 +87,7 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         new ERC1967Proxy(
             address(freshImpl),
             abi.encodeCall(
-                freshImpl.initialize,
-                (address(0), address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
+                freshImpl.initialize, (address(0), address(hook), stableParams, standardParams, volatileParams)
             )
         );
     }
@@ -91,9 +101,7 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         vm.expectRevert(IAlphixLogic.InvalidAddress.selector);
         new ERC1967Proxy(
             address(freshImpl),
-            abi.encodeCall(
-                freshImpl.initialize, (owner, address(0), INITIAL_FEE, stableBounds, standardBounds, volatileBounds)
-            )
+            abi.encodeCall(freshImpl.initialize, (owner, address(0), stableParams, standardParams, volatileParams))
         );
     }
 
@@ -102,51 +110,40 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
      */
     function test_initialize_canOnlyBeCalledOnce() public {
         vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
-        AlphixLogic(address(logicProxy)).initialize(
-            owner, address(hook), INITIAL_FEE, stableBounds, standardBounds, volatileBounds
+        AlphixLogic(address(logicProxy)).initialize(owner, address(hook), stableParams, standardParams, volatileParams);
+    }
+
+    /**
+     * @notice Calling initialize should revert with invalid params (minFee > maxFee).
+     */
+    function test_initialize_revertsOnInvalidParams_minGtMax() public {
+        AlphixLogic freshImpl = new AlphixLogic();
+        DynamicFeeLib.PoolTypeParams memory badStable = stableParams;
+        badStable.minFee = badStable.maxFee + 1;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, badStable.minFee, badStable.maxFee)
+        );
+        new ERC1967Proxy(
+            address(freshImpl),
+            abi.encodeCall(freshImpl.initialize, (owner, address(hook), badStable, standardParams, volatileParams))
         );
     }
 
     /**
-     * @notice Calling AlphixLogic initialize should revert with invalid bounds (max fee too big).
+     * @notice Calling initialize should revert when maxFee is over LPFeeLibrary.MAX_LP_FEE.
      */
-    function test_initialize_revertsOnInvalidBoundsMax() public {
+    function test_initialize_revertsOnInvalidParams_maxTooHigh() public {
         AlphixLogic freshImpl = new AlphixLogic();
-        IAlphixLogic.PoolTypeBounds memory badStandardBounds =
-            IAlphixLogic.PoolTypeBounds({minFee: 1, maxFee: uint24(LPFeeLibrary.MAX_LP_FEE + 1)});
+        DynamicFeeLib.PoolTypeParams memory badStandard = standardParams;
+        badStandard.maxFee = uint24(LPFeeLibrary.MAX_LP_FEE + 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAlphixLogic.InvalidFeeBounds.selector, badStandardBounds.minFee, badStandardBounds.maxFee
-            )
+            abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, badStandard.minFee, badStandard.maxFee)
         );
         new ERC1967Proxy(
             address(freshImpl),
-            abi.encodeCall(
-                freshImpl.initialize,
-                (owner, address(hook), INITIAL_FEE, stableBounds, badStandardBounds, volatileBounds)
-            )
-        );
-    }
-
-    /**
-     * @notice Calling AlphixLogic initialize should revert with invalid bounds (min fee greater than max fee).
-     */
-    function test_initialize_revertsOnInvalidBoundsMinGtMax() public {
-        AlphixLogic freshImpl = new AlphixLogic();
-        IAlphixLogic.PoolTypeBounds memory badStableBounds = IAlphixLogic.PoolTypeBounds({minFee: 2000, maxFee: 1000});
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAlphixLogic.InvalidFeeBounds.selector, badStableBounds.minFee, badStableBounds.maxFee
-            )
-        );
-        new ERC1967Proxy(
-            address(freshImpl),
-            abi.encodeCall(
-                freshImpl.initialize,
-                (owner, address(hook), INITIAL_FEE, badStableBounds, standardBounds, volatileBounds)
-            )
+            abi.encodeCall(freshImpl.initialize, (owner, address(hook), stableParams, badStandard, volatileParams))
         );
     }
 
@@ -165,87 +162,92 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
 
     /**
      * @notice Tests if logic upgrade works (implem is the same)
+     * @dev Verifies state and owner unchanged after upgrade.
      */
     function test_authorizeUpgrade_success() public {
-        AlphixLogic newImpl = new AlphixLogic();
+        // Snapshot current fee from PoolManager
+        (,,, uint24 preFee) = poolManager.getSlot0(poolId);
 
+        AlphixLogic newImpl = new AlphixLogic();
         vm.prank(owner);
         AlphixLogic(address(logicProxy)).upgradeToAndCall(address(newImpl), bytes(""));
 
-        assertEq(logic.getFee(key), 3000);
+        (,,, uint24 postFee) = poolManager.getSlot0(poolId);
+        assertEq(postFee, preFee, "fee changed across same-impl upgrade");
+
+        assertEq(Ownable2StepUpgradeable(address(logicProxy)).owner(), owner, "owner changed");
+        assertEq(logic.getAlphixHook(), address(hook), "hook changed");
     }
 
     /**
      * @notice Logic upgrade to MockAlphixLogic adds storage and changes behavior while preserving original storage
+     * @dev After upgrade and reinitializer, poke through the hook should adopt the mock fee.
      */
     function test_upgradeToMockLogicAddStorageAndChangesBehavior() public {
-        // Verify original behavior
-        assertEq(logic.getFee(key), 3000, "original getFee should return 3000");
-
-        // Modify bounds through hook to test storage preservation
-        IAlphixLogic.PoolTypeBounds memory newVolatile = IAlphixLogic.PoolTypeBounds({minFee: 1500, maxFee: 30000});
+        // Pre-upgrade: adjust a per-type param to test state preservation
+        DynamicFeeLib.PoolTypeParams memory newVol = volatileParams;
+        newVol.minFee = 1500;
+        newVol.maxFee = 30000;
         vm.prank(owner);
-        hook.setPoolTypeBounds(IAlphixLogic.PoolType.VOLATILE, newVolatile);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, newVol);
 
-        // Verify bounds were set
-        IAlphixLogic.PoolTypeBounds memory preUpgrade = logic.getPoolTypeBounds(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(preUpgrade.minFee, newVolatile.minFee, "pre-upgrade volatile minFee");
-        assertEq(preUpgrade.maxFee, newVolatile.maxFee, "pre-upgrade volatile maxFee");
+        DynamicFeeLib.PoolTypeParams memory preVol = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
+        assertEq(preVol.minFee, newVol.minFee, "pre-upgrade minFee");
+        assertEq(preVol.maxFee, newVol.maxFee, "pre-upgrade maxFee");
 
-        // Deploy MockAlphixLogic with appended storage
+        // Upgrade to mock and set mockFee via reinitializer
         MockAlphixLogic mockImpl = new MockAlphixLogic();
-
-        // Upgrade to mock implementation WITH reinitializer to set mockFee to 2000
         vm.prank(owner);
         AlphixLogic(address(logicProxy)).upgradeToAndCall(
             address(mockImpl), abi.encodeCall(MockAlphixLogic.initializeV2, (uint24(2000)))
         );
 
-        // Verify behavior changed - getFee now returns 2000 from appended storage
-        assertEq(logic.getFee(key), 2000, "upgraded getFee should return 2000 from appended storage");
+        // Advance time past cooldown period (1 day + buffer)
+        vm.warp(block.timestamp + 1 days + 1);
 
-        // Verify all original storage was preserved - bounds should remain the same
-        IAlphixLogic.PoolTypeBounds memory postUpgrade = logic.getPoolTypeBounds(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(postUpgrade.minFee, newVolatile.minFee, "post-upgrade volatile minFee preserved");
-        assertEq(postUpgrade.maxFee, newVolatile.maxFee, "post-upgrade volatile maxFee preserved");
+        // Poke with any ratio to trigger compute->manager update->finalize
+        vm.prank(owner);
+        hook.poke(key, 6e17); // 60%
 
-        // Verify other bounds were preserved too
-        IAlphixLogic.PoolTypeBounds memory stablePost = logic.getPoolTypeBounds(IAlphixLogic.PoolType.STABLE);
-        assertEq(stablePost.minFee, stableBounds.minFee, "stable bounds preserved");
-        assertEq(stablePost.maxFee, stableBounds.maxFee, "stable bounds preserved");
+        // Read fee from PoolManager, should reflect mockFee=2000 set by mock
+        (,,, uint24 newFee) = poolManager.getSlot0(poolId);
+        assertEq(newFee, 2000, "mock fee not applied");
 
-        IAlphixLogic.PoolTypeBounds memory standardPost = logic.getPoolTypeBounds(IAlphixLogic.PoolType.STANDARD);
-        assertEq(standardPost.minFee, standardBounds.minFee, "standard bounds preserved");
-        assertEq(standardPost.maxFee, standardBounds.maxFee, "standard bounds preserved");
-
-        // Verify hook address preserved
-        assertEq(logic.getAlphixHook(), address(hook), "hook address preserved");
-
-        // Verify owner preserved
+        // Verify state preserved
+        DynamicFeeLib.PoolTypeParams memory postVol = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
+        assertEq(postVol.minFee, newVol.minFee, "post-upgrade minFee preserved");
+        assertEq(postVol.maxFee, newVol.maxFee, "post-upgrade maxFee preserved");
+        assertEq(logic.getAlphixHook(), address(hook), "hook preserved");
         assertEq(Ownable2StepUpgradeable(address(logicProxy)).owner(), owner, "owner preserved");
     }
 
     /**
-     * @notice Test upgrade without reinitializer maintains pre-upgrade behavior until mockFee is set
+     * @notice Test upgrade without reinitializer maintains pre-upgrade fee until mockFee is set
      */
     function test_upgradeToMockLogicWithoutReinitializerKeepsOriginalBehavior() public {
-        // Verify original behavior
-        assertEq(logic.getFee(key), 3000, "original getFee should return 3000");
+        // Snapshot fee
+        (,,, uint24 preFee) = poolManager.getSlot0(poolId);
 
-        // Deploy and upgrade without reinitializer
+        // Upgrade without setting mock fee
         MockAlphixLogic mockImpl = new MockAlphixLogic();
         vm.prank(owner);
         AlphixLogic(address(logicProxy)).upgradeToAndCall(address(mockImpl), bytes(""));
 
-        // Verify behavior remains 3000 (fallback when mockFee is zero)
-        assertEq(logic.getFee(key), 3000, "should still return 3000 when mockFee uninitialized");
+        // Advance time past cooldown period (1 day + buffer)
+        vm.warp(block.timestamp + 1 days + 1);
 
-        // Verify all original storage preserved
-        IAlphixLogic.PoolTypeBounds memory stablePost = logic.getPoolTypeBounds(IAlphixLogic.PoolType.STABLE);
-        assertEq(stablePost.minFee, stableBounds.minFee, "stable bounds preserved");
-        assertEq(stablePost.maxFee, stableBounds.maxFee, "stable bounds preserved");
+        // Poke; mock returns live fee when mockFee == 0
+        vm.prank(owner);
+        hook.poke(key, 5e17);
 
-        assertEq(logic.getAlphixHook(), address(hook), "hook address preserved");
+        (,,, uint24 postFee) = poolManager.getSlot0(poolId);
+        assertEq(postFee, preFee, "fee should remain unchanged when mockFee is zero");
+
+        // State intact
+        DynamicFeeLib.PoolTypeParams memory st = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+        assertEq(st.minFee, stableParams.minFee, "stable params preserved");
+        assertEq(st.maxFee, stableParams.maxFee, "stable params preserved");
+        assertEq(logic.getAlphixHook(), address(hook), "hook preserved");
         assertEq(Ownable2StepUpgradeable(address(logicProxy)).owner(), owner, "owner preserved");
     }
 
@@ -256,7 +258,7 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         MockERC20 invalidImpl = new MockERC20("Invalid", "INV", 18);
 
         vm.prank(owner);
-        vm.expectRevert(); // IAlphixLogic.InvalidLogicContract.selector
+        vm.expectRevert(); // InvalidLogicContract
         AlphixLogic(address(logicProxy)).upgradeToAndCall(address(invalidImpl), bytes(""));
     }
 
@@ -269,27 +271,6 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, user1));
         AlphixLogic(address(logicProxy)).upgradeToAndCall(address(newImpl), bytes(""));
-    }
-
-    /**
-     * @notice Tests that logic upgrade preserves state.
-     */
-    function test_upgradePreservesState() public {
-        IAlphixLogic.PoolTypeBounds memory newVol = IAlphixLogic.PoolTypeBounds({minFee: 2000, maxFee: 25000});
-        vm.prank(owner);
-        hook.setPoolTypeBounds(IAlphixLogic.PoolType.VOLATILE, newVol);
-
-        IAlphixLogic.PoolTypeBounds memory pre = logic.getPoolTypeBounds(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(pre.minFee, newVol.minFee);
-        assertEq(pre.maxFee, newVol.maxFee);
-
-        AlphixLogic newImpl = new AlphixLogic();
-        vm.prank(owner);
-        AlphixLogic(address(logicProxy)).upgradeToAndCall(address(newImpl), bytes(""));
-
-        IAlphixLogic.PoolTypeBounds memory post = logic.getPoolTypeBounds(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(post.minFee, newVol.minFee);
-        assertEq(post.maxFee, newVol.maxFee);
     }
 
     /* PAUSE/UNPAUSE */
@@ -345,36 +326,35 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Tests AlphixLogic's getFee returns the expected value.
+     * @notice Tests AlphixLogic's getPoolTypeParams returns the expected values for STABLE.
      */
-    function test_getFee() public view {
-        assertEq(logic.getFee(key), 3000);
+    function test_getPoolTypeParams_stable() public view {
+        DynamicFeeLib.PoolTypeParams memory p = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+        assertEq(p.minFee, stableParams.minFee);
+        assertEq(p.maxFee, stableParams.maxFee);
+        assertEq(p.lookbackPeriod, stableParams.lookbackPeriod);
+        assertEq(p.minPeriod, stableParams.minPeriod);
     }
 
     /**
-     * @notice Tests AlphixLogic's getPoolTypeBounds returns the expected value.
+     * @notice Tests AlphixLogic's getPoolTypeParams returns the expected values for STANDARD.
      */
-    function test_getPoolTypeBounds_stable() public view {
-        IAlphixLogic.PoolTypeBounds memory bounds = logic.getPoolTypeBounds(IAlphixLogic.PoolType.STABLE);
-        assertEq(bounds.minFee, stableBounds.minFee);
-        assertEq(bounds.maxFee, stableBounds.maxFee);
+    function test_getPoolTypeParams_standard() public view {
+        DynamicFeeLib.PoolTypeParams memory p = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        assertEq(p.minFee, standardParams.minFee);
+        assertEq(p.maxFee, standardParams.maxFee);
+        assertEq(p.lookbackPeriod, standardParams.lookbackPeriod);
+        assertEq(p.minPeriod, standardParams.minPeriod);
     }
 
     /**
-     * @notice Tests AlphixLogic's getPoolTypeBounds returns the expected value.
+     * @notice Tests AlphixLogic's getPoolTypeParams returns the expected values for VOLATILE.
      */
-    function test_getPoolTypeBounds_standard() public view {
-        IAlphixLogic.PoolTypeBounds memory bounds = logic.getPoolTypeBounds(IAlphixLogic.PoolType.STANDARD);
-        assertEq(bounds.minFee, standardBounds.minFee);
-        assertEq(bounds.maxFee, standardBounds.maxFee);
-    }
-
-    /**
-     * @notice Tests AlphixLogic's getPoolTypeBounds returns the expected value.
-     */
-    function test_getPoolTypeBounds_volatile() public view {
-        IAlphixLogic.PoolTypeBounds memory bounds = logic.getPoolTypeBounds(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(bounds.minFee, volatileBounds.minFee);
-        assertEq(bounds.maxFee, volatileBounds.maxFee);
+    function test_getPoolTypeParams_volatile() public view {
+        DynamicFeeLib.PoolTypeParams memory p = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
+        assertEq(p.minFee, volatileParams.minFee);
+        assertEq(p.maxFee, volatileParams.maxFee);
+        assertEq(p.lookbackPeriod, volatileParams.lookbackPeriod);
+        assertEq(p.minPeriod, volatileParams.minPeriod);
     }
 }
