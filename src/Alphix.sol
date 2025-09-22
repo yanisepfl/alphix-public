@@ -320,7 +320,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         _setDynamicFee(key, _initialFee);
         PoolId poolId = key.toId();
         IRegistry(registry).registerPool(key, _poolType, _initialFee, _initialTargetRatio);
-        emit FeeUpdated(poolId, 0, _initialFee, _initialTargetRatio, 0, 0);
+        emit FeeUpdated(poolId, 0, _initialFee, 0, _initialTargetRatio, _initialTargetRatio);
         emit PoolConfigured(poolId, _initialFee, _initialTargetRatio, _poolType);
     }
 

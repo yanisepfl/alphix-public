@@ -58,6 +58,7 @@ contract AlphixLogic is
     uint24 internal constant MIN_LOOKBACK_PERIOD = 7;
     uint24 internal constant MAX_LOOKBACK_PERIOD = 365;
     uint24 internal constant MIN_FEE = 1;
+    uint256 internal constant MAX_CURRENT_RATIO = 1e24;
 
     /* STORAGE */
 
@@ -335,9 +336,12 @@ contract AlphixLogic is
         PoolConfig memory cfg = poolConfig[poolId];
         DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
 
+        // Check currentRatio against pool's maxCurrentRatio limit
+        if (currentRatio > pp.maxCurrentRatio) revert InvalidParameter();
+
         // Revert if cooldown not elapsed
         uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs);
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
         oldTargetRatio = targetRatio[poolId];
@@ -527,6 +531,9 @@ contract AlphixLogic is
         // linearSlope checks
         if (params.linearSlope < MIN_LINEAR_SLOPE || params.linearSlope > TEN) revert InvalidParameter();
 
+        // maxCurrentRatio checks
+        if (params.maxCurrentRatio == 0 || params.maxCurrentRatio > MAX_CURRENT_RATIO) revert InvalidParameter();
+
         // side multipliers checks
         if (params.upperSideFactor < ONE || params.upperSideFactor > TEN) revert InvalidParameter();
         if (params.lowerSideFactor < ONE || params.lowerSideFactor > TEN) revert InvalidParameter();
@@ -540,6 +547,7 @@ contract AlphixLogic is
             params.minPeriod,
             params.ratioTolerance,
             params.linearSlope,
+            params.maxCurrentRatio,
             params.lowerSideFactor,
             params.upperSideFactor
         );

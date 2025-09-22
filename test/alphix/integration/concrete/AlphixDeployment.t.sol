@@ -326,7 +326,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         // Expect revert from Ownable when calling setLogic
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.setLogic(address(newProxy));
-        assertEq(hook.getLogic(), address(oldLogic), "Logic should not update on non-owner");
+        assertEq(hook.getLogic(), oldLogic, "Logic should not update on non-owner");
     }
 
     /**
@@ -469,6 +469,32 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertEq(ps.linearSlope, stableParams.linearSlope, "linearSlope mismatch (STABLE)");
         assertEq(ps.upperSideFactor, stableParams.upperSideFactor, "upperSideFactor mismatch (STABLE)");
         assertEq(ps.lowerSideFactor, stableParams.lowerSideFactor, "lowerSideFactor mismatch (STABLE)");
+
+        // Verify STANDARD params match initializer arguments
+        IAlphixLogic.PoolType ptStandard = IAlphixLogic.PoolType.STANDARD;
+        ps = logic.getPoolTypeParams(ptStandard);
+        assertEq(ps.minFee, standardParams.minFee, "minFee mismatch (STANDARD)");
+        assertEq(ps.maxFee, standardParams.maxFee, "maxFee mismatch (STANDARD)");
+        assertEq(ps.baseMaxFeeDelta, standardParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch (STANDARD)");
+        assertEq(ps.lookbackPeriod, standardParams.lookbackPeriod, "lookbackPeriod mismatch (STANDARD)");
+        assertEq(ps.minPeriod, standardParams.minPeriod, "minPeriod mismatch (STANDARD)");
+        assertEq(ps.ratioTolerance, standardParams.ratioTolerance, "ratioTolerance mismatch (STANDARD)");
+        assertEq(ps.linearSlope, standardParams.linearSlope, "linearSlope mismatch (STANDARD)");
+        assertEq(ps.upperSideFactor, standardParams.upperSideFactor, "upperSideFactor mismatch (STANDARD)");
+        assertEq(ps.lowerSideFactor, standardParams.lowerSideFactor, "lowerSideFactor mismatch (STANDARD)");
+
+        // Verify VOLATILE params match initializer arguments
+        IAlphixLogic.PoolType ptVolatile = IAlphixLogic.PoolType.VOLATILE;
+        ps = logic.getPoolTypeParams(ptVolatile);
+        assertEq(ps.minFee, volatileParams.minFee, "minFee mismatch (VOLATILE)");
+        assertEq(ps.maxFee, volatileParams.maxFee, "maxFee mismatch (VOLATILE)");
+        assertEq(ps.baseMaxFeeDelta, volatileParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch (VOLATILE)");
+        assertEq(ps.lookbackPeriod, volatileParams.lookbackPeriod, "lookbackPeriod mismatch (VOLATILE)");
+        assertEq(ps.minPeriod, volatileParams.minPeriod, "minPeriod mismatch (VOLATILE)");
+        assertEq(ps.ratioTolerance, volatileParams.ratioTolerance, "ratioTolerance mismatch (VOLATILE)");
+        assertEq(ps.linearSlope, volatileParams.linearSlope, "linearSlope mismatch (VOLATILE)");
+        assertEq(ps.upperSideFactor, volatileParams.upperSideFactor, "upperSideFactor mismatch (VOLATILE)");
+        assertEq(ps.lowerSideFactor, volatileParams.lowerSideFactor, "lowerSideFactor mismatch (VOLATILE)");
 
         // Verify a default global cap is set inside logic and is within safe bound
         uint256 cap = logic.getGlobalMaxAdjRate();

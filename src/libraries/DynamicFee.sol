@@ -28,10 +28,11 @@ library DynamicFeeLib {
         uint24 maxFee;
         // Algorithm knobs
         uint24 baseMaxFeeDelta; // e.g. 100 = 0.01%
-        uint24 lookbackPeriod; // the smoothing factor is then obtained: alpha = 1e18 * 2 / (lookbackPeriod + 1)
+        uint24 lookbackPeriod; // EMA smoothing factor alpha = 1e18 * 2 / (lookbackPeriod + 1)
         uint256 minPeriod; // cooldown in seconds
         uint256 ratioTolerance; // band half-width in 1e18
         uint256 linearSlope; // sensitivity vs relative deviation in 1e18
+        uint256 maxCurrentRatio; // maximum allowed current ratio in 1e18
         // Side multipliers
         uint256 upperSideFactor;
         uint256 lowerSideFactor;
@@ -60,8 +61,9 @@ library DynamicFeeLib {
         pure
         returns (bool upper, bool inBand)
     {
-        uint256 lowerBound = target - target.mulDiv(tol, ONE);
-        uint256 upperBound = target + target.mulDiv(tol, ONE);
+        uint256 delta = target.mulDiv(tol, ONE);
+        uint256 lowerBound = target > delta ? target - delta : 0;
+        uint256 upperBound = target + delta;
         bool lower = current < lowerBound;
         upper = current > upperBound;
         inBand = !(lower || upper);

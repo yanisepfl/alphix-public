@@ -22,6 +22,9 @@ interface IAlphix {
      * @param poolId The pool identifier.
      * @param oldFee The previous fee value.
      * @param newFee The new fee value.
+     * @param oldTargetRatio The previous target ratio used for the fee computation.
+     * @param currentRatio The observed ratio input used for this update.
+     * @param newTargetRatio The updated target ratio after applying the algorithm.
      */
     event FeeUpdated(
         PoolId indexed poolId,
@@ -190,7 +193,8 @@ interface IAlphix {
 
     /**
      * @notice Get the given pool params.
-     * @return poolId The pool ID to get the params of.
+     * @param poolId The pool ID to get the params of.
+     * @return poolParams The params of the given pool.
      */
     function getPoolParams(PoolId poolId) external view returns (DynamicFeeLib.PoolTypeParams memory);
 

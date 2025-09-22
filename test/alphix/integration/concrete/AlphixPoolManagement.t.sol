@@ -280,6 +280,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             minPeriod: standardParams.minPeriod,
             ratioTolerance: standardParams.ratioTolerance,
             linearSlope: standardParams.linearSlope,
+            maxCurrentRatio: standardParams.maxCurrentRatio,
             lowerSideFactor: standardParams.lowerSideFactor,
             upperSideFactor: standardParams.upperSideFactor
         });
@@ -302,6 +303,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             minPeriod: standardParams.minPeriod,
             ratioTolerance: standardParams.ratioTolerance,
             linearSlope: standardParams.linearSlope,
+            maxCurrentRatio: standardParams.maxCurrentRatio,
             lowerSideFactor: standardParams.lowerSideFactor,
             upperSideFactor: standardParams.upperSideFactor
         });
@@ -549,7 +551,9 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         // Immediately poking should hit logic cooldown check
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.CooldownNotElapsed.selector, k.toId(), currentTimestamp + 1 days)
+            abi.encodeWithSelector(
+                IAlphixLogic.CooldownNotElapsed.selector, k.toId(), currentTimestamp + 1 days, 1 days
+            )
         );
         hook.poke(k, INITIAL_TARGET_RATIO);
     }

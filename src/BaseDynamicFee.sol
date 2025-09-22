@@ -2,14 +2,13 @@
 // inspiration from: OpenZeppelin Uniswap Hooks (last updated v0.1.0) (src/fee/BaseDynamicFee.sol)
 // Alphix version of the BaseDynamicFee
 
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.26;
 
 import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
-import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
 
 /**

@@ -56,6 +56,7 @@ interface IAlphixLogic {
         uint256 minPeriod,
         uint256 ratioTolerance,
         uint256 linearSlope,
+        uint256 maxCurrentRatio,
         uint256 lowerSideFactor,
         uint256 upperSideFactor
     );
@@ -112,7 +113,7 @@ interface IAlphixLogic {
     /**
      * @dev Thrown when the time elapsed since the pool's last fee update happened is less than minPeriod.
      */
-    error CooldownNotElapsed(PoolId poolId, uint256 nextEligibleTimestamp);
+    error CooldownNotElapsed(PoolId poolId, uint256 nextEligibleTimestamp, uint256 minPeriod);
 
     /* CORE HOOK LOGIC */
 

@@ -55,6 +55,7 @@ contract MockAlphixLogic is
     uint24 internal constant MIN_LOOKBACK_PERIOD = 7;
     uint24 internal constant MAX_LOOKBACK_PERIOD = 365;
     uint24 internal constant MIN_FEE = 1;
+    uint256 internal constant MAX_CURRENT_RATIO = 1e24;
 
     /* MATCHING STORAGE (must mirror AlphixLogic order) */
 
@@ -260,7 +261,7 @@ contract MockAlphixLogic is
      * @notice Compute fee and target ratio using mockFee if set; return no-op EMA and passthrough OOB state
      * @dev View-only compute to maintain “compute, then manager update, then finalize” ordering in hook
      */
-    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 /* currentRatio */ )
+    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
         external
         view
         override
@@ -273,9 +274,12 @@ contract MockAlphixLogic is
         PoolConfig memory cfg = poolConfig[poolId];
         DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
 
+        // Check currentRatio against pool's maxCurrentRatio limit
+        if (currentRatio > pp.maxCurrentRatio) revert InvalidParameter();
+
         // Cooldown check mirrors production logic
         uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs);
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
         // Read current fee from PoolManager
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
@@ -416,6 +420,8 @@ contract MockAlphixLogic is
         if (params.linearSlope < MIN_LINEAR_SLOPE || params.linearSlope > TEN) {
             revert InvalidParameter();
         }
+        // maxCurrentRatio checks
+        if (params.maxCurrentRatio == 0 || params.maxCurrentRatio > MAX_CURRENT_RATIO) revert InvalidParameter();
         // side multipliers
         if (params.upperSideFactor < ONE || params.upperSideFactor > TEN) revert InvalidParameter();
         if (params.lowerSideFactor < ONE || params.lowerSideFactor > TEN) revert InvalidParameter();
@@ -429,6 +435,7 @@ contract MockAlphixLogic is
             params.minPeriod,
             params.ratioTolerance,
             params.linearSlope,
+            params.maxCurrentRatio,
             params.lowerSideFactor,
             params.upperSideFactor
         );
