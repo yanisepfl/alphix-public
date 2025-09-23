@@ -688,7 +688,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Verify reasonable values are returned
         assertTrue(newFee > 0, "newFee should be non-zero");
-        assertTrue(oldTargetRatio >= 0, "oldTargetRatio should be non-negative");
+        assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
         assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
     }
 
@@ -739,7 +739,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Verify reasonable values are returned
         assertTrue(newFee > 0, "newFee should be non-zero");
-        assertTrue(oldTargetRatio >= 0, "oldTargetRatio should be non-negative");
+        assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
         assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
     }
 }
