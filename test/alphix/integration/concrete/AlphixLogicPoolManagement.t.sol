@@ -669,7 +669,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice computeFeeAndTargetRatio succeeds when currentRatio is within pool's maxCurrentRatio limit
      */
     function test_computeFeeAndTargetRatio_successOnValidCurrentRatio() public {
-        (PoolKey memory freshKey, PoolId freshId) =
+        (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
 
         vm.prank(address(hook));
@@ -683,7 +683,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Should succeed
         vm.prank(address(hook));
-        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut) =
+        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio,) =
             logic.computeFeeAndTargetRatio(freshKey, validCurrentRatio);
 
         // Verify reasonable values are returned
@@ -696,7 +696,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice computeFeeAndTargetRatio reverts when currentRatio exceeds pool's maxCurrentRatio limit
      */
     function test_computeFeeAndTargetRatio_revertsOnExcessiveCurrentRatio() public {
-        (PoolKey memory freshKey, PoolId freshId) =
+        (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
 
         vm.prank(address(hook));
@@ -719,7 +719,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice computeFeeAndTargetRatio succeeds at maxCurrentRatio boundary
      */
     function test_computeFeeAndTargetRatio_successAtMaxCurrentRatioBoundary() public {
-        (PoolKey memory freshKey, PoolId freshId) =
+        (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
 
         vm.prank(address(hook));
@@ -734,7 +734,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Should succeed
         vm.prank(address(hook));
-        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut) =
+        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio,) =
             logic.computeFeeAndTargetRatio(freshKey, boundaryCurrentRatio);
 
         // Verify reasonable values are returned

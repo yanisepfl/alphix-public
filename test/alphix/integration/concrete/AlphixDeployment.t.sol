@@ -467,6 +467,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertEq(ps.minPeriod, stableParams.minPeriod, "minPeriod mismatch (STABLE)");
         assertEq(ps.ratioTolerance, stableParams.ratioTolerance, "ratioTolerance mismatch (STABLE)");
         assertEq(ps.linearSlope, stableParams.linearSlope, "linearSlope mismatch (STABLE)");
+        assertEq(ps.maxCurrentRatio, stableParams.maxCurrentRatio, "maxCurrentRatio mismatch (STABLE)");
         assertEq(ps.upperSideFactor, stableParams.upperSideFactor, "upperSideFactor mismatch (STABLE)");
         assertEq(ps.lowerSideFactor, stableParams.lowerSideFactor, "lowerSideFactor mismatch (STABLE)");
 
@@ -480,6 +481,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertEq(ps.minPeriod, standardParams.minPeriod, "minPeriod mismatch (STANDARD)");
         assertEq(ps.ratioTolerance, standardParams.ratioTolerance, "ratioTolerance mismatch (STANDARD)");
         assertEq(ps.linearSlope, standardParams.linearSlope, "linearSlope mismatch (STANDARD)");
+        assertEq(ps.maxCurrentRatio, standardParams.maxCurrentRatio, "maxCurrentRatio mismatch (STANDARD)");
         assertEq(ps.upperSideFactor, standardParams.upperSideFactor, "upperSideFactor mismatch (STANDARD)");
         assertEq(ps.lowerSideFactor, standardParams.lowerSideFactor, "lowerSideFactor mismatch (STANDARD)");
 
@@ -493,6 +495,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertEq(ps.minPeriod, volatileParams.minPeriod, "minPeriod mismatch (VOLATILE)");
         assertEq(ps.ratioTolerance, volatileParams.ratioTolerance, "ratioTolerance mismatch (VOLATILE)");
         assertEq(ps.linearSlope, volatileParams.linearSlope, "linearSlope mismatch (VOLATILE)");
+        assertEq(ps.maxCurrentRatio, volatileParams.maxCurrentRatio, "maxCurrentRatio mismatch (VOLATILE)");
         assertEq(ps.upperSideFactor, volatileParams.upperSideFactor, "upperSideFactor mismatch (VOLATILE)");
         assertEq(ps.lowerSideFactor, volatileParams.lowerSideFactor, "lowerSideFactor mismatch (VOLATILE)");
 
