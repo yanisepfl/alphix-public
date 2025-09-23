@@ -365,7 +365,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setPoolTypeParams reverts when minPeriod <= 1 hour
+     * @notice setPoolTypeParams reverts when minPeriod < 1 hour
      */
     function test_setPoolTypeParams_revertsOnMinPeriod() public {
         DynamicFeeLib.PoolTypeParams memory bad = standardParams;
@@ -678,8 +678,9 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         // Advance time past cooldown period
         vm.warp(block.timestamp + 2 days);
 
-        // Use a currentRatio well within the standard pool's maxCurrentRatio limit
-        uint256 validCurrentRatio = 1e19; // 10x, well below standard pool's 1000x limit
+        // Derive a safe in-bounds currentRatio from configured params
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        uint256 validCurrentRatio = pp.maxCurrentRatio > 1 ? pp.maxCurrentRatio - 1 : 1;
 
         // Should succeed
         vm.prank(address(hook));
@@ -688,6 +689,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Verify reasonable values are returned
         assertTrue(newFee > 0, "newFee should be non-zero");
+        assertTrue(uint256(newFee) <= uint256(pp.maxFee), "newFee above maxFee");
         assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
         assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
     }
@@ -739,6 +741,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Verify reasonable values are returned
         assertTrue(newFee > 0, "newFee should be non-zero");
+        assertTrue(uint256(newFee) <= uint256(pp.maxFee), "newFee above maxFee");
         assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
         assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
     }

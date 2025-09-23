@@ -277,10 +277,6 @@ contract MockAlphixLogic is
         // Check currentRatio against pool's maxCurrentRatio limit
         if (currentRatio > pp.maxCurrentRatio) revert InvalidParameter();
 
-        // Cooldown check mirrors production logic
-        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
-
         // Read current fee from PoolManager
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
 
@@ -303,8 +299,16 @@ contract MockAlphixLogic is
         onlyAlphixHook
         poolActivated(key)
         whenNotPaused
+        nonReentrant
     {
         PoolId poolId = key.toId();
+        PoolConfig memory cfg = poolConfig[poolId];
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+
+        // Revert if cooldown not elapsed
+        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
+
         targetRatio[poolId] = newTarget;
         oobState[poolId] = sOut;
         lastFeeUpdate[poolId] = block.timestamp;
@@ -318,6 +322,16 @@ contract MockAlphixLogic is
         uint256 _initialTargetRatio,
         PoolType _poolType
     ) external override onlyAlphixHook poolUnconfigured(key) whenNotPaused {
+        // Validate fee is within bounds for the pool type
+        if (!_isValidFeeForPoolType(_poolType, _initialFee)) {
+            revert InvalidFeeForPoolType(_poolType, _initialFee);
+        }
+
+        // Validate target ratio is not zero
+        if (_initialTargetRatio == 0) {
+            revert NullArgument();
+        }
+
         PoolId id = key.toId();
         lastFeeUpdate[id] = block.timestamp;
         targetRatio[id] = _initialTargetRatio;
@@ -352,8 +366,7 @@ contract MockAlphixLogic is
         onlyAlphixHook
         returns (bool)
     {
-        DynamicFeeLib.PoolTypeParams memory p = poolTypeParams[poolType];
-        return fee >= p.minFee && fee <= p.maxFee;
+        return _isValidFeeForPoolType(poolType, fee);
     }
 
     /* GLOBAL PARAMS */
@@ -446,6 +459,14 @@ contract MockAlphixLogic is
         uint256 old = globalMaxAdjRate;
         globalMaxAdjRate = _globalMaxAdjRate;
         emit GlobalMaxAdjRateUpdated(old, globalMaxAdjRate);
+    }
+
+    /**
+     * @dev Internal helper function to validate fee for pool type.
+     */
+    function _isValidFeeForPoolType(PoolType poolType, uint24 fee) internal view returns (bool) {
+        DynamicFeeLib.PoolTypeParams memory p = poolTypeParams[poolType];
+        return fee >= p.minFee && fee <= p.maxFee;
     }
 
     /* UUPS AUTHORIZATION */

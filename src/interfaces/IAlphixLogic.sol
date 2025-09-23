@@ -115,6 +115,16 @@ interface IAlphixLogic {
      */
     error CooldownNotElapsed(PoolId poolId, uint256 nextEligibleTimestamp, uint256 minPeriod);
 
+    /**
+     * @dev Thrown when a null argument is provided where a non-zero value is required.
+     */
+    error NullArgument();
+
+    /**
+     * @dev Thrown when an invalid fee is provided for a given pool type.
+     */
+    error InvalidFeeForPoolType(PoolType poolType, uint24 fee);
+
     /* CORE HOOK LOGIC */
 
     /**

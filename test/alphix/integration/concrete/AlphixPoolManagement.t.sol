@@ -60,14 +60,14 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         uint24 invalidLow = 98;
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(IAlphix.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidLow)
+            abi.encodeWithSelector(IAlphixLogic.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidLow)
         );
         hook.initializePool(k, invalidLow, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
 
         uint24 invalidHigh = 10002;
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(IAlphix.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidHigh)
+            abi.encodeWithSelector(IAlphixLogic.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidHigh)
         );
         hook.initializePool(k, invalidHigh, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
 
@@ -87,7 +87,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
     function test_initializePool_revertsOnZeroRatio() public {
         (PoolKey memory k,) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        vm.expectRevert(IAlphix.NullArgument.selector);
+        vm.expectRevert(IAlphixLogic.NullArgument.selector);
         hook.initializePool(k, INITIAL_FEE, 0, IAlphixLogic.PoolType.STANDARD);
     }
 
@@ -529,7 +529,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         );
 
         vm.prank(owner);
-        vm.expectRevert(IAlphix.NullArgument.selector);
+        vm.expectRevert(IAlphixLogic.NullArgument.selector);
         hook.poke(k, 0);
     }
 

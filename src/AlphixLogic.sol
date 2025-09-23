@@ -339,10 +339,6 @@ contract AlphixLogic is
         // Check currentRatio against pool's maxCurrentRatio limit
         if (currentRatio > pp.maxCurrentRatio) revert InvalidParameter();
 
-        // Revert if cooldown not elapsed
-        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
-
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
         oldTargetRatio = targetRatio[poolId];
 
@@ -367,6 +363,12 @@ contract AlphixLogic is
         nonReentrant
     {
         PoolId poolId = key.toId();
+        PoolConfig memory cfg = poolConfig[poolId];
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+
+        // Revert if cooldown not elapsed
+        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
         // Update targetRatio
         targetRatio[poolId] = newTargetRatio;
@@ -389,6 +391,16 @@ contract AlphixLogic is
         uint256 _initialTargetRatio,
         PoolType _poolType
     ) external override onlyAlphixHook poolUnconfigured(key) whenNotPaused {
+        // Validate fee is within bounds for the pool type
+        if (!_isValidFeeForPoolType(_poolType, _initialFee)) {
+            revert InvalidFeeForPoolType(_poolType, _initialFee);
+        }
+
+        // Validate target ratio is not zero
+        if (_initialTargetRatio == 0) {
+            revert NullArgument();
+        }
+
         PoolId poolId = key.toId();
         lastFeeUpdate[poolId] = block.timestamp;
         targetRatio[poolId] = _initialTargetRatio;
@@ -444,8 +456,7 @@ contract AlphixLogic is
         onlyAlphixHook
         returns (bool)
     {
-        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
-        return fee >= params.minFee && fee <= params.maxFee;
+        return _isValidFeeForPoolType(poolType, fee);
     }
 
     /* ADMIN FUNCTIONS */
@@ -564,6 +575,14 @@ contract AlphixLogic is
         uint256 oldGlobalMaxAdjRate = globalMaxAdjRate;
         globalMaxAdjRate = _globalMaxAdjRate;
         emit GlobalMaxAdjRateUpdated(oldGlobalMaxAdjRate, globalMaxAdjRate);
+    }
+
+    /**
+     * @dev Internal helper function to validate fee for pool type.
+     */
+    function _isValidFeeForPoolType(PoolType poolType, uint24 fee) internal view returns (bool) {
+        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
+        return fee >= params.minFee && fee <= params.maxFee;
     }
 
     /* UUPS AUTHORIZATION */
