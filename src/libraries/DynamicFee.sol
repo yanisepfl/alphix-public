@@ -96,7 +96,7 @@ library DynamicFeeLib {
         sOut = s;
 
         (bool isUpper, bool inBand) = withinBounds(targetRatio, p.ratioTolerance, currentRatio);
-        if (inBand) {
+        if (targetRatio == 0 || inBand) {
             sOut.consecutiveOOBHits = 0;
             return (clampFee(uint256(currentFee), p.minFee, p.maxFee), sOut);
         }
