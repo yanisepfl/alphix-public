@@ -48,10 +48,10 @@ contract AlphixLogic is
     /**
      * @dev Strict Global Bounds.
      */
-    uint256 internal constant ONE = 1e18;
-    uint256 internal constant TEN = 1e19;
+    uint256 internal constant ONE_WAD = 1e18;
+    uint256 internal constant TEN_WAD = 1e19;
     uint256 private constant MAX_ADJUSTMENT_RATE =
-        (uint256(type(uint24).max) * ONE) / uint256(LPFeeLibrary.MAX_LP_FEE) - 1; // ~ 1.67e19, enforced to protect when casting: uint24(uint256(currentFee).mulDiv(adjustmentRate, ONE))
+        (uint256(type(uint24).max) * ONE_WAD) / uint256(LPFeeLibrary.MAX_LP_FEE) - 1; // ~ 1.67e19, enforced to protect when casting: uint24(uint256(currentFee).mulDiv(adjustmentRate, ONE_WAD))
     uint256 internal constant MIN_PERIOD = 1 hours;
     uint256 internal constant MIN_RATIO_TOLERANCE = 1e15;
     uint256 internal constant MIN_LINEAR_SLOPE = 1e17;
@@ -184,7 +184,7 @@ contract AlphixLogic is
         alphixHook = _alphixHook;
 
         // Sets the default globalMaxAdjustmentRate
-        _setGlobalMaxAdjRate(TEN);
+        _setGlobalMaxAdjRate(TEN_WAD);
 
         // Initialize params for each pool type
         _setPoolTypeParams(PoolType.STABLE, _stableParams);
@@ -336,8 +336,10 @@ contract AlphixLogic is
         PoolConfig memory cfg = poolConfig[poolId];
         DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
 
-        // Check currentRatio against pool's maxCurrentRatio limit
-        if (currentRatio > pp.maxCurrentRatio) revert InvalidParameter();
+        // Check currentRatio is valid for the pool type
+        if (!_isValidRatioForPoolType(cfg.poolType, currentRatio)) {
+            revert InvalidRatioForPoolType(cfg.poolType, currentRatio);
+        }
 
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
         oldTargetRatio = targetRatio[poolId];
@@ -396,9 +398,9 @@ contract AlphixLogic is
             revert InvalidFeeForPoolType(_poolType, _initialFee);
         }
 
-        // Validate target ratio is not zero
-        if (_initialTargetRatio == 0) {
-            revert NullArgument();
+        // Validate ratio is within bounds for the pool type
+        if (!_isValidRatioForPoolType(_poolType, _initialTargetRatio)) {
+            revert InvalidRatioForPoolType(_poolType, _initialTargetRatio);
         }
 
         PoolId poolId = key.toId();
@@ -444,19 +446,6 @@ contract AlphixLogic is
      */
     function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyAlphixHook whenNotPaused {
         _setGlobalMaxAdjRate(_globalMaxAdjRate);
-    }
-
-    /**
-     * @dev See {IAlphixLogic-isValidFeeForPoolType}.
-     */
-    function isValidFeeForPoolType(PoolType poolType, uint24 fee)
-        external
-        view
-        override
-        onlyAlphixHook
-        returns (bool)
-    {
-        return _isValidFeeForPoolType(poolType, fee);
     }
 
     /* ADMIN FUNCTIONS */
@@ -537,17 +526,17 @@ contract AlphixLogic is
         }
 
         // ratioTolerance checks
-        if (params.ratioTolerance < MIN_RATIO_TOLERANCE || params.ratioTolerance > TEN) revert InvalidParameter();
+        if (params.ratioTolerance < MIN_RATIO_TOLERANCE || params.ratioTolerance > TEN_WAD) revert InvalidParameter();
 
         // linearSlope checks
-        if (params.linearSlope < MIN_LINEAR_SLOPE || params.linearSlope > TEN) revert InvalidParameter();
+        if (params.linearSlope < MIN_LINEAR_SLOPE || params.linearSlope > TEN_WAD) revert InvalidParameter();
 
         // maxCurrentRatio checks
         if (params.maxCurrentRatio == 0 || params.maxCurrentRatio > MAX_CURRENT_RATIO) revert InvalidParameter();
 
         // side multipliers checks
-        if (params.upperSideFactor < ONE || params.upperSideFactor > TEN) revert InvalidParameter();
-        if (params.lowerSideFactor < ONE || params.lowerSideFactor > TEN) revert InvalidParameter();
+        if (params.upperSideFactor < ONE_WAD || params.upperSideFactor > TEN_WAD) revert InvalidParameter();
+        if (params.lowerSideFactor < ONE_WAD || params.lowerSideFactor > TEN_WAD) revert InvalidParameter();
 
         poolTypeParams[poolType] = params;
         emit PoolTypeParamsUpdated(
@@ -578,11 +567,27 @@ contract AlphixLogic is
     }
 
     /**
+     * @notice Check if fee is valid for pool type.
      * @dev Internal helper function to validate fee for pool type.
+     * @param poolType The pool type.
+     * @param fee The fee to validate.
+     * @return isValid True if fee is within bounds.
      */
     function _isValidFeeForPoolType(PoolType poolType, uint24 fee) internal view returns (bool) {
         DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
         return fee >= params.minFee && fee <= params.maxFee;
+    }
+
+    /**
+     * @notice Check if ratio is valid for pool type.
+     * @dev Internal helper function to validate ratio for pool type.
+     * @param poolType The pool type.
+     * @param ratio The ratio to validate.
+     * @return isValid True if ratio is within bounds.
+     */
+    function _isValidRatioForPoolType(PoolType poolType, uint256 ratio) internal view returns (bool) {
+        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
+        return ratio > 0 && ratio <= params.maxCurrentRatio;
     }
 
     /* UUPS AUTHORIZATION */

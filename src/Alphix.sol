@@ -242,10 +242,6 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         nonReentrant
         whenNotPaused
     {
-        if (currentRatio == 0) {
-            revert NullArgument();
-        }
-
         PoolId poolId = key.toId();
         (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
 

@@ -84,11 +84,6 @@ interface IAlphix {
      */
     error InvalidAddress();
 
-    /**
-     * @dev Thrown when a function argument is invalid.
-     */
-    error NullArgument();
-
     /* INITIALIZER */
 
     /**

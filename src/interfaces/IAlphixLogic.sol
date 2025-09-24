@@ -45,6 +45,7 @@ interface IAlphixLogic {
      * @param minPeriod The minimum period between 2 fee updates (expressed in s).
      * @param ratioTolerance The tolerated difference in ratio between current and target ratio to not be considered out of bounds.
      * @param linearSlope The linear slope to consider for the dynamic fee algorithm.
+     * @param maxCurrentRatio The maximum allowed current ratio (to avoid extreme outliers).
      * @param lowerSideFactor The downward multiplier to throttle our dynamic fee algorithm by side.
      * @param upperSideFactor The upward multiplier to throttle our dynamic fee algorithm by side.
      */
@@ -116,14 +117,14 @@ interface IAlphixLogic {
     error CooldownNotElapsed(PoolId poolId, uint256 nextEligibleTimestamp, uint256 minPeriod);
 
     /**
-     * @dev Thrown when a null argument is provided where a non-zero value is required.
-     */
-    error NullArgument();
-
-    /**
      * @dev Thrown when an invalid fee is provided for a given pool type.
      */
     error InvalidFeeForPoolType(PoolType poolType, uint24 fee);
+
+    /**
+     * @dev Thrown when an invalid ratio is provided for a given pool type.
+     */
+    error InvalidRatioForPoolType(PoolType poolType, uint256 ratio);
 
     /* CORE HOOK LOGIC */
 
@@ -288,14 +289,6 @@ interface IAlphixLogic {
      * @param _globalMaxAdjRate The global max adjustment rate to set.
      */
     function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external;
-
-    /**
-     * @notice Check if fee is valid for pool type.
-     * @param poolType The pool type.
-     * @param fee The fee to validate.
-     * @return isValid True if fee is within bounds.
-     */
-    function isValidFeeForPoolType(PoolType poolType, uint24 fee) external view returns (bool isValid);
 
     /* GETTERS */
 

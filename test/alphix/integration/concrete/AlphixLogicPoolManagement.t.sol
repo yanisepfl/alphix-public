@@ -34,8 +34,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     uint24 constant MAX_LOOKBACK_PERIOD = 365;
     uint256 constant MIN_RATIO_TOLERANCE = 1e15;
     uint256 constant MIN_LINEAR_SLOPE = 1e17;
-    uint256 constant ONE = 1e18;
-    uint256 constant TEN = 1e19;
+    uint256 constant ONE_WAD = 1e18;
+    uint256 constant TEN_WAD = 1e19;
     uint256 constant MAX_CURRENT_RATIO = 1e24;
 
     /* TESTS */
@@ -391,7 +391,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setPoolTypeParams reverts when lookbackPeriod not in (7, 365)
+     * @notice setPoolTypeParams reverts when lookbackPeriod not in [7, 365]
      */
     function test_setPoolTypeParams_revertsOnLookbackPeriod() public {
         // Too low
@@ -433,7 +433,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setPoolTypeParams reverts when ratioTolerance not in [1e15, 1e17]
+     * @notice setPoolTypeParams reverts when ratioTolerance not in [1e15, 1e19]
      */
     function test_setPoolTypeParams_revertsOnRatioTolerance() public {
         // Too low
@@ -466,7 +466,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundary
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.ratioTolerance = TEN;
+        maxEdge.ratioTolerance = TEN_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
@@ -508,7 +508,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundary
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.linearSlope = TEN;
+        maxEdge.linearSlope = TEN_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
@@ -541,8 +541,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     function test_setPoolTypeParams_successOnSideFactorBounds() public {
         // At minimum boundaries
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
-        minEdge.upperSideFactor = ONE;
-        minEdge.lowerSideFactor = ONE;
+        minEdge.upperSideFactor = ONE_WAD;
+        minEdge.lowerSideFactor = ONE_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 
@@ -552,8 +552,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundaries
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.upperSideFactor = TEN;
-        maxEdge.lowerSideFactor = TEN;
+        maxEdge.upperSideFactor = TEN_WAD;
+        maxEdge.lowerSideFactor = TEN_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
@@ -688,8 +688,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
             logic.computeFeeAndTargetRatio(freshKey, validCurrentRatio);
 
         // Verify reasonable values are returned
-        assertTrue(newFee > 0, "newFee should be non-zero");
-        assertTrue(uint256(newFee) <= uint256(pp.maxFee), "newFee above maxFee");
+        assertGe(uint256(newFee), uint256(pp.minFee), "newFee below minFee");
+        assertLe(uint256(newFee), uint256(pp.maxFee), "newFee above maxFee");
         assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
         assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
     }
@@ -713,7 +713,11 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Should revert
         vm.prank(address(hook));
-        vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAlphixLogic.InvalidRatioForPoolType.selector, IAlphixLogic.PoolType.STANDARD, excessiveCurrentRatio
+            )
+        );
         logic.computeFeeAndTargetRatio(freshKey, excessiveCurrentRatio);
     }
 
@@ -740,8 +744,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
             logic.computeFeeAndTargetRatio(freshKey, boundaryCurrentRatio);
 
         // Verify reasonable values are returned
-        assertTrue(newFee > 0, "newFee should be non-zero");
-        assertTrue(uint256(newFee) <= uint256(pp.maxFee), "newFee above maxFee");
+        assertGe(uint256(newFee), uint256(pp.minFee), "newFee below minFee");
+        assertLe(uint256(newFee), uint256(pp.maxFee), "newFee above maxFee");
         assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
         assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
     }
