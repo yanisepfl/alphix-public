@@ -19,6 +19,7 @@ import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
+import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 
 /**
  * @title AlphixLogicPoolManagementTest
@@ -27,17 +28,6 @@ import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
  * @dev Updated to unified PoolTypeParams and ratio-aware hook/logic flow
  */
 contract AlphixLogicPoolManagementTest is BaseAlphixTest {
-    // Constants for boundary testing
-    uint24 constant MIN_FEE = 1;
-    uint256 constant MIN_PERIOD = 1 hours;
-    uint24 constant MIN_LOOKBACK_PERIOD = 7;
-    uint24 constant MAX_LOOKBACK_PERIOD = 365;
-    uint256 constant MIN_RATIO_TOLERANCE = 1e15;
-    uint256 constant MIN_LINEAR_SLOPE = 1e17;
-    uint256 constant ONE_WAD = 1e18;
-    uint256 constant TEN_WAD = 1e19;
-    uint256 constant MAX_CURRENT_RATIO = 1e24;
-
     /* TESTS */
 
     /**
@@ -253,7 +243,19 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         newP.maxFee = 12000;
 
         vm.prank(address(hook));
-        // Event content depends on interface; here we assert post-state
+        vm.expectEmit(true, false, false, true);
+        emit IAlphixLogic.PoolTypeParamsUpdated(
+            IAlphixLogic.PoolType.STANDARD,
+            newP.minFee,
+            newP.maxFee,
+            newP.lookbackPeriod,
+            newP.minPeriod,
+            newP.ratioTolerance,
+            newP.linearSlope,
+            newP.maxCurrentRatio,
+            newP.lowerSideFactor,
+            newP.upperSideFactor
+        );
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newP);
 
         DynamicFeeLib.PoolTypeParams memory got = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
@@ -264,6 +266,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         assertEq(got.minPeriod, newP.minPeriod, "minPeriod mismatch");
         assertEq(got.ratioTolerance, newP.ratioTolerance, "ratioTolerance mismatch");
         assertEq(got.linearSlope, newP.linearSlope, "linearSlope mismatch");
+        assertEq(got.maxCurrentRatio, newP.maxCurrentRatio, "maxCurrentRatio mismatch");
         assertEq(got.upperSideFactor, newP.upperSideFactor, "upperSideFactor mismatch");
         assertEq(got.lowerSideFactor, newP.lowerSideFactor, "lowerSideFactor mismatch");
     }
@@ -347,7 +350,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     function test_setPoolTypeParams_successOnBaseMaxFeeDeltaBounds() public {
         // At minimum
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
-        minEdge.baseMaxFeeDelta = MIN_FEE;
+        minEdge.baseMaxFeeDelta = AlphixGlobalConstants.MIN_FEE;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 
@@ -365,25 +368,74 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setPoolTypeParams reverts when minPeriod < 1 hour
+     * @notice setPoolTypeParams reverts when minPeriod < 1 hour or > 30 days
      */
     function test_setPoolTypeParams_revertsOnMinPeriod() public {
-        DynamicFeeLib.PoolTypeParams memory bad = standardParams;
-        bad.minPeriod = 1 hours - 1; // must be >= 1 hour
+        // Too low
+        DynamicFeeLib.PoolTypeParams memory low = standardParams;
+        low.minPeriod = 1 hours - 1; // must be >= 1 hour
 
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, bad);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, low);
+
+        // Too high
+        DynamicFeeLib.PoolTypeParams memory high = standardParams;
+        high.minPeriod = AlphixGlobalConstants.MAX_PERIOD + 1; // must be <= 30 days
+
+        vm.prank(address(hook));
+        vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, high);
     }
 
     /**
-     * @notice setPoolTypeParams succeeds when minPeriod == 1 hour (edge case)
+     * @notice setPoolTypeParams succeeds when minPeriod == 1 hour (minimum edge case)
      */
     function test_setPoolTypeParams_successOnMinPeriodAtBoundary() public {
         DynamicFeeLib.PoolTypeParams memory edge = standardParams;
-        edge.minPeriod = MIN_PERIOD; // exactly at minimum
+        edge.minPeriod = AlphixGlobalConstants.MIN_PERIOD; // exactly at minimum
 
         vm.prank(address(hook));
+        vm.expectEmit(true, false, false, true);
+        emit IAlphixLogic.PoolTypeParamsUpdated(
+            IAlphixLogic.PoolType.STANDARD,
+            edge.minFee,
+            edge.maxFee,
+            edge.lookbackPeriod,
+            edge.minPeriod,
+            edge.ratioTolerance,
+            edge.linearSlope,
+            edge.maxCurrentRatio,
+            edge.lowerSideFactor,
+            edge.upperSideFactor
+        );
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, edge);
+
+        DynamicFeeLib.PoolTypeParams memory got = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        assertEq(got.minPeriod, edge.minPeriod, "minPeriod mismatch");
+    }
+
+    /**
+     * @notice setPoolTypeParams succeeds when minPeriod == 30 days (maximum edge case)
+     */
+    function test_setPoolTypeParams_successOnMaxPeriodAtBoundary() public {
+        DynamicFeeLib.PoolTypeParams memory edge = standardParams;
+        edge.minPeriod = AlphixGlobalConstants.MAX_PERIOD; // exactly at maximum
+
+        vm.prank(address(hook));
+        vm.expectEmit(true, false, false, true);
+        emit IAlphixLogic.PoolTypeParamsUpdated(
+            IAlphixLogic.PoolType.STANDARD,
+            edge.minFee,
+            edge.maxFee,
+            edge.lookbackPeriod,
+            edge.minPeriod,
+            edge.ratioTolerance,
+            edge.linearSlope,
+            edge.maxCurrentRatio,
+            edge.lowerSideFactor,
+            edge.upperSideFactor
+        );
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, edge);
 
         DynamicFeeLib.PoolTypeParams memory got = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
@@ -415,8 +467,21 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     function test_setPoolTypeParams_successOnLookbackPeriodBounds() public {
         // At minimum boundary
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
-        minEdge.lookbackPeriod = MIN_LOOKBACK_PERIOD;
+        minEdge.lookbackPeriod = AlphixGlobalConstants.MIN_LOOKBACK_PERIOD;
         vm.prank(address(hook));
+        vm.expectEmit(true, false, false, true);
+        emit IAlphixLogic.PoolTypeParamsUpdated(
+            IAlphixLogic.PoolType.STANDARD,
+            minEdge.minFee,
+            minEdge.maxFee,
+            minEdge.lookbackPeriod,
+            minEdge.minPeriod,
+            minEdge.ratioTolerance,
+            minEdge.linearSlope,
+            minEdge.maxCurrentRatio,
+            minEdge.lowerSideFactor,
+            minEdge.upperSideFactor
+        );
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 
         DynamicFeeLib.PoolTypeParams memory gotMin = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
@@ -424,8 +489,21 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundary
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.lookbackPeriod = MAX_LOOKBACK_PERIOD;
+        maxEdge.lookbackPeriod = AlphixGlobalConstants.MAX_LOOKBACK_PERIOD;
         vm.prank(address(hook));
+        vm.expectEmit(true, false, false, true);
+        emit IAlphixLogic.PoolTypeParamsUpdated(
+            IAlphixLogic.PoolType.STANDARD,
+            maxEdge.minFee,
+            maxEdge.maxFee,
+            maxEdge.lookbackPeriod,
+            maxEdge.minPeriod,
+            maxEdge.ratioTolerance,
+            maxEdge.linearSlope,
+            maxEdge.maxCurrentRatio,
+            maxEdge.lowerSideFactor,
+            maxEdge.upperSideFactor
+        );
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
         DynamicFeeLib.PoolTypeParams memory gotMax = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
@@ -457,7 +535,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     function test_setPoolTypeParams_successOnRatioToleranceBounds() public {
         // At minimum boundary
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
-        minEdge.ratioTolerance = MIN_RATIO_TOLERANCE;
+        minEdge.ratioTolerance = AlphixGlobalConstants.MIN_RATIO_TOLERANCE;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 
@@ -466,7 +544,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundary
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.ratioTolerance = TEN_WAD;
+        maxEdge.ratioTolerance = AlphixGlobalConstants.TEN_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
@@ -499,7 +577,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     function test_setPoolTypeParams_successOnLinearSlopeBounds() public {
         // At minimum boundary
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
-        minEdge.linearSlope = MIN_LINEAR_SLOPE;
+        minEdge.linearSlope = AlphixGlobalConstants.MIN_LINEAR_SLOPE;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 
@@ -508,7 +586,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundary
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.linearSlope = TEN_WAD;
+        maxEdge.linearSlope = AlphixGlobalConstants.TEN_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
@@ -541,8 +619,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     function test_setPoolTypeParams_successOnSideFactorBounds() public {
         // At minimum boundaries
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
-        minEdge.upperSideFactor = ONE_WAD;
-        minEdge.lowerSideFactor = ONE_WAD;
+        minEdge.upperSideFactor = AlphixGlobalConstants.ONE_WAD;
+        minEdge.lowerSideFactor = AlphixGlobalConstants.ONE_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 
@@ -552,8 +630,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundaries
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.upperSideFactor = TEN_WAD;
-        maxEdge.lowerSideFactor = TEN_WAD;
+        maxEdge.upperSideFactor = AlphixGlobalConstants.TEN_WAD;
+        maxEdge.lowerSideFactor = AlphixGlobalConstants.TEN_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
@@ -575,7 +653,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Too high
         DynamicFeeLib.PoolTypeParams memory high = standardParams;
-        high.maxCurrentRatio = MAX_CURRENT_RATIO + 1;
+        high.maxCurrentRatio = AlphixGlobalConstants.MAX_CURRENT_RATIO + 1;
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, high);
@@ -589,6 +667,19 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
         minEdge.maxCurrentRatio = 1;
         vm.prank(address(hook));
+        vm.expectEmit(true, false, false, true);
+        emit IAlphixLogic.PoolTypeParamsUpdated(
+            IAlphixLogic.PoolType.STANDARD,
+            minEdge.minFee,
+            minEdge.maxFee,
+            minEdge.lookbackPeriod,
+            minEdge.minPeriod,
+            minEdge.ratioTolerance,
+            minEdge.linearSlope,
+            minEdge.maxCurrentRatio,
+            minEdge.lowerSideFactor,
+            minEdge.upperSideFactor
+        );
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 
         DynamicFeeLib.PoolTypeParams memory gotMin = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
@@ -596,8 +687,21 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // At maximum boundary
         DynamicFeeLib.PoolTypeParams memory maxEdge = standardParams;
-        maxEdge.maxCurrentRatio = MAX_CURRENT_RATIO;
+        maxEdge.maxCurrentRatio = AlphixGlobalConstants.MAX_CURRENT_RATIO;
         vm.prank(address(hook));
+        vm.expectEmit(true, false, false, true);
+        emit IAlphixLogic.PoolTypeParamsUpdated(
+            IAlphixLogic.PoolType.STANDARD,
+            maxEdge.minFee,
+            maxEdge.maxFee,
+            maxEdge.lookbackPeriod,
+            maxEdge.minPeriod,
+            maxEdge.ratioTolerance,
+            maxEdge.linearSlope,
+            maxEdge.maxCurrentRatio,
+            maxEdge.lowerSideFactor,
+            maxEdge.upperSideFactor
+        );
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, maxEdge);
 
         DynamicFeeLib.PoolTypeParams memory gotMax = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
@@ -666,32 +770,21 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     /* CURRENT RATIO CHECKING LOGIC TESTS */
 
     /**
-     * @notice computeFeeAndTargetRatio succeeds when currentRatio is within pool's maxCurrentRatio limit
+     * @notice computeFeeAndTargetRatio reverts when called by non-hook address
      */
-    function test_computeFeeAndTargetRatio_successOnValidCurrentRatio() public {
+    function test_computeFeeAndTargetRatio_revertsOnNonHook() public {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
 
         vm.prank(address(hook));
         logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
 
-        // Advance time past cooldown period
-        vm.warp(block.timestamp + 2 days);
+        // Try to call from non-hook address (user1)
+        uint256 validCurrentRatio = 1e18; // 1.0 ratio
 
-        // Derive a safe in-bounds currentRatio from configured params
-        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
-        uint256 validCurrentRatio = pp.maxCurrentRatio > 1 ? pp.maxCurrentRatio - 1 : 1;
-
-        // Should succeed
-        vm.prank(address(hook));
-        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio,) =
-            logic.computeFeeAndTargetRatio(freshKey, validCurrentRatio);
-
-        // Verify reasonable values are returned
-        assertGe(uint256(newFee), uint256(pp.minFee), "newFee below minFee");
-        assertLe(uint256(newFee), uint256(pp.maxFee), "newFee above maxFee");
-        assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
-        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+        vm.prank(user1);
+        vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
+        logic.computeFeeAndTargetRatio(freshKey, validCurrentRatio);
     }
 
     /**
@@ -703,9 +796,6 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         vm.prank(address(hook));
         logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
-
-        // Advance time past cooldown period
-        vm.warp(block.timestamp + 2 days);
 
         // Get the pool's maxCurrentRatio limit
         DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
@@ -731,9 +821,6 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         vm.prank(address(hook));
         logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
 
-        // Advance time past cooldown period
-        vm.warp(block.timestamp + 2 days);
-
         // Get the pool's maxCurrentRatio limit and use exactly that value
         DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
         uint256 boundaryCurrentRatio = pp.maxCurrentRatio;
@@ -742,6 +829,32 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         vm.prank(address(hook));
         (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio,) =
             logic.computeFeeAndTargetRatio(freshKey, boundaryCurrentRatio);
+
+        // Verify reasonable values are returned
+        assertGe(uint256(newFee), uint256(pp.minFee), "newFee below minFee");
+        assertLe(uint256(newFee), uint256(pp.maxFee), "newFee above maxFee");
+        assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
+        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+    }
+
+    /**
+     * @notice computeFeeAndTargetRatio succeeds when currentRatio is within pool's maxCurrentRatio limit
+     */
+    function test_computeFeeAndTargetRatio_successOnValidCurrentRatio() public {
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Derive a safe in-bounds currentRatio from configured params
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        uint256 validCurrentRatio = pp.maxCurrentRatio > 1 ? pp.maxCurrentRatio - 1 : 1;
+
+        // Should succeed
+        vm.prank(address(hook));
+        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio,) =
+            logic.computeFeeAndTargetRatio(freshKey, validCurrentRatio);
 
         // Verify reasonable values are returned
         assertGe(uint256(newFee), uint256(pp.minFee), "newFee below minFee");

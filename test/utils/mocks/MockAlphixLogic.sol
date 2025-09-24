@@ -25,6 +25,7 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "../../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../../src/libraries/DynamicFee.sol";
+import {AlphixGlobalConstants} from "../../../src/libraries/AlphixGlobalConstants.sol";
 
 /**
  * @title MockAlphixLogic
@@ -43,19 +44,6 @@ contract MockAlphixLogic is
 {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
-
-    /* CONSTANTS (kept same as logic for validation paths) */
-    uint256 internal constant ONE_WAD = 1e18;
-    uint256 internal constant TEN_WAD = 1e19;
-    uint256 private constant MAX_ADJUSTMENT_RATE =
-        (uint256(type(uint24).max) * ONE_WAD) / uint256(LPFeeLibrary.MAX_LP_FEE) - 1;
-    uint256 internal constant MIN_PERIOD = 1 hours;
-    uint256 internal constant MIN_RATIO_TOLERANCE = 1e15;
-    uint256 internal constant MIN_LINEAR_SLOPE = 1e17;
-    uint24 internal constant MIN_LOOKBACK_PERIOD = 7;
-    uint24 internal constant MAX_LOOKBACK_PERIOD = 365;
-    uint24 internal constant MIN_FEE = 1;
-    uint256 internal constant MAX_CURRENT_RATIO = 1e24;
 
     /* MATCHING STORAGE (must mirror AlphixLogic order) */
 
@@ -146,7 +134,7 @@ contract MockAlphixLogic is
         alphixHook = _alphixHook;
 
         // Set default global cap (same as logic)
-        _setGlobalMaxAdjRate(TEN_WAD);
+        _setGlobalMaxAdjRate(AlphixGlobalConstants.TEN_WAD);
 
         // Initialize params for each pool type
         _setPoolTypeParams(PoolType.STABLE, _stableParams);
@@ -403,32 +391,56 @@ contract MockAlphixLogic is
 
     function _setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams memory params) internal {
         // Fee bounds
-        if (params.minFee < MIN_FEE || params.minFee > params.maxFee || params.maxFee > LPFeeLibrary.MAX_LP_FEE) {
+        if (
+            params.minFee < AlphixGlobalConstants.MIN_FEE || params.minFee > params.maxFee
+                || params.maxFee > LPFeeLibrary.MAX_LP_FEE
+        ) {
             revert InvalidFeeBounds(params.minFee, params.maxFee);
         }
         // baseMaxFeeDelta
-        if (params.baseMaxFeeDelta < MIN_FEE || params.baseMaxFeeDelta > LPFeeLibrary.MAX_LP_FEE) {
+        if (params.baseMaxFeeDelta < AlphixGlobalConstants.MIN_FEE || params.baseMaxFeeDelta > LPFeeLibrary.MAX_LP_FEE)
+        {
             revert InvalidParameter();
         }
         // minPeriod
-        if (params.minPeriod < MIN_PERIOD) revert InvalidParameter();
+        if (params.minPeriod < AlphixGlobalConstants.MIN_PERIOD || params.minPeriod > AlphixGlobalConstants.MAX_PERIOD)
+        {
+            revert InvalidParameter();
+        }
         // lookbackPeriod
-        if (params.lookbackPeriod < MIN_LOOKBACK_PERIOD || params.lookbackPeriod > MAX_LOOKBACK_PERIOD) {
+        if (
+            params.lookbackPeriod < AlphixGlobalConstants.MIN_LOOKBACK_PERIOD
+                || params.lookbackPeriod > AlphixGlobalConstants.MAX_LOOKBACK_PERIOD
+        ) {
             revert InvalidParameter();
         }
         // ratioTolerance
-        if (params.ratioTolerance < MIN_RATIO_TOLERANCE || params.ratioTolerance > TEN_WAD) {
+        if (
+            params.ratioTolerance < AlphixGlobalConstants.MIN_RATIO_TOLERANCE
+                || params.ratioTolerance > AlphixGlobalConstants.TEN_WAD
+        ) {
             revert InvalidParameter();
         }
         // linearSlope
-        if (params.linearSlope < MIN_LINEAR_SLOPE || params.linearSlope > TEN_WAD) {
+        if (
+            params.linearSlope < AlphixGlobalConstants.MIN_LINEAR_SLOPE
+                || params.linearSlope > AlphixGlobalConstants.TEN_WAD
+        ) {
             revert InvalidParameter();
         }
         // maxCurrentRatio checks
-        if (params.maxCurrentRatio == 0 || params.maxCurrentRatio > MAX_CURRENT_RATIO) revert InvalidParameter();
+        if (params.maxCurrentRatio == 0 || params.maxCurrentRatio > AlphixGlobalConstants.MAX_CURRENT_RATIO) {
+            revert InvalidParameter();
+        }
         // side multipliers
-        if (params.upperSideFactor < ONE_WAD || params.upperSideFactor > TEN_WAD) revert InvalidParameter();
-        if (params.lowerSideFactor < ONE_WAD || params.lowerSideFactor > TEN_WAD) revert InvalidParameter();
+        if (
+            params.upperSideFactor < AlphixGlobalConstants.ONE_WAD
+                || params.upperSideFactor > AlphixGlobalConstants.TEN_WAD
+        ) revert InvalidParameter();
+        if (
+            params.lowerSideFactor < AlphixGlobalConstants.ONE_WAD
+                || params.lowerSideFactor > AlphixGlobalConstants.TEN_WAD
+        ) revert InvalidParameter();
 
         poolTypeParams[poolType] = params;
         emit PoolTypeParamsUpdated(
@@ -446,7 +458,9 @@ contract MockAlphixLogic is
     }
 
     function _setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) internal {
-        if (_globalMaxAdjRate == 0 || _globalMaxAdjRate > MAX_ADJUSTMENT_RATE) revert InvalidParameter();
+        if (_globalMaxAdjRate == 0 || _globalMaxAdjRate > AlphixGlobalConstants.MAX_ADJUSTMENT_RATE) {
+            revert InvalidParameter();
+        }
         uint256 old = globalMaxAdjRate;
         globalMaxAdjRate = _globalMaxAdjRate;
         emit GlobalMaxAdjRateUpdated(old, globalMaxAdjRate);

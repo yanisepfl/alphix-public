@@ -198,6 +198,12 @@ library DynamicFeeLib {
         returns (uint256 newTargetRatio)
     {
         uint256 alpha = ALPHA_NUMERATOR / (uint256(lookbackPeriod) + 1);
-        return oldTargetRatio + currentRatio.mulDiv(alpha, ONE_WAD) - oldTargetRatio.mulDiv(alpha, ONE_WAD);
+        if (currentRatio >= oldTargetRatio) {
+            uint256 up = (currentRatio - oldTargetRatio).mulDiv(alpha, ONE_WAD);
+            return oldTargetRatio + up;
+        } else {
+            uint256 down = (oldTargetRatio - currentRatio).mulDiv(alpha, ONE_WAD);
+            return oldTargetRatio - down;
+        }
     }
 }
