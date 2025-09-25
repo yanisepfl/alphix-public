@@ -862,4 +862,212 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         assertEq(oldTargetRatio, INITIAL_TARGET_RATIO, "oldTargetRatio should equal initial target ratio");
         assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
     }
+
+    /**
+     * @notice finalizeAfterFeeUpdate reverts before cooldown and succeeds after advancing time by pp.minPeriod
+     */
+    function test_finalizeAfterFeeUpdate_cooldownEnforcement() public {
+        (PoolKey memory freshKey, PoolId freshPoolId) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Get pool params to know the minPeriod
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+
+        // Prepare finalize parameters
+        uint256 newTargetRatio = 1.5e18;
+        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+
+        // Should revert immediately after pool activation (cooldown not elapsed)
+        vm.prank(address(hook));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAlphixLogic.CooldownNotElapsed.selector, freshPoolId, block.timestamp + pp.minPeriod, pp.minPeriod
+            )
+        );
+        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+
+        // Advance time by exactly pp.minPeriod
+        vm.warp(block.timestamp + pp.minPeriod);
+
+        // Should succeed now
+        vm.prank(address(hook));
+        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+
+        // Verify the target ratio was updated by calling computeFeeAndTargetRatio
+        vm.prank(address(hook));
+        (, uint256 actualStoredTarget,,) = logic.computeFeeAndTargetRatio(freshKey, 1e18);
+
+        // The stored target should be the value we just set (newTargetRatio)
+        assertEq(actualStoredTarget, newTargetRatio, "stored target ratio should match what was set");
+    }
+
+    /**
+     * @notice finalizeAfterFeeUpdate reverts when called by non-hook address
+     */
+    function test_finalizeAfterFeeUpdate_revertsOnNonHook() public {
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Advance time to bypass cooldown
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        vm.warp(block.timestamp + pp.minPeriod);
+
+        // Prepare finalize parameters
+        uint256 newTargetRatio = 1.5e18;
+        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+
+        // Should revert when called by non-hook (user1)
+        vm.prank(user1);
+        vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
+        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+    }
+
+    /**
+     * @notice finalizeAfterFeeUpdate reverts when pool is not activated
+     */
+    function test_finalizeAfterFeeUpdate_revertsOnInactivePool() public {
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Deactivate the pool
+        vm.prank(address(hook));
+        logic.deactivatePool(freshKey);
+
+        // Advance time to bypass cooldown
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        vm.warp(block.timestamp + pp.minPeriod);
+
+        // Prepare finalize parameters
+        uint256 newTargetRatio = 1.5e18;
+        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+
+        // Should revert due to pool being inactive
+        vm.prank(address(hook));
+        vm.expectRevert(IAlphixLogic.PoolPaused.selector);
+        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+    }
+
+    /**
+     * @notice finalizeAfterFeeUpdate reverts when contract is paused
+     */
+    function test_finalizeAfterFeeUpdate_revertsWhenPaused() public {
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Pause the contract (as owner)
+        vm.prank(owner);
+        AlphixLogic(address(logic)).pause();
+
+        // Advance time to bypass cooldown
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        vm.warp(block.timestamp + pp.minPeriod);
+
+        // Prepare finalize parameters
+        uint256 newTargetRatio = 1.5e18;
+        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+
+        // Should revert due to contract being paused
+        vm.prank(address(hook));
+        vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
+        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+    }
+
+    /**
+     * @notice finalizeAfterFeeUpdate updates all state correctly on success
+     */
+    function test_finalizeAfterFeeUpdate_updatesStateCorrectly() public {
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Advance time to bypass cooldown
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        vm.warp(block.timestamp + pp.minPeriod);
+
+        // Prepare finalize parameters
+        uint256 newTargetRatio = 2.5e18;
+        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 3, lastOOBWasUpper: false});
+
+        // Execute finalization
+        vm.prank(address(hook));
+        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+
+        // Verify target ratio was updated
+        vm.prank(address(hook));
+        (, uint256 storedTarget,,) = logic.computeFeeAndTargetRatio(freshKey, 1e18);
+        assertEq(storedTarget, newTargetRatio, "target ratio should be updated");
+
+        // Verify cooldown is reset by trying another immediate call (should fail)
+        vm.prank(address(hook));
+        vm.expectRevert(); // Should revert due to cooldown
+        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+
+        // Verify cooldown works after advancing time again
+        vm.warp(block.timestamp + pp.minPeriod);
+        vm.prank(address(hook));
+        logic.finalizeAfterFeeUpdate(freshKey, 3e18, sOut); // Should succeed
+    }
+
+    /**
+     * @notice Test that lowering maxCurrentRatio post-activation clamps targetRatio to the new cap
+     */
+    function test_finalizeAfterFeeUpdate_clampsTargetRatioToNewCap() public {
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Set a high target ratio first
+        uint256 highTargetRatio = 5e21; // 5000:1 ratio
+
+        // Advance time to bypass cooldown
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        vm.warp(block.timestamp + pp.minPeriod);
+
+        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+
+        // Set the high target ratio
+        vm.prank(address(hook));
+        logic.finalizeAfterFeeUpdate(freshKey, highTargetRatio, sOut);
+
+        // Now lower the maxCurrentRatio cap for this pool type
+        DynamicFeeLib.PoolTypeParams memory newParams = pp;
+        newParams.maxCurrentRatio = 2e21; // Lower cap: 2000:1 ratio
+
+        vm.prank(address(hook));
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
+
+        // Advance time again for another update
+        vm.warp(block.timestamp + newParams.minPeriod);
+
+        // Try to finalize with a target ratio above the new cap
+        uint256 attemptedTargetRatio = 3e21; // 3000:1 ratio (above new cap)
+
+        vm.prank(address(hook));
+        logic.finalizeAfterFeeUpdate(freshKey, attemptedTargetRatio, sOut);
+
+        // Verify that the target ratio was clamped to the new cap
+        // We can check this by calling computeFeeAndTargetRatio and examining oldTargetRatio
+        vm.warp(block.timestamp + newParams.minPeriod);
+        vm.prank(address(hook));
+        (, uint256 actualStoredTarget,,) = logic.computeFeeAndTargetRatio(freshKey, 1e18);
+
+        assertEq(actualStoredTarget, newParams.maxCurrentRatio, "targetRatio should be clamped to maxCurrentRatio");
+        assertTrue(actualStoredTarget < attemptedTargetRatio, "targetRatio should be less than attempted value");
+    }
 }
