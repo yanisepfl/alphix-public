@@ -41,6 +41,7 @@ interface IAlphixLogic {
      * @param poolType The pool type to change bounds of.
      * @param minFee The min fee value.
      * @param maxFee The max fee value.
+     * @param baseMaxFeeDelta The maximum fee delta per streak hit (expressed as uint24).
      * @param lookbackPeriod The lookbackPeriod to consider for the EMA smoothing factor (expressed in days).
      * @param minPeriod The minimum period between 2 fee updates (expressed in s).
      * @param ratioTolerance The tolerated difference in ratio between current and target ratio to not be considered out of bounds.
@@ -53,6 +54,7 @@ interface IAlphixLogic {
         PoolType indexed poolType,
         uint24 minFee,
         uint24 maxFee,
+        uint24 baseMaxFeeDelta,
         uint24 lookbackPeriod,
         uint256 minPeriod,
         uint256 ratioTolerance,

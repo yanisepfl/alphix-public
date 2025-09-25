@@ -556,6 +556,7 @@ contract AlphixLogic is
             poolType,
             params.minFee,
             params.maxFee,
+            params.baseMaxFeeDelta,
             params.lookbackPeriod,
             params.minPeriod,
             params.ratioTolerance,
