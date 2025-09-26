@@ -273,8 +273,16 @@ contract MockAlphixLogic is
         uint24 mf = mockFee;
         newFee = mf == 0 ? currentFee : mf;
 
+        // Get pool type parameters for clamping
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+
         oldTarget = targetRatio[poolId];
-        newTarget = oldTarget; // no-op EMA for the mock
+        // Clamp oldTarget to current pool-type cap (in case parameters changed)
+        if (oldTarget > pp.maxCurrentRatio) {
+            oldTarget = pp.maxCurrentRatio;
+        }
+
+        newTarget = oldTarget; // no-op EMA for the mock, but clamp for consistency
         sOut = oobState[poolId]; // passthrough
     }
 
@@ -289,6 +297,7 @@ contract MockAlphixLogic is
         poolActivated(key)
         whenNotPaused
         nonReentrant
+        returns (uint256 targetRatioAfterUpdate)
     {
         PoolId poolId = key.toId();
         PoolConfig memory cfg = poolConfig[poolId];
@@ -298,7 +307,16 @@ contract MockAlphixLogic is
         uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
         if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
+        // Validate and clamp newTarget (same logic as main implementation)
+        if (newTarget == 0) {
+            revert InvalidRatioForPoolType(cfg.poolType, newTarget);
+        }
+        if (newTarget > pp.maxCurrentRatio) {
+            newTarget = pp.maxCurrentRatio;
+        }
+
         targetRatio[poolId] = newTarget;
+        targetRatioAfterUpdate = newTarget;
         oobState[poolId] = sOut;
         lastFeeUpdate[poolId] = block.timestamp;
     }

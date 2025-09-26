@@ -319,9 +319,11 @@ interface IAlphixLogic {
      * @param key The key of the pool.
      * @param newTargetRatio The new target ratio of the pool.
      * @param sOut The OOBState of the pool.
+     * @return targetRatioAfterUpdate The target ratio after the update.
      */
     function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OOBState calldata sOut)
-        external;
+        external
+        returns (uint256 targetRatioAfterUpdate);
 
     /**
      * @notice Get pool config for a specific pool.

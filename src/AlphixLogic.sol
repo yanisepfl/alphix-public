@@ -330,13 +330,21 @@ contract AlphixLogic is
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
         oldTargetRatio = targetRatio[poolId];
 
+        // Clamp oldTargetRatio to current pool-type cap
+        if (oldTargetRatio > pp.maxCurrentRatio) {
+            oldTargetRatio = pp.maxCurrentRatio;
+        }
+
         // Compute the new fee (the newFee is clamped as per its pool type)
         (newFee, sOut) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, oldTargetRatio, globalMaxAdjRate, pp, oobState[poolId]
         );
 
-        // Apply EMA for targetRatio update
+        // Apply EMA for targetRatio update and clamp to current pool-type cap
         newTargetRatio = DynamicFeeLib.ema(currentRatio, oldTargetRatio, pp.lookbackPeriod);
+        if (newTargetRatio > pp.maxCurrentRatio) {
+            newTargetRatio = pp.maxCurrentRatio;
+        }
     }
 
     /**
@@ -349,6 +357,7 @@ contract AlphixLogic is
         poolActivated(key)
         whenNotPaused
         nonReentrant
+        returns (uint256 targetRatioAfterUpdate)
     {
         PoolId poolId = key.toId();
         PoolConfig memory cfg = poolConfig[poolId];
@@ -366,6 +375,7 @@ contract AlphixLogic is
             newTargetRatio = pp.maxCurrentRatio;
         }
         targetRatio[poolId] = newTargetRatio;
+        targetRatioAfterUpdate = newTargetRatio;
 
         // Update OOB state
         oobState[poolId] = sOut;

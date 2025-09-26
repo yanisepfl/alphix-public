@@ -253,7 +253,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         _setDynamicFee(key, newFee);
 
         // Update the storage
-        IAlphixLogic(logic).finalizeAfterFeeUpdate(key, newTargetRatio, sOut);
+        newTargetRatio = IAlphixLogic(logic).finalizeAfterFeeUpdate(key, newTargetRatio, sOut);
 
         emit FeeUpdated(poolId, oldFee, newFee, oldTargetRatio, currentRatio, newTargetRatio);
     }
