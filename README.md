@@ -1,4 +1,4 @@
-# Alphix [![codecov](https://codecov.io/github/yanisepfl/alphix-atrium/graph/badge.svg?token=JX37PW6PZA)](https://codecov.io/github/yanisepfl/alphix-atrium)
+# Alphix Core Repository  [![codecov](https://codecov.io/github/yanisepfl/alphix-atrium/graph/badge.svg?token=JX37PW6PZA)](https://codecov.io/github/yanisepfl/alphix-atrium)
 
 ![Alphix Logo](./branding-materials/logos/type/LogoTypeWhite.png)
 
