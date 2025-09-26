@@ -1,4 +1,4 @@
-# Alphix: Atrium UHI6 [![codecov](https://codecov.io/github/yanisepfl/alphix-atrium/graph/badge.svg?token=JX37PW6PZA)](https://codecov.io/github/yanisepfl/alphix-atrium)
+# Alphix [![codecov](https://codecov.io/github/yanisepfl/alphix-atrium/graph/badge.svg?token=JX37PW6PZA)](https://codecov.io/github/yanisepfl/alphix-atrium)
 
 ![Alphix Logo](./branding-materials/logos/type/LogoTypeWhite.png)
 
@@ -65,23 +65,17 @@ Each of those parameters are bounded by global constants for additional security
 ## Links & Resources
 
 - [Working Paper (WIP)](./Alphix_Working_Paper.pdf)
-- [Atrium Demo Video](https://youtu.be/Uy0fGHfMMDY)
-- [Website](https://www.alphix.fi/) (password for app access: ATRIUM)
+- [Website](https://www.alphix.fi/)
 - [Documentation (WIP)](https://alphix.gitbook.io/docs)
 - [Branding Material](./branding-materials/)
 
-
 ## Partners
 
-Currently, Alphix only integrates with Uniswap. More partners to come.
-
-In particular, we do not integrate eigenlayer nor fhenix.
+More partners to come.
 
 ## Acknowledgements
 
-Alphix builds on top of Uniswap V4, leveraging its new **[Hook Feature](#hooks)**. Our implementation follows the official **[Uniswap v4 template](https://github.com/uniswapfoundation/v4-template)**, and closely follows **[OpenZeppelin's Uniswap Hook template](https://github.com/OpenZeppelin/uniswap-hooks)**. This helps us ensure compatibility and best practices. We also leveraged Atrum's resources, workshops and office hours (Uniswap Hook Incubator 6).
-
-We thank our mentors, the organizers, the Atrium and Uniswap teams for their support.
+Alphix builds on top of Uniswap V4, leveraging its new **[Hook Feature](#hooks)**. Our implementation follows the official **[Uniswap v4 template](https://github.com/uniswapfoundation/v4-template)**, and closely follows **[OpenZeppelin's Uniswap Hook template](https://github.com/OpenZeppelin/uniswap-hooks)**. This helps us ensure compatibility and best practices.
 
 ## License
 
