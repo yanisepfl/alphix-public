@@ -242,10 +242,6 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         nonReentrant
         whenNotPaused
     {
-        if (currentRatio == 0) {
-            revert NullArgument();
-        }
-
         PoolId poolId = key.toId();
         (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
 
@@ -257,7 +253,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         _setDynamicFee(key, newFee);
 
         // Update the storage
-        IAlphixLogic(logic).finalizeAfterFeeUpdate(key, newTargetRatio, sOut);
+        newTargetRatio = IAlphixLogic(logic).finalizeAfterFeeUpdate(key, newTargetRatio, sOut);
 
         emit FeeUpdated(poolId, oldFee, newFee, oldTargetRatio, currentRatio, newTargetRatio);
     }
@@ -310,17 +306,11 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         uint256 _initialTargetRatio,
         IAlphixLogic.PoolType _poolType
     ) external override onlyOwner nonReentrant whenNotPaused validLogic {
-        if (!IAlphixLogic(logic).isValidFeeForPoolType(_poolType, _initialFee)) {
-            revert InvalidFeeForPoolType(_poolType, _initialFee);
-        }
-        if (_initialTargetRatio == 0) {
-            revert NullArgument();
-        }
         IAlphixLogic(logic).activateAndConfigurePool(key, _initialFee, _initialTargetRatio, _poolType);
         _setDynamicFee(key, _initialFee);
         PoolId poolId = key.toId();
         IRegistry(registry).registerPool(key, _poolType, _initialFee, _initialTargetRatio);
-        emit FeeUpdated(poolId, 0, _initialFee, _initialTargetRatio, 0, 0);
+        emit FeeUpdated(poolId, 0, _initialFee, 0, _initialTargetRatio, _initialTargetRatio);
         emit PoolConfigured(poolId, _initialFee, _initialTargetRatio, _poolType);
     }
 

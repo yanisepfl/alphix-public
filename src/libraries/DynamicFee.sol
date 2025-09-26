@@ -5,6 +5,9 @@ pragma solidity ^0.8.26;
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 
+/* LOCAL IMPORTS */
+import {AlphixGlobalConstants} from "./AlphixGlobalConstants.sol";
+
 /**
  * @title DynamicFeeLib.
  * @notice Pure library for Alphix dynamic fee algorithm and EMA.
@@ -13,8 +16,7 @@ import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 library DynamicFeeLib {
     using FullMath for uint256;
 
-    uint256 internal constant ONE = 1e18;
-    uint256 internal constant ALPHA_NUMERATOR = 2 * ONE;
+    uint256 internal constant ALPHA_NUMERATOR = 2 * AlphixGlobalConstants.ONE_WAD;
 
     /**
      * @dev PoolType-dependent parameters.
@@ -28,10 +30,11 @@ library DynamicFeeLib {
         uint24 maxFee;
         // Algorithm knobs
         uint24 baseMaxFeeDelta; // e.g. 100 = 0.01%
-        uint24 lookbackPeriod; // the smoothing factor is then obtained: alpha = 1e18 * 2 / (lookbackPeriod + 1)
+        uint24 lookbackPeriod; // EMA smoothing factor alpha = 1e18 * 2 / (lookbackPeriod + 1)
         uint256 minPeriod; // cooldown in seconds
         uint256 ratioTolerance; // band half-width in 1e18
         uint256 linearSlope; // sensitivity vs relative deviation in 1e18
+        uint256 maxCurrentRatio; // maximum allowed current ratio in 1e18
         // Side multipliers
         uint256 upperSideFactor;
         uint256 lowerSideFactor;
@@ -50,7 +53,7 @@ library DynamicFeeLib {
     /**
      * @notice Check whether a current ratio is within a symmetric tolerance band.
      * @param target The target ratio in 1e18.
-     * @param tol The tolerance half-width in 1e18.
+     * @param tol The tolerance width around the target ratio in 1e18 (e.g. 3e16 = 3%).
      * @param current The current ratio in 1e18.
      * @return upper True if above upper bound.
      * @return inBand True if within tolerated bounds.
@@ -60,8 +63,9 @@ library DynamicFeeLib {
         pure
         returns (bool upper, bool inBand)
     {
-        uint256 lowerBound = target - target.mulDiv(tol, ONE);
-        uint256 upperBound = target + target.mulDiv(tol, ONE);
+        uint256 delta = target.mulDiv(tol, AlphixGlobalConstants.ONE_WAD);
+        uint256 lowerBound = target > delta ? target - delta : 0;
+        uint256 upperBound = target + delta;
         bool lower = current < lowerBound;
         upper = current > upperBound;
         inBand = !(lower || upper);
@@ -94,7 +98,7 @@ library DynamicFeeLib {
         sOut = s;
 
         (bool isUpper, bool inBand) = withinBounds(targetRatio, p.ratioTolerance, currentRatio);
-        if (inBand) {
+        if (targetRatio == 0 || inBand) {
             sOut.consecutiveOOBHits = 0;
             return (clampFee(uint256(currentFee), p.minFee, p.maxFee), sOut);
         }
@@ -137,7 +141,7 @@ library DynamicFeeLib {
         uint24 streak,
         bool isUpper
     ) private pure returns (uint24, OOBState memory sOut) {
-        uint256 feeDelta = uint256(currentFee).mulDiv(adjustmentRate, ONE);
+        uint256 feeDelta = uint256(currentFee).mulDiv(adjustmentRate, AlphixGlobalConstants.ONE_WAD);
 
         // throttle by streak
         uint256 maxFeeDelta = uint256(p.baseMaxFeeDelta) * uint256(streak);
@@ -147,12 +151,12 @@ library DynamicFeeLib {
 
         // throttle by side
         if (isUpper) {
-            uint256 deltaUp = feeDelta.mulDiv(p.upperSideFactor, ONE);
+            uint256 deltaUp = feeDelta.mulDiv(p.upperSideFactor, AlphixGlobalConstants.ONE_WAD);
             unchecked {
                 feeAcc += deltaUp;
             } // clamped below
         } else {
-            uint256 deltaDown = feeDelta.mulDiv(p.lowerSideFactor, ONE);
+            uint256 deltaDown = feeDelta.mulDiv(p.lowerSideFactor, AlphixGlobalConstants.ONE_WAD);
             if (deltaDown >= feeAcc) {
                 sOut.lastOOBWasUpper = isUpper;
                 sOut.consecutiveOOBHits = streak;
@@ -184,7 +188,7 @@ library DynamicFeeLib {
 
     /**
      * @notice Exponential moving average: new = old + alpha*(current - old).
-     * @dev alpha = 2 * ONE / (lookbackPeriod + 1).
+     * @dev alpha = 2 * AlphixGlobalConstants.ONE_WAD / (lookbackPeriod + 1).
      * @param currentRatio The current ratio in 1e18.
      * @param oldTargetRatio The previous target ratio in 1e18.
      * @param lookbackPeriod The lookbackPeriod in days.
@@ -196,6 +200,12 @@ library DynamicFeeLib {
         returns (uint256 newTargetRatio)
     {
         uint256 alpha = ALPHA_NUMERATOR / (uint256(lookbackPeriod) + 1);
-        return oldTargetRatio + currentRatio.mulDiv(alpha, ONE) - oldTargetRatio.mulDiv(alpha, ONE);
+        if (currentRatio >= oldTargetRatio) {
+            uint256 up = (currentRatio - oldTargetRatio).mulDiv(alpha, AlphixGlobalConstants.ONE_WAD);
+            return oldTargetRatio + up;
+        } else {
+            uint256 down = (oldTargetRatio - currentRatio).mulDiv(alpha, AlphixGlobalConstants.ONE_WAD);
+            return oldTargetRatio - down;
+        }
     }
 }

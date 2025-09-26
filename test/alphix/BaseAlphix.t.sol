@@ -78,7 +78,8 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint64 constant REGISTRAR_ROLE = 1;
 
     // Optional: derived safe cap if tests ever want to override logic default
-    uint256 constant GLOBAL_MAX_ADJ_RATE_SAFE = (uint256(type(uint24).max) * 1e18) / uint256(LPFeeLibrary.MAX_LP_FEE);
+    uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
+        (uint256(type(uint24).max) * 1e18) / uint256(LPFeeLibrary.MAX_LP_FEE);
 
     // Test addresses
     address public owner;
@@ -171,6 +172,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
             minPeriod: 1 days,
             ratioTolerance: 5e15,
             linearSlope: 2e18,
+            maxCurrentRatio: 1e21, // 1000x for stable pools
             upperSideFactor: 1e18,
             lowerSideFactor: 2e18
         });
@@ -183,6 +185,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
             minPeriod: 1 days,
             ratioTolerance: 5e16,
             linearSlope: 1e18,
+            maxCurrentRatio: 1e21, // 1000x for standard pools
             upperSideFactor: 1e18,
             lowerSideFactor: 2e18
         });
@@ -195,6 +198,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
             minPeriod: 1 days,
             ratioTolerance: 1e16,
             linearSlope: 5e17,
+            maxCurrentRatio: 1e21, // 1000x for volatile pools
             upperSideFactor: 1e18,
             lowerSideFactor: 2e18
         });

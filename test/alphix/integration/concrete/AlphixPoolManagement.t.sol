@@ -60,14 +60,18 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         uint24 invalidLow = 98;
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(IAlphix.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidLow)
+            abi.encodeWithSelector(
+                IAlphixLogic.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidLow
+            )
         );
         hook.initializePool(k, invalidLow, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
 
         uint24 invalidHigh = 10002;
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(IAlphix.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidHigh)
+            abi.encodeWithSelector(
+                IAlphixLogic.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidHigh
+            )
         );
         hook.initializePool(k, invalidHigh, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
 
@@ -87,7 +91,9 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
     function test_initializePool_revertsOnZeroRatio() public {
         (PoolKey memory k,) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        vm.expectRevert(IAlphix.NullArgument.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, IAlphixLogic.PoolType.STANDARD, 0)
+        );
         hook.initializePool(k, INITIAL_FEE, 0, IAlphixLogic.PoolType.STANDARD);
     }
 
@@ -280,6 +286,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             minPeriod: standardParams.minPeriod,
             ratioTolerance: standardParams.ratioTolerance,
             linearSlope: standardParams.linearSlope,
+            maxCurrentRatio: standardParams.maxCurrentRatio,
             lowerSideFactor: standardParams.lowerSideFactor,
             upperSideFactor: standardParams.upperSideFactor
         });
@@ -302,6 +309,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             minPeriod: standardParams.minPeriod,
             ratioTolerance: standardParams.ratioTolerance,
             linearSlope: standardParams.linearSlope,
+            maxCurrentRatio: standardParams.maxCurrentRatio,
             lowerSideFactor: standardParams.lowerSideFactor,
             upperSideFactor: standardParams.upperSideFactor
         });
@@ -526,8 +534,13 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             Constants.SQRT_PRICE_1_1
         );
 
+        // Advance time past cooldown period
+        vm.warp(block.timestamp + 2 days);
+
         vm.prank(owner);
-        vm.expectRevert(IAlphix.NullArgument.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, IAlphixLogic.PoolType.STANDARD, 0)
+        );
         hook.poke(k, 0);
     }
 
@@ -549,7 +562,9 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         // Immediately poking should hit logic cooldown check
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.CooldownNotElapsed.selector, k.toId(), currentTimestamp + 1 days)
+            abi.encodeWithSelector(
+                IAlphixLogic.CooldownNotElapsed.selector, k.toId(), currentTimestamp + 1 days, 1 days
+            )
         );
         hook.poke(k, INITIAL_TARGET_RATIO);
     }

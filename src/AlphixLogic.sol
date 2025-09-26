@@ -27,6 +27,7 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {IAlphix} from "./interfaces/IAlphix.sol";
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
+import {AlphixGlobalConstants} from "./libraries/AlphixGlobalConstants.sol";
 
 /**
  * @title AlphixLogic.
@@ -44,20 +45,6 @@ contract AlphixLogic is
 {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
-
-    /**
-     * @dev Strict Global Bounds.
-     */
-    uint256 internal constant ONE = 1e18;
-    uint256 internal constant TEN = 1e19;
-    uint256 private constant MAX_ADJUSTMENT_RATE =
-        (uint256(type(uint24).max) * ONE) / uint256(LPFeeLibrary.MAX_LP_FEE) - 1; // ~ 1.67e19, enforced to protect when casting: uint24(uint256(currentFee).mulDiv(adjustmentRate, ONE))
-    uint256 internal constant MIN_PERIOD = 1 hours;
-    uint256 internal constant MIN_RATIO_TOLERANCE = 1e15;
-    uint256 internal constant MIN_LINEAR_SLOPE = 1e17;
-    uint24 internal constant MIN_LOOKBACK_PERIOD = 7;
-    uint24 internal constant MAX_LOOKBACK_PERIOD = 365;
-    uint24 internal constant MIN_FEE = 1;
 
     /* STORAGE */
 
@@ -183,7 +170,7 @@ contract AlphixLogic is
         alphixHook = _alphixHook;
 
         // Sets the default globalMaxAdjustmentRate
-        _setGlobalMaxAdjRate(TEN);
+        _setGlobalMaxAdjRate(AlphixGlobalConstants.TEN_WAD);
 
         // Initialize params for each pool type
         _setPoolTypeParams(PoolType.STABLE, _stableParams);
@@ -335,20 +322,29 @@ contract AlphixLogic is
         PoolConfig memory cfg = poolConfig[poolId];
         DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
 
-        // Revert if cooldown not elapsed
-        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs);
+        // Check currentRatio is valid for the pool type
+        if (!_isValidRatioForPoolType(cfg.poolType, currentRatio)) {
+            revert InvalidRatioForPoolType(cfg.poolType, currentRatio);
+        }
 
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
         oldTargetRatio = targetRatio[poolId];
+
+        // Clamp oldTargetRatio to current pool-type cap
+        if (oldTargetRatio > pp.maxCurrentRatio) {
+            oldTargetRatio = pp.maxCurrentRatio;
+        }
 
         // Compute the new fee (the newFee is clamped as per its pool type)
         (newFee, sOut) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, oldTargetRatio, globalMaxAdjRate, pp, oobState[poolId]
         );
 
-        // Apply EMA for targetRatio update
+        // Apply EMA for targetRatio update and clamp to current pool-type cap
         newTargetRatio = DynamicFeeLib.ema(currentRatio, oldTargetRatio, pp.lookbackPeriod);
+        if (newTargetRatio > pp.maxCurrentRatio) {
+            newTargetRatio = pp.maxCurrentRatio;
+        }
     }
 
     /**
@@ -361,11 +357,25 @@ contract AlphixLogic is
         poolActivated(key)
         whenNotPaused
         nonReentrant
+        returns (uint256 targetRatioAfterUpdate)
     {
         PoolId poolId = key.toId();
+        PoolConfig memory cfg = poolConfig[poolId];
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
 
-        // Update targetRatio
+        // Revert if cooldown not elapsed
+        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
+
+        // Update targetRatio (validate and clamp to current pool-type cap)
+        if (newTargetRatio == 0) {
+            revert InvalidRatioForPoolType(cfg.poolType, newTargetRatio);
+        }
+        if (newTargetRatio > pp.maxCurrentRatio) {
+            newTargetRatio = pp.maxCurrentRatio;
+        }
         targetRatio[poolId] = newTargetRatio;
+        targetRatioAfterUpdate = newTargetRatio;
 
         // Update OOB state
         oobState[poolId] = sOut;
@@ -385,6 +395,16 @@ contract AlphixLogic is
         uint256 _initialTargetRatio,
         PoolType _poolType
     ) external override onlyAlphixHook poolUnconfigured(key) whenNotPaused {
+        // Validate fee is within bounds for the pool type
+        if (!_isValidFeeForPoolType(_poolType, _initialFee)) {
+            revert InvalidFeeForPoolType(_poolType, _initialFee);
+        }
+
+        // Validate ratio is within bounds for the pool type
+        if (!_isValidRatioForPoolType(_poolType, _initialTargetRatio)) {
+            revert InvalidRatioForPoolType(_poolType, _initialTargetRatio);
+        }
+
         PoolId poolId = key.toId();
         lastFeeUpdate[poolId] = block.timestamp;
         targetRatio[poolId] = _initialTargetRatio;
@@ -428,20 +448,6 @@ contract AlphixLogic is
      */
     function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyAlphixHook whenNotPaused {
         _setGlobalMaxAdjRate(_globalMaxAdjRate);
-    }
-
-    /**
-     * @dev See {IAlphixLogic-isValidFeeForPoolType}.
-     */
-    function isValidFeeForPoolType(PoolType poolType, uint24 fee)
-        external
-        view
-        override
-        onlyAlphixHook
-        returns (bool)
-    {
-        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
-        return fee >= params.minFee && fee <= params.maxFee;
     }
 
     /* ADMIN FUNCTIONS */
@@ -504,42 +510,71 @@ contract AlphixLogic is
      */
     function _setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams memory params) internal {
         // Fee bounds checks
-        if (params.minFee < MIN_FEE || params.minFee > params.maxFee || params.maxFee > LPFeeLibrary.MAX_LP_FEE) {
+        if (
+            params.minFee < AlphixGlobalConstants.MIN_FEE || params.minFee > params.maxFee
+                || params.maxFee > LPFeeLibrary.MAX_LP_FEE
+        ) {
             revert InvalidFeeBounds(params.minFee, params.maxFee);
         }
 
         // baseMaxFeeDelta checks
-        if (params.baseMaxFeeDelta < MIN_FEE || params.baseMaxFeeDelta > LPFeeLibrary.MAX_LP_FEE) {
+        if (params.baseMaxFeeDelta < AlphixGlobalConstants.MIN_FEE || params.baseMaxFeeDelta > LPFeeLibrary.MAX_LP_FEE)
+        {
             revert InvalidParameter();
         }
 
         // minPeriod checks
-        if (params.minPeriod < MIN_PERIOD) revert InvalidParameter();
+        if (params.minPeriod < AlphixGlobalConstants.MIN_PERIOD || params.minPeriod > AlphixGlobalConstants.MAX_PERIOD)
+        {
+            revert InvalidParameter();
+        }
 
         // lookbackPeriod checks
-        if (params.lookbackPeriod < MIN_LOOKBACK_PERIOD || params.lookbackPeriod > MAX_LOOKBACK_PERIOD) {
+        if (
+            params.lookbackPeriod < AlphixGlobalConstants.MIN_LOOKBACK_PERIOD
+                || params.lookbackPeriod > AlphixGlobalConstants.MAX_LOOKBACK_PERIOD
+        ) {
             revert InvalidParameter();
         }
 
         // ratioTolerance checks
-        if (params.ratioTolerance < MIN_RATIO_TOLERANCE || params.ratioTolerance > TEN) revert InvalidParameter();
+        if (
+            params.ratioTolerance < AlphixGlobalConstants.MIN_RATIO_TOLERANCE
+                || params.ratioTolerance > AlphixGlobalConstants.TEN_WAD
+        ) revert InvalidParameter();
 
         // linearSlope checks
-        if (params.linearSlope < MIN_LINEAR_SLOPE || params.linearSlope > TEN) revert InvalidParameter();
+        if (
+            params.linearSlope < AlphixGlobalConstants.MIN_LINEAR_SLOPE
+                || params.linearSlope > AlphixGlobalConstants.TEN_WAD
+        ) revert InvalidParameter();
+
+        // maxCurrentRatio checks
+        if (params.maxCurrentRatio == 0 || params.maxCurrentRatio > AlphixGlobalConstants.MAX_CURRENT_RATIO) {
+            revert InvalidParameter();
+        }
 
         // side multipliers checks
-        if (params.upperSideFactor < ONE || params.upperSideFactor > TEN) revert InvalidParameter();
-        if (params.lowerSideFactor < ONE || params.lowerSideFactor > TEN) revert InvalidParameter();
+        if (
+            params.upperSideFactor < AlphixGlobalConstants.ONE_WAD
+                || params.upperSideFactor > AlphixGlobalConstants.TEN_WAD
+        ) revert InvalidParameter();
+        if (
+            params.lowerSideFactor < AlphixGlobalConstants.ONE_WAD
+                || params.lowerSideFactor > AlphixGlobalConstants.TEN_WAD
+        ) revert InvalidParameter();
 
         poolTypeParams[poolType] = params;
         emit PoolTypeParamsUpdated(
             poolType,
             params.minFee,
             params.maxFee,
+            params.baseMaxFeeDelta,
             params.lookbackPeriod,
             params.minPeriod,
             params.ratioTolerance,
             params.linearSlope,
+            params.maxCurrentRatio,
             params.lowerSideFactor,
             params.upperSideFactor
         );
@@ -550,12 +585,36 @@ contract AlphixLogic is
      * @param _globalMaxAdjRate The global max adjustment rate to set.
      */
     function _setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) internal {
-        if (_globalMaxAdjRate == 0 || _globalMaxAdjRate > MAX_ADJUSTMENT_RATE) {
+        if (_globalMaxAdjRate == 0 || _globalMaxAdjRate > AlphixGlobalConstants.MAX_ADJUSTMENT_RATE) {
             revert InvalidParameter();
         }
         uint256 oldGlobalMaxAdjRate = globalMaxAdjRate;
         globalMaxAdjRate = _globalMaxAdjRate;
         emit GlobalMaxAdjRateUpdated(oldGlobalMaxAdjRate, globalMaxAdjRate);
+    }
+
+    /**
+     * @notice Check if fee is valid for pool type.
+     * @dev Internal helper function to validate fee for pool type.
+     * @param poolType The pool type.
+     * @param fee The fee to validate.
+     * @return isValid True if fee is within bounds.
+     */
+    function _isValidFeeForPoolType(PoolType poolType, uint24 fee) internal view returns (bool) {
+        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
+        return fee >= params.minFee && fee <= params.maxFee;
+    }
+
+    /**
+     * @notice Check if ratio is valid for pool type.
+     * @dev Internal helper function to validate ratio for pool type.
+     * @param poolType The pool type.
+     * @param ratio The ratio to validate.
+     * @return isValid True if ratio is within bounds.
+     */
+    function _isValidRatioForPoolType(PoolType poolType, uint256 ratio) internal view returns (bool) {
+        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
+        return ratio > 0 && ratio <= params.maxCurrentRatio;
     }
 
     /* UUPS AUTHORIZATION */

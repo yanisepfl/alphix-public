@@ -41,10 +41,12 @@ interface IAlphixLogic {
      * @param poolType The pool type to change bounds of.
      * @param minFee The min fee value.
      * @param maxFee The max fee value.
+     * @param baseMaxFeeDelta The maximum fee delta per streak hit (expressed as uint24).
      * @param lookbackPeriod The lookbackPeriod to consider for the EMA smoothing factor (expressed in days).
      * @param minPeriod The minimum period between 2 fee updates (expressed in s).
      * @param ratioTolerance The tolerated difference in ratio between current and target ratio to not be considered out of bounds.
      * @param linearSlope The linear slope to consider for the dynamic fee algorithm.
+     * @param maxCurrentRatio The maximum allowed current ratio (to avoid extreme outliers).
      * @param lowerSideFactor The downward multiplier to throttle our dynamic fee algorithm by side.
      * @param upperSideFactor The upward multiplier to throttle our dynamic fee algorithm by side.
      */
@@ -52,10 +54,12 @@ interface IAlphixLogic {
         PoolType indexed poolType,
         uint24 minFee,
         uint24 maxFee,
+        uint24 baseMaxFeeDelta,
         uint24 lookbackPeriod,
         uint256 minPeriod,
         uint256 ratioTolerance,
         uint256 linearSlope,
+        uint256 maxCurrentRatio,
         uint256 lowerSideFactor,
         uint256 upperSideFactor
     );
@@ -112,7 +116,17 @@ interface IAlphixLogic {
     /**
      * @dev Thrown when the time elapsed since the pool's last fee update happened is less than minPeriod.
      */
-    error CooldownNotElapsed(PoolId poolId, uint256 nextEligibleTimestamp);
+    error CooldownNotElapsed(PoolId poolId, uint256 nextEligibleTimestamp, uint256 minPeriod);
+
+    /**
+     * @dev Thrown when an invalid fee is provided for a given pool type.
+     */
+    error InvalidFeeForPoolType(PoolType poolType, uint24 fee);
+
+    /**
+     * @dev Thrown when an invalid ratio is provided for a given pool type.
+     */
+    error InvalidRatioForPoolType(PoolType poolType, uint256 ratio);
 
     /* CORE HOOK LOGIC */
 
@@ -278,14 +292,6 @@ interface IAlphixLogic {
      */
     function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external;
 
-    /**
-     * @notice Check if fee is valid for pool type.
-     * @param poolType The pool type.
-     * @param fee The fee to validate.
-     * @return isValid True if fee is within bounds.
-     */
-    function isValidFeeForPoolType(PoolType poolType, uint24 fee) external view returns (bool isValid);
-
     /* GETTERS */
 
     /**
@@ -313,9 +319,11 @@ interface IAlphixLogic {
      * @param key The key of the pool.
      * @param newTargetRatio The new target ratio of the pool.
      * @param sOut The OOBState of the pool.
+     * @return targetRatioAfterUpdate The target ratio after the update.
      */
     function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OOBState calldata sOut)
-        external;
+        external
+        returns (uint256 targetRatioAfterUpdate);
 
     /**
      * @notice Get pool config for a specific pool.
