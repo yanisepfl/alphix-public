@@ -992,6 +992,33 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     }
 
     /**
+     * @notice finalizeAfterFeeUpdate reverts when newTargetRatio is zero
+     */
+    function test_finalizeAfterFeeUpdate_revertsOnZeroTargetRatio() public {
+        // Use fresh pool to ensure clean state
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+
+        // Configure and activate pool
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+
+        // Advance time past cooldown
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        vm.warp(block.timestamp + pp.minPeriod);
+
+        // Create some OOB state
+        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({lastOOBWasUpper: true, consecutiveOOBHits: 1});
+
+        // Attempt to finalize with zero targetRatio should revert
+        vm.prank(address(hook));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, IAlphixLogic.PoolType.STANDARD, 0)
+        );
+        logic.finalizeAfterFeeUpdate(freshKey, 0, sOut);
+    }
+
+    /**
      * @notice finalizeAfterFeeUpdate updates all state correctly on success
      */
     function test_finalizeAfterFeeUpdate_updatesStateCorrectly() public {

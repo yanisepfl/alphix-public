@@ -358,7 +358,10 @@ contract AlphixLogic is
         uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
         if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
-        // Update targetRatio (clamp to current pool-type cap)
+        // Update targetRatio (validate and clamp to current pool-type cap)
+        if (newTargetRatio == 0) {
+            revert InvalidRatioForPoolType(cfg.poolType, newTargetRatio);
+        }
         if (newTargetRatio > pp.maxCurrentRatio) {
             newTargetRatio = pp.maxCurrentRatio;
         }
