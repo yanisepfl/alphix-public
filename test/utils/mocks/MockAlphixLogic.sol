@@ -266,15 +266,20 @@ contract MockAlphixLogic is
             revert InvalidRatioForPoolType(cfg.poolType, currentRatio);
         }
 
+        // Get pool type parameters for clamping
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+
         // Read current fee from PoolManager
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
 
-        // If mockFee is set, prefer it; otherwise reflect the current live fee
+        // If mockFee is set, prefer it (clamped to bounds); otherwise reflect the current live fee
         uint24 mf = mockFee;
-        newFee = mf == 0 ? currentFee : mf;
-
-        // Get pool type parameters for clamping
-        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+        if (mf == 0) {
+            newFee = currentFee;
+        } else {
+            // Clamp mockFee to per-type bounds to avoid unrealistic test states
+            newFee = DynamicFeeLib.clampFee(uint256(mf), pp.minFee, pp.maxFee);
+        }
 
         oldTarget = targetRatio[poolId];
         // Clamp oldTarget to current pool-type cap (in case parameters changed)

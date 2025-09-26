@@ -935,7 +935,10 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Should succeed now
         vm.prank(address(hook));
-        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+        uint256 returnedTargetRatio = logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+        assertEq(
+            returnedTargetRatio, newTargetRatio, "returned target ratio should equal input since no clamping needed"
+        );
 
         // Verify the target ratio was updated by calling computeFeeAndTargetRatio
         vm.prank(address(hook));
@@ -1072,7 +1075,10 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Execute finalization
         vm.prank(address(hook));
-        logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+        uint256 returnedTargetRatio = logic.finalizeAfterFeeUpdate(freshKey, newTargetRatio, sOut);
+        assertEq(
+            returnedTargetRatio, newTargetRatio, "returned target ratio should equal input since no clamping needed"
+        );
 
         // Verify target ratio was updated
         vm.prank(address(hook));
@@ -1092,7 +1098,8 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         // Verify cooldown works after advancing time again
         vm.warp(block.timestamp + pp.minPeriod);
         vm.prank(address(hook));
-        logic.finalizeAfterFeeUpdate(freshKey, 3e18, sOut); // Should succeed
+        uint256 finalReturnedRatio = logic.finalizeAfterFeeUpdate(freshKey, 3e18, sOut); // Should succeed
+        assertEq(finalReturnedRatio, 3e18, "final returned target ratio should equal input");
     }
 
     /**
@@ -1105,22 +1112,21 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         vm.prank(address(hook));
         logic.activateAndConfigurePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
 
-        // Set a high target ratio first
-        uint256 highTargetRatio = 5e21; // 5000:1 ratio
-
         // Advance time to bypass cooldown
         DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
         vm.warp(block.timestamp + pp.minPeriod);
 
         DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
 
-        // Set the high target ratio
+        // Set a target ratio that's at the current limit
+        uint256 validHighRatio = pp.maxCurrentRatio; // Use current max (1e21)
         vm.prank(address(hook));
-        logic.finalizeAfterFeeUpdate(freshKey, highTargetRatio, sOut);
+        uint256 initialReturnedRatio = logic.finalizeAfterFeeUpdate(freshKey, validHighRatio, sOut);
+        assertEq(initialReturnedRatio, validHighRatio, "initial returned ratio should equal input (at current limit)");
 
         // Now lower the maxCurrentRatio cap for this pool type
         DynamicFeeLib.PoolTypeParams memory newParams = pp;
-        newParams.maxCurrentRatio = 2e21; // Lower cap: 2000:1 ratio
+        newParams.maxCurrentRatio = 5e20; // Lower cap: 500:1 ratio (down from 1000:1)
 
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
@@ -1129,10 +1135,12 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         vm.warp(block.timestamp + newParams.minPeriod);
 
         // Try to finalize with a target ratio above the new cap
-        uint256 attemptedTargetRatio = 3e21; // 3000:1 ratio (above new cap)
+        uint256 attemptedTargetRatio = 8e20; // 800:1 ratio (above new cap of 500:1)
 
         vm.prank(address(hook));
-        logic.finalizeAfterFeeUpdate(freshKey, attemptedTargetRatio, sOut);
+        uint256 clampedReturnedRatio = logic.finalizeAfterFeeUpdate(freshKey, attemptedTargetRatio, sOut);
+        assertEq(clampedReturnedRatio, newParams.maxCurrentRatio, "returned ratio should be clamped to maxCurrentRatio");
+        assertTrue(clampedReturnedRatio < attemptedTargetRatio, "returned ratio should be less than attempted ratio");
 
         // Verify that the target ratio was clamped to the new cap
         // We can check this by calling computeFeeAndTargetRatio and examining oldTargetRatio
