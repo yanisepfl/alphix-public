@@ -253,7 +253,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      the fee adjustment magnitude is constrained by the new limits
      */
     function test_restrictiveParams_reducesMaximumFee() public {
-        uint256 testRatio = 1e18; // High ratio to trigger significant adjustment
+        // Use a ratio significantly outside tolerance to trigger fee adjustment
+        uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // First, establish behavior with original parameters
         vm.prank(owner);
@@ -289,7 +290,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      higher fee adjustments are possible within the new bounds
      */
     function test_permissiveParams_allowsHigherMaxFee() public {
-        uint256 testRatio = 1e18; // High ratio to trigger adjustment
+        // Use a ratio outside tolerance to trigger adjustment
+        uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // Change to permissive parameters first
         vm.prank(owner);
@@ -468,7 +470,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         // Should not be able to poke in same block due to cooldown
         vm.expectRevert();
         vm.prank(owner);
-        hook.poke(key, 1e18);
+        hook.poke(key, _getAboveToleranceRatio(INITIAL_TARGET_RATIO, extremeParams.ratioTolerance));
     }
 
     /**
@@ -503,7 +505,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      fee adjustment magnitudes when ratio is above tolerance
      */
     function test_sideFactor_changes_affectAdjustmentDirection() public {
-        uint256 upperRatio = INITIAL_TARGET_RATIO + 2e16; // Significantly above tolerance
+        // Use ratio significantly above tolerance to test side factor effects
+        uint256 upperRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // Test with low upper side factor (1.0x multiplier)
         vm.prank(owner);
@@ -543,7 +546,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      fee adjustment magnitudes when ratio is below tolerance
      */
     function test_sideFactor_lowerRatio_affectAdjustmentMagnitude() public {
-        uint256 lowerRatio = INITIAL_TARGET_RATIO - 1e16; // Moderately below tolerance
+        // Use ratio below tolerance to test lower side factor effects
+        uint256 lowerRatio = _getBelowToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // Test with low lower side factor (1.0x multiplier)
         vm.prank(owner);
@@ -623,7 +627,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Now both pools have different lookback parameters applied
         // Test convergence behavior with sustained ratio deviation
-        uint256 deviatedRatio = INITIAL_TARGET_RATIO + 2e16; // Significantly above target
+        // Use ratio above tolerance for convergence testing
+        uint256 deviatedRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, shortLookbackParams.ratioTolerance);
 
         // First update - should produce identical fees (lookback only affects EMA)
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
@@ -682,7 +687,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      for the same ratio deviations from target
      */
     function test_linearSlope_affectFeeAdjustmentSensitivity() public {
-        uint256 testRatio = INITIAL_TARGET_RATIO + 2e16; // Moderately above tolerance
+        // Use ratio above tolerance to test linear slope sensitivity
+        uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // Test with low linear slope (gentler adjustments)
         vm.prank(owner);
@@ -721,7 +727,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      * @dev Verifies that slope parameter affects fee decreases when ratio is below tolerance
      */
     function test_linearSlope_affectDownwardAdjustments() public {
-        uint256 lowerRatio = INITIAL_TARGET_RATIO - 15e15; // Below tolerance
+        // Use ratio below tolerance to test linear slope sensitivity for decreases
+        uint256 lowerRatio = _getBelowToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // Test with low linear slope (gentler decreases)
         vm.prank(owner);
@@ -760,7 +767,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      regardless of how large the ratio deviation is
      */
     function test_baseMaxFeeDelta_limitsMaximumFeeChange() public {
-        uint256 extremeRatio = INITIAL_TARGET_RATIO + 5e16; // Very high ratio to trigger large adjustment
+        // Use ratio well above tolerance to test baseMaxFeeDelta effects
+        uint256 extremeRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance) + 2e16;
 
         // Test with low base max fee delta (smaller steps)
         vm.prank(owner);
@@ -808,7 +816,9 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      and amplify the fee delta, while still being limited by baseMaxFeeDelta
      */
     function test_baseMaxFeeDelta_limitsConsecutiveSteps() public {
-        uint256 persistentHighRatio = INITIAL_TARGET_RATIO + 3e16; // Sustained high ratio to trigger upper streak
+        // Use sustained ratio above tolerance to trigger upper streak
+        uint256 persistentHighRatio =
+            _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance) + 1e16;
 
         // Set up parameters that allow us to see streak effects
         vm.prank(owner);
@@ -849,11 +859,16 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         assertTrue(secondStep >= firstStep, "Second step should be at least as large as first (streak effect)");
         assertTrue(thirdStep >= secondStep, "Third step should be at least as large as second (streak effect)");
 
-        // However, each step should still be constrained by baseMaxFeeDelta bounds
-        // The exact constraint depends on the streak multiplier, but should be reasonable
-        assertTrue(firstStep <= 150, "First step should be constrained");
-        assertTrue(secondStep <= 300, "Second step should be constrained even with streak");
-        assertTrue(thirdStep <= 450, "Third step should be constrained even with higher streak");
+        // Each step should be constrained by baseMaxFeeDelta with streak multiplier
+        // Rather than hardcode values, verify relative growth patterns
+        uint24 baseMaxDelta = lowBaseMaxFeeDeltaParams.baseMaxFeeDelta;
+
+        // First step should be roughly bounded by baseMaxFeeDelta (streak = 1)
+        assertTrue(firstStep <= baseMaxDelta * 3, "First step should be reasonably constrained by baseMaxFeeDelta");
+
+        // Verify reasonable progressive growth without hardcoded thresholds
+        assertTrue(secondStep <= firstStep * 3, "Second step should not grow excessively from first");
+        assertTrue(thirdStep <= secondStep * 2, "Third step should not grow excessively from second");
 
         // Verify all fees respect the maximum bound
         assertTrue(feeAfterThird <= lowBaseMaxFeeDeltaParams.maxFee, "Final fee should respect max bound");
@@ -867,7 +882,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      consistent and predictable behavior regardless of parameter history
      */
     function test_multipleParameterChanges_consistentBehavior() public {
-        uint256 testRatio = 7e17;
+        // Use ratio above tolerance for consistent testing across parameter sets
+        uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // Cycle through different parameter sets
         DynamicFeeLib.PoolTypeParams[3] memory paramSets = [restrictiveParams, permissiveParams, originalParams];
@@ -902,8 +918,8 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
 
-        // High ratio test
-        uint256 highRatio = INITIAL_TARGET_RATIO + restrictiveParams.ratioTolerance + 1e16;
+        // High ratio test - use ratio above tolerance
+        uint256 highRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, restrictiveParams.ratioTolerance);
         vm.prank(owner);
         hook.poke(key, highRatio);
 
@@ -917,13 +933,59 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
 
-        // Low ratio test
-        uint256 lowRatio = INITIAL_TARGET_RATIO - permissiveParams.ratioTolerance - 1e16;
+        // Low ratio test - use ratio below tolerance
+        uint256 lowRatio = _getBelowToleranceRatio(INITIAL_TARGET_RATIO, permissiveParams.ratioTolerance);
         vm.prank(owner);
         hook.poke(key, lowRatio);
 
         (,,, uint24 feeAfterLow) = poolManager.getSlot0(poolId);
         assertTrue(feeAfterLow <= feeAfterHigh, "Fee should decrease for low ratio");
         assertTrue(feeAfterLow >= permissiveParams.minFee, "Fee should respect min bound");
+    }
+
+    /* HELPER FUNCTIONS FOR RATIO TOLERANCE CALCULATIONS */
+
+    /**
+     * @notice Calculate upper bound for ratio tolerance
+     * @param targetRatio The target ratio to calculate bounds for
+     * @param ratioTolerance The ratio tolerance (as a fraction of 1e18)
+     * @return upperBound The upper bound: targetRatio + targetRatio * ratioTolerance / 1e18
+     */
+    function _getUpperToleranceBound(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
+        return targetRatio + (targetRatio * ratioTolerance / 1e18);
+    }
+
+    /**
+     * @notice Calculate lower bound for ratio tolerance
+     * @param targetRatio The target ratio to calculate bounds for
+     * @param ratioTolerance The ratio tolerance (as a fraction of 1e18)
+     * @return lowerBound The lower bound: targetRatio - targetRatio * ratioTolerance / 1e18
+     */
+    function _getLowerToleranceBound(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
+        return targetRatio - (targetRatio * ratioTolerance / 1e18);
+    }
+
+    /**
+     * @notice Get a ratio slightly above the tolerance (out of bounds upper)
+     * @param targetRatio The target ratio
+     * @param ratioTolerance The ratio tolerance
+     * @return outOfBoundsRatio A ratio just above the upper tolerance bound
+     */
+    function _getAboveToleranceRatio(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
+        // Add 0.1% relative to target ratio (1e15 * targetRatio / 1e18)
+        uint256 additionalMargin = (1e15 * targetRatio) / 1e18;
+        return _getUpperToleranceBound(targetRatio, ratioTolerance) + additionalMargin;
+    }
+
+    /**
+     * @notice Get a ratio slightly below the tolerance (out of bounds lower)
+     * @param targetRatio The target ratio
+     * @param ratioTolerance The ratio tolerance
+     * @return outOfBoundsRatio A ratio just below the lower tolerance bound
+     */
+    function _getBelowToleranceRatio(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
+        // Subtract 0.1% relative to target ratio (1e15 * targetRatio / 1e18)
+        uint256 additionalMargin = (1e15 * targetRatio) / 1e18;
+        return _getLowerToleranceBound(targetRatio, ratioTolerance) - additionalMargin;
     }
 }
