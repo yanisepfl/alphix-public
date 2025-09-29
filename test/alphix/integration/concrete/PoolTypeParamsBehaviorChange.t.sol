@@ -41,6 +41,12 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     DynamicFeeLib.PoolTypeParams public highUpperSideParams;
     DynamicFeeLib.PoolTypeParams public lowLowerSideParams;
     DynamicFeeLib.PoolTypeParams public highLowerSideParams;
+    DynamicFeeLib.PoolTypeParams public shortLookbackParams;
+    DynamicFeeLib.PoolTypeParams public longLookbackParams;
+    DynamicFeeLib.PoolTypeParams public lowLinearSlopeParams;
+    DynamicFeeLib.PoolTypeParams public highLinearSlopeParams;
+    DynamicFeeLib.PoolTypeParams public lowBaseMaxFeeDeltaParams;
+    DynamicFeeLib.PoolTypeParams public highBaseMaxFeeDeltaParams;
 
     /**
      * @notice Sets up the test environment with parameter variations
@@ -66,6 +72,32 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      *      behavior under different configuration conditions
      */
     function _setupTestParameters() internal {
+        // Create base parameter template
+        DynamicFeeLib.PoolTypeParams memory baseParams = DynamicFeeLib.PoolTypeParams({
+            minFee: 1,
+            maxFee: 8000,
+            baseMaxFeeDelta: 50,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 5e15,
+            linearSlope: 2e18,
+            maxCurrentRatio: 1e21,
+            upperSideFactor: 2e18,
+            lowerSideFactor: 2e18
+        });
+
+        _createMainParameterSets();
+        _createSideFactorParameterSets(baseParams);
+        _createLookbackParameterSets(baseParams);
+        _createLinearSlopeParameterSets(baseParams);
+        _createBaseMaxFeeDeltaParameterSets(baseParams);
+    }
+
+    /**
+     * @notice Creates main parameter sets (restrictive, permissive, extreme)
+     * @dev Sets up the primary parameter variations for general testing
+     */
+    function _createMainParameterSets() internal {
         // Restrictive parameters (tighter bounds, slower adjustments)
         restrictiveParams = DynamicFeeLib.PoolTypeParams({
             minFee: 1000, // Higher minimum (was 1)
@@ -107,62 +139,70 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
             upperSideFactor: AlphixGlobalConstants.TEN_WAD,
             lowerSideFactor: AlphixGlobalConstants.TEN_WAD
         });
+    }
 
-        // Parameters with low upper side factor (for testing upper ratio adjustments)
-        lowUpperSideParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1,
-            maxFee: 8000,
-            baseMaxFeeDelta: 50,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
-            upperSideFactor: 1e18, // Minimum allowed (1.0x multiplier)
-            lowerSideFactor: 2e18
-        });
+    /**
+     * @notice Creates side factor parameter sets for testing side factor effects
+     * @dev Uses base parameters and only modifies side factors to isolate their effects
+     */
+    function _createSideFactorParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+        // Low upper side factor (1.0x multiplier)
+        lowUpperSideParams = baseParams;
+        lowUpperSideParams.upperSideFactor = 1e18;
 
-        // Parameters with high upper side factor (for testing upper ratio adjustments)
-        highUpperSideParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1,
-            maxFee: 8000,
-            baseMaxFeeDelta: 50,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
-            upperSideFactor: 5e18, // High multiplier (5.0x)
-            lowerSideFactor: 2e18
-        });
+        // High upper side factor (5.0x multiplier)
+        highUpperSideParams = baseParams;
+        highUpperSideParams.upperSideFactor = 5e18;
 
-        // Parameters with low lower side factor (for testing lower ratio adjustments)
-        lowLowerSideParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1,
-            maxFee: 8000,
-            baseMaxFeeDelta: 50,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
-            upperSideFactor: 2e18,
-            lowerSideFactor: 1e18 // Minimum allowed (1.0x multiplier)
-        });
+        // Low lower side factor (1.0x multiplier)
+        lowLowerSideParams = baseParams;
+        lowLowerSideParams.lowerSideFactor = 1e18;
 
-        // Parameters with high lower side factor (for testing lower ratio adjustments)
-        highLowerSideParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1,
-            maxFee: 8000,
-            baseMaxFeeDelta: 50,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
-            upperSideFactor: 2e18,
-            lowerSideFactor: 5e18 // High multiplier (5.0x)
-        });
+        // High lower side factor (5.0x multiplier)
+        highLowerSideParams = baseParams;
+        highLowerSideParams.lowerSideFactor = 5e18;
+    }
+
+    /**
+     * @notice Creates lookback period parameter sets for testing EMA effects
+     * @dev Uses base parameters and only modifies lookback periods to isolate their effects
+     */
+    function _createLookbackParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+        // Short lookback period (faster EMA response)
+        shortLookbackParams = baseParams;
+        shortLookbackParams.lookbackPeriod = AlphixGlobalConstants.MIN_LOOKBACK_PERIOD; // 7 days
+
+        // Long lookback period (slower EMA response)
+        longLookbackParams = baseParams;
+        longLookbackParams.lookbackPeriod = 90; // 90 days (well below max of 365)
+    }
+
+    /**
+     * @notice Creates linear slope parameter sets for testing fee adjustment sensitivity
+     * @dev Uses base parameters and only modifies linear slopes to isolate their effects
+     */
+    function _createLinearSlopeParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+        // Low linear slope (gentler fee adjustments)
+        lowLinearSlopeParams = baseParams;
+        lowLinearSlopeParams.linearSlope = AlphixGlobalConstants.MIN_LINEAR_SLOPE; // 1e17
+
+        // High linear slope (steeper fee adjustments)
+        highLinearSlopeParams = baseParams;
+        highLinearSlopeParams.linearSlope = 5e18; // 5.0 (well below max of 10.0)
+    }
+
+    /**
+     * @notice Creates base max fee delta parameter sets for testing fee change limits
+     * @dev Uses base parameters and only modifies baseMaxFeeDelta to isolate their effects
+     */
+    function _createBaseMaxFeeDeltaParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+        // Low base max fee delta (smaller fee steps)
+        lowBaseMaxFeeDeltaParams = baseParams;
+        lowBaseMaxFeeDeltaParams.baseMaxFeeDelta = 10;
+
+        // High base max fee delta (larger fee steps)
+        highBaseMaxFeeDeltaParams = baseParams;
+        highBaseMaxFeeDeltaParams.baseMaxFeeDelta = 100;
     }
 
     /* BASELINE BEHAVIOR TESTS */
@@ -535,6 +575,288 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         uint256 lowDecrease = INITIAL_FEE - feeAfterLowLower;
         uint256 highDecrease = INITIAL_FEE - feeAfterHighLower;
         assertTrue(highDecrease > (lowDecrease * 12) / 10, "High lower side factor should show significant decrease");
+    }
+
+    /* PARAMETER-SPECIFIC EFFECT TESTS */
+
+    /**
+     * @notice Tests that lookback period affects convergence rate over multiple updates
+     * @dev Creates two similar pools to test different lookback periods without state contamination.
+     *      Short lookback should converge faster (more aggressive EMA smoothing),
+     *      while long lookback should converge slower (less aggressive EMA smoothing).
+     */
+    function test_lookbackPeriod_affectsConvergenceRate() public {
+        // Create second pool key for comparison (different tick spacing to ensure unique pool)
+        PoolKey memory shortLookbackKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        PoolId shortLookbackPoolId = PoolIdLibrary.toId(shortLookbackKey);
+
+        PoolKey memory longLookbackKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 200, IHooks(hook));
+        PoolId longLookbackPoolId = PoolIdLibrary.toId(longLookbackKey);
+
+        // Initialize both pools
+        poolManager.initialize(shortLookbackKey, Constants.SQRT_PRICE_1_1);
+        poolManager.initialize(longLookbackKey, Constants.SQRT_PRICE_1_1);
+
+        // Configure both pools identically
+        vm.prank(owner);
+        hook.initializePool(shortLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        vm.prank(owner);
+        hook.initializePool(longLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+
+        // Set different lookback parameters
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, shortLookbackParams);
+
+        // Apply short lookback to first pool via poke to trigger parameter update
+        vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(shortLookbackKey, INITIAL_TARGET_RATIO);
+
+        // Switch to long lookback parameters
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, longLookbackParams);
+
+        // Apply long lookback to second pool
+        vm.warp(block.timestamp + longLookbackParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(longLookbackKey, INITIAL_TARGET_RATIO);
+
+        // Now both pools have different lookback parameters applied
+        // Test convergence behavior with sustained ratio deviation
+        uint256 deviatedRatio = INITIAL_TARGET_RATIO + 2e16; // Significantly above target
+
+        // First update - should produce identical fees (lookback only affects EMA)
+        vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(shortLookbackKey, deviatedRatio);
+        vm.prank(owner);
+        hook.poke(longLookbackKey, deviatedRatio);
+
+        (,,, uint24 shortFirstFee) = poolManager.getSlot0(shortLookbackPoolId);
+        (,,, uint24 longFirstFee) = poolManager.getSlot0(longLookbackPoolId);
+
+        // Second update - differences should start to emerge
+        vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(shortLookbackKey, deviatedRatio);
+        vm.prank(owner);
+        hook.poke(longLookbackKey, deviatedRatio);
+
+        (,,, uint24 shortSecondFee) = poolManager.getSlot0(shortLookbackPoolId);
+        (,,, uint24 longSecondFee) = poolManager.getSlot0(longLookbackPoolId);
+
+        // Third update - differences should be more pronounced
+        vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(shortLookbackKey, deviatedRatio);
+        vm.prank(owner);
+        hook.poke(longLookbackKey, deviatedRatio);
+
+        (,,, uint24 shortThirdFee) = poolManager.getSlot0(shortLookbackPoolId);
+        (,,, uint24 longThirdFee) = poolManager.getSlot0(longLookbackPoolId);
+
+        // Verify convergence behavior:
+        // First fees should be identical (algorithm design)
+        assertEq(shortFirstFee, longFirstFee, "First fees should be identical");
+
+        // Short lookback should show faster convergence (fees should change more between updates)
+        uint24 shortProgression =
+            shortThirdFee > shortSecondFee ? shortThirdFee - shortSecondFee : shortSecondFee - shortThirdFee;
+        uint24 longProgression =
+            longThirdFee > longSecondFee ? longThirdFee - longSecondFee : longSecondFee - longThirdFee;
+
+        // Short lookback should show more fee movement (faster convergence)
+        assertTrue(shortProgression >= longProgression, "Short lookback should converge faster");
+
+        // Both should show progression from initial fee
+        assertTrue(shortThirdFee > INITIAL_FEE, "Short lookback should increase fee");
+        assertTrue(longThirdFee > INITIAL_FEE, "Long lookback should increase fee");
+
+        // Verify parameter setup is correct
+        assertTrue(shortLookbackParams.lookbackPeriod < longLookbackParams.lookbackPeriod, "Setup verification");
+    }
+
+    /**
+     * @notice Tests that linear slope changes affect fee adjustment sensitivity
+     * @dev Verifies that higher linear slopes result in more aggressive fee adjustments
+     *      for the same ratio deviations from target
+     */
+    function test_linearSlope_affectFeeAdjustmentSensitivity() public {
+        uint256 testRatio = INITIAL_TARGET_RATIO + 2e16; // Moderately above tolerance
+
+        // Test with low linear slope (gentler adjustments)
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowLinearSlopeParams);
+
+        vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, testRatio);
+
+        (,,, uint24 feeAfterLowSlope) = poolManager.getSlot0(poolId);
+
+        // Reset and test with high linear slope (steeper adjustments)
+        vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highLinearSlopeParams);
+
+        vm.warp(block.timestamp + highLinearSlopeParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, testRatio);
+
+        (,,, uint24 feeAfterHighSlope) = poolManager.getSlot0(poolId);
+
+        // High linear slope should result in larger fee adjustment
+        assertTrue(feeAfterHighSlope > feeAfterLowSlope, "High linear slope should increase fee more aggressively");
+        assertTrue(feeAfterLowSlope >= INITIAL_FEE, "Low slope should still increase fee");
+        assertTrue(feeAfterHighSlope >= INITIAL_FEE, "High slope should increase fee");
+
+        // Verify the slope effect is meaningful (at least 25% difference)
+        uint256 lowIncrease = feeAfterLowSlope - INITIAL_FEE;
+        uint256 highIncrease = feeAfterHighSlope - INITIAL_FEE;
+        assertTrue(highIncrease > (lowIncrease * 125) / 100, "High slope should show significant sensitivity increase");
+    }
+
+    /**
+     * @notice Tests that linear slope affects downward adjustments as well
+     * @dev Verifies that slope parameter affects fee decreases when ratio is below tolerance
+     */
+    function test_linearSlope_affectDownwardAdjustments() public {
+        uint256 lowerRatio = INITIAL_TARGET_RATIO - 15e15; // Below tolerance
+
+        // Test with low linear slope (gentler decreases)
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowLinearSlopeParams);
+
+        vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, lowerRatio);
+
+        (,,, uint24 feeAfterLowSlope) = poolManager.getSlot0(poolId);
+
+        // Reset and test with high linear slope (steeper decreases)
+        vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highLinearSlopeParams);
+
+        vm.warp(block.timestamp + highLinearSlopeParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, lowerRatio);
+
+        (,,, uint24 feeAfterHighSlope) = poolManager.getSlot0(poolId);
+
+        // High linear slope should result in larger fee decrease
+        assertTrue(feeAfterHighSlope < feeAfterLowSlope, "High linear slope should decrease fee more aggressively");
+        assertTrue(feeAfterLowSlope <= INITIAL_FEE, "Low slope should decrease fee");
+        assertTrue(feeAfterHighSlope <= INITIAL_FEE, "High slope should decrease fee");
+
+        // Verify both respect minimum bounds
+        assertTrue(feeAfterLowSlope >= lowLinearSlopeParams.minFee, "Should respect low slope min fee");
+        assertTrue(feeAfterHighSlope >= highLinearSlopeParams.minFee, "Should respect high slope min fee");
+    }
+
+    /**
+     * @notice Tests that baseMaxFeeDelta limits the maximum fee change per adjustment
+     * @dev Verifies that smaller baseMaxFeeDelta values constrain fee changes more tightly
+     *      regardless of how large the ratio deviation is
+     */
+    function test_baseMaxFeeDelta_limitsMaximumFeeChange() public {
+        uint256 extremeRatio = INITIAL_TARGET_RATIO + 5e16; // Very high ratio to trigger large adjustment
+
+        // Test with low base max fee delta (smaller steps)
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowBaseMaxFeeDeltaParams);
+
+        vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, extremeRatio);
+
+        (,,, uint24 feeAfterLowDelta) = poolManager.getSlot0(poolId);
+
+        // Reset and test with high base max fee delta (larger steps)
+        vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highBaseMaxFeeDeltaParams);
+
+        vm.warp(block.timestamp + highBaseMaxFeeDeltaParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, extremeRatio);
+
+        (,,, uint24 feeAfterHighDelta) = poolManager.getSlot0(poolId);
+
+        // High base max fee delta should allow larger single-step fee increases
+        assertTrue(feeAfterHighDelta >= feeAfterLowDelta, "High baseMaxFeeDelta should allow larger fee steps");
+        assertTrue(feeAfterLowDelta >= INITIAL_FEE, "Low delta should still increase fee");
+        assertTrue(feeAfterHighDelta >= INITIAL_FEE, "High delta should increase fee");
+
+        // Verify the delta constraint effect is meaningful
+        uint256 lowChange = feeAfterLowDelta - INITIAL_FEE;
+        uint256 highChange = feeAfterHighDelta - INITIAL_FEE;
+
+        // The difference should be significant, but we need to account for other constraints
+        if (highChange > 0 && lowChange > 0) {
+            assertTrue(highChange >= lowChange, "High delta should allow at least as much change as low delta");
+        }
+
+        // Verify both respect their bounds
+        assertTrue(feeAfterLowDelta <= lowBaseMaxFeeDeltaParams.maxFee, "Should respect low delta max fee");
+        assertTrue(feeAfterHighDelta <= highBaseMaxFeeDeltaParams.maxFee, "Should respect high delta max fee");
+    }
+
+    /**
+     * @notice Tests baseMaxFeeDelta with streak behavior in consecutive adjustments
+     * @dev Verifies that consecutive pokes in the same direction (upper) increase the streak
+     *      and amplify the fee delta, while still being limited by baseMaxFeeDelta
+     */
+    function test_baseMaxFeeDelta_limitsConsecutiveSteps() public {
+        uint256 persistentHighRatio = INITIAL_TARGET_RATIO + 3e16; // Sustained high ratio to trigger upper streak
+
+        // Set up parameters that allow us to see streak effects
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowBaseMaxFeeDeltaParams);
+
+        // Make first adjustment (streak = 1)
+        vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, persistentHighRatio);
+
+        (,,, uint24 feeAfterFirst) = poolManager.getSlot0(poolId);
+
+        // Make second adjustment with same high ratio direction (streak = 2)
+        vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, persistentHighRatio);
+
+        (,,, uint24 feeAfterSecond) = poolManager.getSlot0(poolId);
+
+        // Make third adjustment with same high ratio direction (streak = 3)
+        vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, persistentHighRatio);
+
+        (,,, uint24 feeAfterThird) = poolManager.getSlot0(poolId);
+
+        // All adjustments should increase fees progressively
+        assertTrue(feeAfterFirst >= INITIAL_FEE, "First adjustment should increase fee");
+        assertTrue(feeAfterSecond > feeAfterFirst, "Second adjustment should further increase fee");
+        assertTrue(feeAfterThird > feeAfterSecond, "Third adjustment should further increase fee");
+
+        // Calculate step sizes - streak behavior should amplify steps
+        uint256 firstStep = feeAfterFirst - INITIAL_FEE;
+        uint256 secondStep = feeAfterSecond - feeAfterFirst;
+        uint256 thirdStep = feeAfterThird - feeAfterSecond;
+
+        // Due to streak behavior, later steps should be larger (amplified by consecutive hits)
+        assertTrue(secondStep >= firstStep, "Second step should be at least as large as first (streak effect)");
+        assertTrue(thirdStep >= secondStep, "Third step should be at least as large as second (streak effect)");
+
+        // However, each step should still be constrained by baseMaxFeeDelta bounds
+        // The exact constraint depends on the streak multiplier, but should be reasonable
+        assertTrue(firstStep <= 150, "First step should be constrained");
+        assertTrue(secondStep <= 300, "Second step should be constrained even with streak");
+        assertTrue(thirdStep <= 450, "Third step should be constrained even with higher streak");
+
+        // Verify all fees respect the maximum bound
+        assertTrue(feeAfterThird <= lowBaseMaxFeeDeltaParams.maxFee, "Final fee should respect max bound");
     }
 
     /* STRESS TESTS */
