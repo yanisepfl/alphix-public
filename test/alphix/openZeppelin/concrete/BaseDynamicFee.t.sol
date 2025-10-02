@@ -16,9 +16,9 @@ import {Constants} from "v4-core/test/utils/Constants.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* LOCAL IMPORTS */
-import {BaseDynamicFee} from "../../../src/BaseDynamicFee.sol";
-import {DynamicFeeLib} from "../../../src/libraries/DynamicFee.sol";
-import {BaseAlphixTest} from "../BaseAlphix.t.sol";
+import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
+import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
+import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 
 /**
  * @title TestBaseDynamicFee
@@ -94,7 +94,9 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         // Deploy test hook at a valid hook address
         address hookAddress = _computeTestHookAddress();
         deployCodeTo(
-            "test/alphix/openZeppelin/BaseDynamicFee.t.sol:TestBaseDynamicFee", abi.encode(poolManager), hookAddress
+            "test/alphix/openZeppelin/concrete/BaseDynamicFee.t.sol:TestBaseDynamicFee",
+            abi.encode(poolManager),
+            hookAddress
         );
         testHook = TestBaseDynamicFee(hookAddress);
 
