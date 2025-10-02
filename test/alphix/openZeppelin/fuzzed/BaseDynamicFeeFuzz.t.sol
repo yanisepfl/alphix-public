@@ -88,7 +88,6 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
 
     TestBaseDynamicFeeFuzz public testHook;
     PoolKey public dynamicFeeKey;
-    PoolKey public staticFeeKey;
 
     /* FUZZING CONSTRAINTS */
 
@@ -119,9 +118,8 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         );
         testHook = TestBaseDynamicFeeFuzz(hookAddress);
 
-        // Create pool keys
+        // Create dynamic fee pool key
         dynamicFeeKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(testHook));
-        staticFeeKey = PoolKey(currency0, currency1, 3000, 60, IHooks(testHook));
     }
 
     /* ========================================================================== */
@@ -172,6 +170,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
     function testFuzz_afterInitialize_success_withDynamicFee(uint160 sqrtPriceX96) public {
         // Bound to valid sqrt price range
         sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE));
+
+        // Ensure we're actually in valid range (bound can produce edge case issues)
+        vm.assume(sqrtPriceX96 >= TickMath.MIN_SQRT_PRICE && sqrtPriceX96 <= TickMath.MAX_SQRT_PRICE);
 
         // Initialize the pool first
         poolManager.initialize(dynamicFeeKey, sqrtPriceX96);

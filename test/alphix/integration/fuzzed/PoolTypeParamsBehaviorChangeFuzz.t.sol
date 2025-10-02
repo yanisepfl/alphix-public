@@ -135,12 +135,12 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint24 baseMaxFeeDelta,
         uint256 ratioDeviation
     ) public {
-        // Bound parameters to meaningful ranges
-        initialFee = uint24(bound(initialFee, 500, 3000)); // reasonable starting fees
-        ratioTolerance = bound(ratioTolerance, 1e15, 1e17); // 0.1% to 10%
-        linearSlope = bound(linearSlope, 1e18, 5e18); // 1x to 5x sensitivity
-        baseMaxFeeDelta = uint24(bound(baseMaxFeeDelta, 10, 200)); // reasonable deltas
-        ratioDeviation = bound(ratioDeviation, 1e15, 5e16); // 0.1% to 5% deviation
+        // Bound parameters to valid ranges using protocol constants
+        initialFee = uint24(bound(initialFee, 500, 3000));
+        ratioTolerance = bound(ratioTolerance, MIN_RATIO_TOLERANCE_FUZZ, MAX_RATIO_TOLERANCE_FUZZ);
+        linearSlope = bound(linearSlope, MIN_LINEAR_SLOPE_FUZZ, MAX_LINEAR_SLOPE_FUZZ);
+        baseMaxFeeDelta = uint24(bound(baseMaxFeeDelta, MIN_BASE_MAX_FEE_DELTA_FUZZ, MAX_BASE_MAX_FEE_DELTA_FUZZ));
+        ratioDeviation = bound(ratioDeviation, MIN_RATIO_DEVIATION_FUZZ, MAX_RATIO_DEVIATION_FUZZ);
 
         // Create parameters for baseline testing
         DynamicFeeLib.PoolTypeParams memory baselineParams = DynamicFeeLib.PoolTypeParams({
@@ -151,7 +151,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: ratioTolerance,
             linearSlope: linearSlope,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 2e18,
             lowerSideFactor: 2e18
         });
@@ -242,7 +242,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: ratioTolerance,
             linearSlope: 2e18, // standard sensitivity
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 2e18,
             lowerSideFactor: 2e18
         });
@@ -282,9 +282,8 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         (,,, uint24 feeUpperInBand) = poolManager.getSlot0(testKey.toId());
 
         // Test slightly below target but within tolerance
-        uint256 lowerInBandRatio = INITIAL_TARGET_RATIO > inBandOffset
-            ? INITIAL_TARGET_RATIO - (INITIAL_TARGET_RATIO * inBandOffset / 1e18)
-            : INITIAL_TARGET_RATIO / 2;
+        // INITIAL_TARGET_RATIO (1e18) is always > inBandOffset (max ratioTolerance/3), so simplify
+        uint256 lowerInBandRatio = INITIAL_TARGET_RATIO - (INITIAL_TARGET_RATIO * inBandOffset / 1e18);
         vm.warp(block.timestamp + inBandParams.minPeriod + 1);
         vm.prank(owner);
         hook.poke(testKey, lowerInBandRatio);
@@ -338,7 +337,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: 5e15,
             linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 1e18,
             lowerSideFactor: 2e18
         });
@@ -350,26 +349,41 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 testRatio =
             _getAboveToleranceRatio(INITIAL_TARGET_RATIO, restrictiveParams.ratioTolerance) + ratioDeviation;
 
-        // Test with permissive parameters first
+        // Create two separate pools for clean comparison
+        (Currency c0_perm, Currency c1_perm) = deployCurrencyPairWithDecimals(18, 18);
+        (Currency c0_rest, Currency c1_rest) = deployCurrencyPairWithDecimals(18, 18);
+
+        PoolKey memory permissiveKey = PoolKey(c0_perm, c1_perm, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        PoolKey memory restrictiveKey = PoolKey(c0_rest, c1_rest, LPFeeLibrary.DYNAMIC_FEE_FLAG, 80, IHooks(hook));
+
+        // Initialize both pools
+        poolManager.initialize(permissiveKey, Constants.SQRT_PRICE_1_1);
+        poolManager.initialize(restrictiveKey, Constants.SQRT_PRICE_1_1);
+
+        vm.prank(owner);
+        hook.initializePool(permissiveKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        vm.prank(owner);
+        hook.initializePool(restrictiveKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+
+        // Test with permissive parameters
         vm.prank(owner);
         hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
 
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(permissiveKey, testRatio);
 
-        (,,, uint24 feeAfterPermissive) = poolManager.getSlot0(poolId);
+        (,,, uint24 feeAfterPermissive) = poolManager.getSlot0(permissiveKey.toId());
 
-        // Reset and test with restrictive parameters
-        vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
+        // Test with restrictive parameters on separate pool
         vm.prank(owner);
         hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
 
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(restrictiveKey, testRatio);
 
-        (,,, uint24 feeAfterRestrictive) = poolManager.getSlot0(poolId);
+        (,,, uint24 feeAfterRestrictive) = poolManager.getSlot0(restrictiveKey.toId());
 
         // Verify fee bounds - algorithm may exceed maxFee with consecutive OOB hits
         assertTrue(feeAfterPermissive <= permissiveMaxFee, "Should not exceed permissive max fee");
@@ -380,11 +394,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             emit log_named_uint("Restrictive maxFee bound", restrictiveMaxFee);
         }
 
-        // Only assert the restrictive relationship if parameters are valid
-        if (restrictiveMaxFee < permissiveMaxFee) {
-            // When restrictive max is actually more restrictive, it should constrain fees more
-            // But the relationship can be complex due to algorithm convergence behavior
-            assertTrue(restrictiveMaxFee <= permissiveMaxFee, "Test parameter relationship should be valid");
+        // Verify directional behavior: restrictive settings should produce smaller/equal fees when not hitting bounds
+        // Both pools started from same initial conditions, so this comparison is valid
+        if (feeAfterRestrictive < restrictiveMaxFee && feeAfterPermissive < permissiveMaxFee) {
+            // Neither hit bounds, so restrictive should have constrained fee more
+            assertTrue(
+                feeAfterRestrictive <= feeAfterPermissive,
+                "Restrictive maxFee should result in lower or equal fee when bounds not hit"
+            );
         }
     }
 
@@ -417,7 +434,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: 5e15,
             linearSlope: linearSlope,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 3e18,
             lowerSideFactor: 2e18
         });
@@ -663,7 +680,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: 5e15,
             linearSlope: linearSlope,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 2e18,
             lowerSideFactor: 2e18
         });
@@ -740,7 +757,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: minPeriod,
             ratioTolerance: ratioTolerance,
             linearSlope: linearSlope,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 1e18,
             lowerSideFactor: 1e18
         });
@@ -968,7 +985,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: ratioTolerance,
             linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: testData.upperSideFactor1,
             lowerSideFactor: testData.lowerSideFactor1
         });
@@ -981,7 +998,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: ratioTolerance,
             linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: testData.upperSideFactor2,
             lowerSideFactor: testData.lowerSideFactor2
         });
@@ -1221,7 +1238,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: 5e15,
             linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 2e18,
             lowerSideFactor: 2e18
         });
@@ -1271,12 +1288,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      * @return upperBound The upper bound: targetRatio + targetRatio * ratioTolerance / 1e18
      */
     function _getUpperToleranceBound(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
-        // Use safe math to prevent overflow - check if multiplication would overflow
+        // Simple calculation: no overflow possible with WAD-scale inputs
         if (ratioTolerance == 0) return targetRatio;
-        if (targetRatio > type(uint256).max / ratioTolerance) {
-            return targetRatio * 2; // Return double target ratio as safe upper bound
+        uint256 delta = (targetRatio * ratioTolerance) / 1e18;
+        // Clamp to prevent exceeding max current ratio
+        if (targetRatio > MAX_CURRENT_RATIO_FUZZ - delta) {
+            return MAX_CURRENT_RATIO_FUZZ;
         }
-        return targetRatio + (targetRatio * ratioTolerance / 1e18);
+        return targetRatio + delta;
     }
 
     /**
@@ -1286,16 +1305,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      * @return lowerBound The lower bound: targetRatio - targetRatio * ratioTolerance / 1e18
      */
     function _getLowerToleranceBound(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
-        // Use safe math to prevent overflow - check if multiplication would overflow
+        // Simple calculation: no overflow possible with WAD-scale inputs
         if (ratioTolerance == 0) return targetRatio;
-        if (targetRatio > type(uint256).max / ratioTolerance) {
-            return targetRatio / 2; // Return half target ratio as safe lower bound
+        uint256 delta = (targetRatio * ratioTolerance) / 1e18;
+        // Clamp to zero if delta exceeds target (high tolerance case)
+        if (delta >= targetRatio) {
+            return 0;
         }
-        uint256 adjustment = (targetRatio * ratioTolerance) / 1e18;
-        if (adjustment >= targetRatio) {
-            return targetRatio / 10; // Return 10% of target ratio as minimum safe bound
-        }
-        return targetRatio - adjustment;
+        return targetRatio - delta;
     }
 
     /**
@@ -1320,8 +1337,12 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         // Subtract 0.1% relative to target ratio (1e15 * targetRatio / 1e18)
         uint256 additionalMargin = (1e15 * targetRatio) / 1e18;
         uint256 lowerBound = _getLowerToleranceBound(targetRatio, ratioTolerance);
-        if (additionalMargin >= lowerBound) {
-            return lowerBound / 2; // Return half the lower bound as safe minimum
+
+        // Ensure we return a non-zero value
+        if (lowerBound == 0 || additionalMargin >= lowerBound) {
+            // For high tolerance cases, return a safe minimum (0.1% of target)
+            uint256 safeMin = (targetRatio * 1e15) / 1e18;
+            return safeMin > 0 ? safeMin : 1e15; // Absolute minimum 1e15
         }
         return lowerBound - additionalMargin;
     }
@@ -1444,7 +1465,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: ratioTolerance,
             linearSlope: linearSlope,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 2e18,
             lowerSideFactor: 2e18
         });
@@ -1470,7 +1491,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: ratioTolerance,
             linearSlope: linearSlope,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 2e18,
             lowerSideFactor: 2e18
         });
@@ -1496,7 +1517,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             minPeriod: 1 days,
             ratioTolerance: ratioTolerance,
             linearSlope: linearSlope,
-            maxCurrentRatio: 1e21,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
             upperSideFactor: 2e18,
             lowerSideFactor: 2e18
         });

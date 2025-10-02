@@ -648,17 +648,18 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
      * @return params Valid PoolTypeParams struct
      */
     function _createValidParams() internal pure returns (DynamicFeeLib.PoolTypeParams memory) {
+        // Use declared fuzz bounds to prevent drift when constants change
         return DynamicFeeLib.PoolTypeParams({
-            minFee: 100,
-            maxFee: 5000,
-            baseMaxFeeDelta: 50,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: 1e21,
-            upperSideFactor: 2e18,
-            lowerSideFactor: 2e18
+            minFee: MIN_FEE_FUZZ,
+            maxFee: MAX_FEE_FUZZ / 2, // Mid-range value
+            baseMaxFeeDelta: (MIN_BASE_MAX_FEE_DELTA_FUZZ + MAX_BASE_MAX_FEE_DELTA_FUZZ) / 2,
+            lookbackPeriod: MIN_LOOKBACK_FUZZ,
+            minPeriod: MIN_PERIOD_FUZZ,
+            ratioTolerance: MIN_RATIO_TOLERANCE_FUZZ * 5, // 5x minimum for safety
+            linearSlope: MIN_LINEAR_SLOPE_FUZZ,
+            maxCurrentRatio: MAX_MAX_CURRENT_RATIO_FUZZ,
+            upperSideFactor: MIN_SIDE_FACTOR_FUZZ,
+            lowerSideFactor: MIN_SIDE_FACTOR_FUZZ
         });
     }
 }
