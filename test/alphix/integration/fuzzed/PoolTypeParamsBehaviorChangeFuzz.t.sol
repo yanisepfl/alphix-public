@@ -940,9 +940,13 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         hook.initializePool(testData.key2, 500, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
 
         // Set test ratio
-        testData.testRatio = testData.testUpperSide
-            ? _getAboveToleranceRatio(INITIAL_TARGET_RATIO, ratioTolerance) + 1e16 // above tolerance (upper side)
-            : _getBelowToleranceRatio(INITIAL_TARGET_RATIO, ratioTolerance) - 1e16; // below tolerance (lower side)
+        if (testData.testUpperSide) {
+            testData.testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, ratioTolerance) + 1e16; // above tolerance (upper side)
+        } else {
+            uint256 belowRatio = _getBelowToleranceRatio(INITIAL_TARGET_RATIO, ratioTolerance);
+            // Ensure we don't underflow when subtracting 1e16
+            testData.testRatio = belowRatio > 1e16 ? belowRatio - 1e16 : belowRatio / 2; // below tolerance (lower side)
+        }
     }
 
     /**

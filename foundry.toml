@@ -8,6 +8,9 @@ solc_version = "0.8.30"
 src = "src"
 via_ir = false
 
+[fuzz]
+runs = 512
+
 [profile.lint]
 exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]
 
