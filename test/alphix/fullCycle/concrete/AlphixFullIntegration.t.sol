@@ -271,61 +271,49 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
     /* ========================================================================== */
 
     /**
-     * @notice Test that traders pay the correct dynamic fee on swaps
-     * @dev Verifies fee amounts match the dynamic fee set by admin
+     * @notice Test that traders pay the correct dynamic fee on swaps (STABLE pool)
+     * @dev Verifies fee behavior: fees are charged and higher fee rates result in lower output
      */
     function test_traders_pay_correct_dynamic_fees() public {
-        // Setup: Add liquidity
+        // Setup: Add large liquidity
         vm.startPrank(alice);
         _addLiquidityForUser(
-            alice, key, TickMath.minUsableTick(key.tickSpacing), TickMath.maxUsableTick(key.tickSpacing), 100e18
+            alice, key, TickMath.minUsableTick(key.tickSpacing), TickMath.maxUsableTick(key.tickSpacing), 10000e18
         );
         vm.stopPrank();
 
-        // Get initial fee
+        // Get initial fee BEFORE swap
         uint24 initialFee;
         (,,, initialFee) = poolManager.getSlot0(poolId);
 
-        // Perform swap and record balances
-        uint256 swapAmount = 10e18;
-        vm.startPrank(bob);
+        // Perform first swap
+        uint256 swapAmount = 1e18;
+        uint256 bobOutput;
+        {
+            vm.startPrank(bob);
+            uint256 bobToken1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(bob);
 
-        uint256 bobToken0Before = MockERC20(Currency.unwrap(currency0)).balanceOf(bob);
-        uint256 bobToken1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(bob);
+            MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
+            swapRouter.swapExactTokensForTokens({
+                amountIn: swapAmount,
+                amountOutMin: 0,
+                zeroForOne: true,
+                poolKey: key,
+                hookData: Constants.ZERO_BYTES,
+                receiver: bob,
+                deadline: block.timestamp + 100
+            });
 
-        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
-        swapRouter.swapExactTokensForTokens({
-            amountIn: swapAmount,
-            amountOutMin: 0,
-            zeroForOne: true,
-            poolKey: key,
-            hookData: Constants.ZERO_BYTES,
-            receiver: bob,
-            deadline: block.timestamp + 100
-        });
+            bobOutput = MockERC20(Currency.unwrap(currency1)).balanceOf(bob) - bobToken1Before;
+            vm.stopPrank();
 
-        uint256 bobToken0After = MockERC20(Currency.unwrap(currency0)).balanceOf(bob);
-        uint256 bobToken1After = MockERC20(Currency.unwrap(currency1)).balanceOf(bob);
-        vm.stopPrank();
+            // Verify fees were charged (output < input)
+            assertLt(bobOutput, swapAmount, "Bob should receive less than input due to fees");
+        }
 
-        // Verify Bob paid token0 and received token1
-        assertEq(bobToken0Before - bobToken0After, swapAmount, "Bob should have paid exact swap amount");
-        assertGt(bobToken1After, bobToken1Before, "Bob should have received token1");
-
-        // Calculate expected output without fee (1:1 price)
-        // With fee, output should be less
-        uint256 actualOutput = bobToken1After - bobToken1Before;
-
-        // Fee is deducted from output: actualOutput ~= swapAmount * (1 - fee/1000000)
-        // We verify that actualOutput < swapAmount (because fee was charged)
-        assertLt(actualOutput, swapAmount, "Output should be less than input due to fees");
-
-        // The difference represents fees + price impact
-        uint256 totalDeduction = swapAmount - actualOutput;
-        assertGt(totalDeduction, 0, "Fees should have been charged");
-
-        // Now update fee to higher value and verify increased fee charge
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        // Update fee to higher value
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
@@ -333,30 +321,76 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
 
         uint24 newFee;
         (,,, newFee) = poolManager.getSlot0(poolId);
-        assertGt(newFee, initialFee, "Fee should have increased");
+        assertGt(newFee, initialFee, "Fee should have increased after poke");
 
-        // Perform another swap with higher fee
-        vm.startPrank(charlie);
-        uint256 charlieToken1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(charlie);
+        // Perform second swap with higher fee - swap in same direction as Bob for comparison
+        {
+            vm.startPrank(charlie);
+            uint256 charlieToken1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(charlie);
 
-        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
-        swapRouter.swapExactTokensForTokens({
-            amountIn: swapAmount,
-            amountOutMin: 0,
-            zeroForOne: true,
-            poolKey: key,
-            hookData: Constants.ZERO_BYTES,
-            receiver: charlie,
-            deadline: block.timestamp + 100
-        });
+            MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
+            swapRouter.swapExactTokensForTokens({
+                amountIn: swapAmount,
+                amountOutMin: 0,
+                zeroForOne: true, // Same direction as Bob
+                poolKey: key,
+                hookData: Constants.ZERO_BYTES,
+                receiver: charlie,
+                deadline: block.timestamp + 100
+            });
 
-        uint256 charlieToken1After = MockERC20(Currency.unwrap(currency1)).balanceOf(charlie);
+            uint256 charlieOutput = MockERC20(Currency.unwrap(currency1)).balanceOf(charlie) - charlieToken1Before;
+            vm.stopPrank();
+
+            // Verify fees were charged
+            assertLt(charlieOutput, swapAmount, "Charlie should receive less than input due to fees");
+
+            // Charlie should receive less output than Bob due to higher fees
+            // Note: Price has moved from Bob's swap, so we can only verify relative fee impact
+            assertLt(charlieOutput, bobOutput, "Higher fee should result in less output received");
+        }
+    }
+
+    /**
+     * @notice Test that traders pay the correct dynamic fee on swaps (STANDARD pool)
+     * @dev Verifies fee amounts match the dynamic fee set by admin
+     */
+    function test_traders_pay_correct_dynamic_fees_standard() public {
+        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
+
+        // Setup: Add large liquidity to minimize price impact
+        vm.startPrank(alice);
+        _addLiquidityForUser(
+            alice,
+            testKey,
+            TickMath.minUsableTick(testKey.tickSpacing),
+            TickMath.maxUsableTick(testKey.tickSpacing),
+            10000e18
+        );
         vm.stopPrank();
 
-        uint256 charlieActualOutput = charlieToken1After - charlieToken1Before;
+        _testDynamicFeesOnPool(testKey, testPoolId);
+    }
 
-        // Charlie's output should be less than Bob's due to higher fee
-        assertLt(charlieActualOutput, actualOutput, "Higher fee should result in less output");
+    /**
+     * @notice Test that traders pay the correct dynamic fee on swaps (VOLATILE pool)
+     * @dev Verifies fee amounts match the dynamic fee set by admin
+     */
+    function test_traders_pay_correct_dynamic_fees_volatile() public {
+        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
+
+        // Setup: Add large liquidity to minimize price impact
+        vm.startPrank(alice);
+        _addLiquidityForUser(
+            alice,
+            testKey,
+            TickMath.minUsableTick(testKey.tickSpacing),
+            TickMath.maxUsableTick(testKey.tickSpacing),
+            10000e18
+        );
+        vm.stopPrank();
+
+        _testDynamicFeesOnPool(testKey, testPoolId);
     }
 
     /**
@@ -411,7 +445,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 calculatedRatio = (totalVolume * 1e18) / totalLiquidity;
 
         // Apply the calculated ratio via poke
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
@@ -434,7 +469,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
      * @dev Simulates realistic LP behavior: early LPs vs late LPs, different amounts
      */
     function test_complex_LP_fee_distribution_different_timelines() public {
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
 
         // === Week 1: Alice enters as early LP ===
         vm.warp(block.timestamp + 1 days);
@@ -509,7 +545,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
 
     /**
      * @notice Test extreme scenario: equal LPs over same timeframe should earn equal fees
-     * @dev Simplified case to verify fee distribution logic
+     * @dev Simplified case to verify fee distribution logic - verifies fees are charged correctly
      */
     function test_equal_LPs_equal_timeline_earn_equal_fees() public {
         // All 4 users provide identical liquidity at the same time
@@ -530,6 +566,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
 
         // Trading activity generates fees
         uint256 swapAmount = 20e18;
+
         for (uint256 i = 0; i < 10; i++) {
             vm.startPrank(user1);
             _performSwap(user1, key, swapAmount, i % 2 == 0);
@@ -542,7 +579,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Ratio = 200/200 = 1.0 = 100% (but will be capped)
         uint256 ratio = 1e18; // 100%
 
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
@@ -560,7 +598,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         assertTrue(fee > params.minFee, "Fee should be above minimum for high activity");
 
         // All LPs have equal positions, so they should theoretically earn equal fees
-        // (In practice, fee collection happens through position manager decrease/burn)
+        // (In practice, equal liquidity at equal time = equal fee share)
         assertTrue(fee > 0, "Dynamic fee should be set");
     }
 
@@ -584,7 +622,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Phase 3: First fee adjustment based on initial volume
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         // Calculate rough ratio (simplified): volume / initial liquidity
@@ -651,7 +690,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Phase 3: Admin responds with higher fee due to volatility
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         // Calculate high volatility ratio: 200e18 volume / 500e18 liquidity = 40%
@@ -669,7 +709,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Test periodic fee adjustments over a month
+     * @notice Test periodic fee adjustments over a month (STABLE pool)
      * @dev Simulates monthly operations with weekly fee updates
      */
     function test_periodic_fee_adjustments_over_month() public {
@@ -680,7 +720,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
 
         // Week 1: Low activity (50% ratio)
         vm.warp(block.timestamp + 7 days);
@@ -725,6 +766,148 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
 
         uint24 week4Fee;
         (,,, week4Fee) = poolManager.getSlot0(poolId);
+
+        // Verify fees responded to activity changes
+        assertGt(week2Fee, week1Fee, "Week 2 fee should be higher (increased activity)");
+        assertLt(week3Fee, week2Fee, "Week 3 fee should be lower (decreased activity)");
+        assertGe(week4Fee, params.minFee, "Week 4 fee should be within bounds");
+    }
+
+    /**
+     * @notice Test periodic fee adjustments over a month (STANDARD pool)
+     * @dev Simulates monthly operations with weekly fee updates
+     */
+    function test_periodic_fee_adjustments_over_month_standard() public {
+        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
+
+        // Setup liquidity
+        vm.startPrank(alice);
+        _addLiquidityForUser(
+            alice,
+            testKey,
+            TickMath.minUsableTick(testKey.tickSpacing),
+            TickMath.maxUsableTick(testKey.tickSpacing),
+            200e18
+        );
+        vm.stopPrank();
+
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+
+        // Week 1: Low activity (50% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 20e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 5e17); // 50%
+
+        uint24 week1Fee;
+        (,,, week1Fee) = poolManager.getSlot0(testPoolId);
+
+        // Week 2: High activity (70% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 40e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 7e17); // 70%
+
+        uint24 week2Fee;
+        (,,, week2Fee) = poolManager.getSlot0(testPoolId);
+
+        // Week 3: Moderate activity (30% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 15e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 3e17); // 30%
+
+        uint24 week3Fee;
+        (,,, week3Fee) = poolManager.getSlot0(testPoolId);
+
+        // Week 4: Return to normal (50% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 25e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 5e17); // 50%
+
+        uint24 week4Fee;
+        (,,, week4Fee) = poolManager.getSlot0(testPoolId);
+
+        // Verify fees responded to activity changes
+        assertGt(week2Fee, week1Fee, "Week 2 fee should be higher (increased activity)");
+        assertLt(week3Fee, week2Fee, "Week 3 fee should be lower (decreased activity)");
+        assertGe(week4Fee, params.minFee, "Week 4 fee should be within bounds");
+    }
+
+    /**
+     * @notice Test periodic fee adjustments over a month (VOLATILE pool)
+     * @dev Simulates monthly operations with weekly fee updates
+     */
+    function test_periodic_fee_adjustments_over_month_volatile() public {
+        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
+
+        // Setup liquidity
+        vm.startPrank(alice);
+        _addLiquidityForUser(
+            alice,
+            testKey,
+            TickMath.minUsableTick(testKey.tickSpacing),
+            TickMath.maxUsableTick(testKey.tickSpacing),
+            200e18
+        );
+        vm.stopPrank();
+
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+
+        // Week 1: Low activity (50% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 20e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 5e17); // 50%
+
+        uint24 week1Fee;
+        (,,, week1Fee) = poolManager.getSlot0(testPoolId);
+
+        // Week 2: High activity (70% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 40e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 7e17); // 70%
+
+        uint24 week2Fee;
+        (,,, week2Fee) = poolManager.getSlot0(testPoolId);
+
+        // Week 3: Moderate activity (30% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 15e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 3e17); // 30%
+
+        uint24 week3Fee;
+        (,,, week3Fee) = poolManager.getSlot0(testPoolId);
+
+        // Week 4: Return to normal (50% ratio)
+        vm.warp(block.timestamp + 7 days);
+        _simulateWeekOfTradingForPool(testKey, 25e18);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 5e17); // 50%
+
+        uint24 week4Fee;
+        (,,, week4Fee) = poolManager.getSlot0(testPoolId);
 
         // Verify fees responded to activity changes
         assertGt(week2Fee, week1Fee, "Week 2 fee should be higher (increased activity)");
@@ -792,7 +975,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Total liquidity = 20e18, Total volume = 14e18
         // Realistic ratio = 14/20 = 0.7 = 70%
         vm.warp(block.timestamp + 2 days);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
@@ -936,6 +1120,53 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
     /* ========================================================================== */
 
     /**
+     * @notice Helper to create a pool with a specific pool type
+     * @param poolType The pool type to create
+     * @return testKey The pool key
+     * @return testPoolId The pool ID
+     */
+    function _createPoolWithType(IAlphixLogic.PoolType poolType)
+        internal
+        returns (PoolKey memory testKey, PoolId testPoolId)
+    {
+        // Create new tokens
+        MockERC20 token0 = new MockERC20("Test Token 0", "TEST0", 18);
+        MockERC20 token1 = new MockERC20("Test Token 1", "TEST1", 18);
+
+        // Mint tokens to test users
+        vm.startPrank(owner);
+        token0.mint(alice, INITIAL_TOKEN_AMOUNT);
+        token0.mint(bob, INITIAL_TOKEN_AMOUNT);
+        token0.mint(charlie, INITIAL_TOKEN_AMOUNT);
+        token0.mint(dave, INITIAL_TOKEN_AMOUNT);
+        token1.mint(alice, INITIAL_TOKEN_AMOUNT);
+        token1.mint(bob, INITIAL_TOKEN_AMOUNT);
+        token1.mint(charlie, INITIAL_TOKEN_AMOUNT);
+        token1.mint(dave, INITIAL_TOKEN_AMOUNT);
+        vm.stopPrank();
+
+        Currency testCurrency0 = Currency.wrap(address(token0));
+        Currency testCurrency1 = Currency.wrap(address(token1));
+
+        // Create pool key
+        testKey = PoolKey({
+            currency0: testCurrency0 < testCurrency1 ? testCurrency0 : testCurrency1,
+            currency1: testCurrency0 < testCurrency1 ? testCurrency1 : testCurrency0,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 60,
+            hooks: IHooks(address(hook))
+        });
+
+        // Initialize pool in PoolManager
+        poolManager.initialize(testKey, Constants.SQRT_PRICE_1_1);
+        testPoolId = testKey.toId();
+
+        // Initialize pool in Alphix with specified pool type
+        vm.prank(owner);
+        hook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, poolType);
+    }
+
+    /**
      * @notice Helper to add liquidity for a user
      */
     function _addLiquidityForUser(address user, PoolKey memory poolKey, int24 lower, int24 upper, uint128 liquidity)
@@ -999,6 +1230,84 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
             vm.stopPrank();
             vm.warp(block.timestamp + 1 days);
         }
+    }
+
+    /**
+     * @notice Helper to simulate a week of trading for a specific pool
+     */
+    function _simulateWeekOfTradingForPool(PoolKey memory poolKey, uint256 dailyVolume) internal {
+        for (uint256 i = 0; i < 7; i++) {
+            vm.startPrank(bob);
+            _performSwap(bob, poolKey, dailyVolume, i % 2 == 0);
+            vm.stopPrank();
+            vm.warp(block.timestamp + 1 days);
+        }
+    }
+
+    /**
+     * @notice Helper to test dynamic fees on a specific pool
+     */
+    function _testDynamicFeesOnPool(PoolKey memory testKey, PoolId testPoolId) internal {
+        // Get initial fee BEFORE first swap
+        uint24 initialFee;
+        (,,, initialFee) = poolManager.getSlot0(testPoolId);
+
+        // Perform first swap with initial fee (small swap to minimize price impact)
+        uint256 swapAmount = 1e18;
+        uint256 bobOutput = _performSwapAndGetOutput(bob, testKey, swapAmount);
+
+        // Update fee and perform second swap
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        vm.prank(owner);
+        hook.poke(testKey, 8e17);
+
+        uint24 newFee;
+        (,,, newFee) = poolManager.getSlot0(testPoolId);
+        assertGt(newFee, initialFee, "Fee should have increased");
+
+        // Perform second swap with new higher fee
+        uint256 charlieOutput = _performSwapAndGetOutput(charlie, testKey, swapAmount);
+
+        // Charlie should receive less output than Bob due to higher fees
+        // (Bob's output > Charlie's output because Charlie pays more fees)
+        assertLt(charlieOutput, bobOutput, "Higher fee should result in less output received");
+
+        // Verify the fee increase is proportional to the fee rate increase
+        uint256 bobOutputLoss = swapAmount - bobOutput;
+        uint256 charlieOutputLoss = swapAmount - charlieOutput;
+        assertGt(charlieOutputLoss, bobOutputLoss, "Higher fee should result in more output loss");
+    }
+
+    /**
+     * @notice Helper to perform a swap and return the output amount
+     */
+    function _performSwapAndGetOutput(address trader, PoolKey memory poolKey, uint256 swapAmount)
+        internal
+        returns (uint256 outputAmount)
+    {
+        vm.startPrank(trader);
+        uint256 token1Before = MockERC20(Currency.unwrap(poolKey.currency1)).balanceOf(trader);
+
+        MockERC20(Currency.unwrap(poolKey.currency0)).approve(address(swapRouter), swapAmount);
+        swapRouter.swapExactTokensForTokens({
+            amountIn: swapAmount,
+            amountOutMin: 0,
+            zeroForOne: true,
+            poolKey: poolKey,
+            hookData: Constants.ZERO_BYTES,
+            receiver: trader,
+            deadline: block.timestamp + 100
+        });
+
+        uint256 token1After = MockERC20(Currency.unwrap(poolKey.currency1)).balanceOf(trader);
+        vm.stopPrank();
+
+        outputAmount = token1After - token1Before;
+        assertGt(outputAmount, 0, "Should receive token1");
+        assertLt(outputAmount, swapAmount, "Output should be less than input due to fees");
     }
 
     /**

@@ -437,6 +437,18 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
+     * @notice Bounds a raw uint8 to a valid PoolType enum for fuzzing
+     * @param raw Raw fuzzed value
+     * @return Bounded PoolType (STABLE, STANDARD, or VOLATILE)
+     */
+    function _boundPoolType(uint8 raw) internal pure returns (IAlphixLogic.PoolType) {
+        uint8 bounded = uint8(bound(raw, 0, 2));
+        if (bounded == 0) return IAlphixLogic.PoolType.STABLE;
+        if (bounded == 1) return IAlphixLogic.PoolType.STANDARD;
+        return IAlphixLogic.PoolType.VOLATILE;
+    }
+
+    /**
      * @notice Sets up AccessManager roles for the registry
      * @dev Grants registrar role to Hook and sets function-level permissions
      */
