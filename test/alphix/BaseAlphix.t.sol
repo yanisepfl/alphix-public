@@ -76,6 +76,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
     uint64 constant REGISTRAR_ROLE = 1;
+    uint64 constant POKER_ROLE = 2;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
@@ -254,7 +255,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
     {
         address hookAddr = _computeNextHookAddress();
         _setupAccessManagerRoles(hookAddr, am, reg);
-        bytes memory ctor = abi.encode(pm, alphixOwner, address(reg));
+        bytes memory ctor = abi.encode(pm, alphixOwner, address(am), address(reg));
         deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
         newHook = Alphix(hookAddr);
     }
@@ -449,12 +450,15 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
-     * @notice Sets up AccessManager roles for the registry
-     * @dev Grants registrar role to Hook and sets function-level permissions
+     * @notice Sets up AccessManager roles for the registry and hook
+     * @dev Grants registrar role to Hook and poker role to owner, sets function-level permissions
      */
     function _setupAccessManagerRoles(address hookAddr, AccessManager am, Registry reg) internal {
         // Grant registrar role to hook
         am.grantRole(REGISTRAR_ROLE, hookAddr, 0);
+
+        // Grant poker role to owner (by default, tests can override)
+        am.grantRole(POKER_ROLE, owner, 0);
 
         // Assign role to specific functions on Registry
         bytes4[] memory contractSelectors = new bytes4[](1);
@@ -464,6 +468,11 @@ abstract contract BaseAlphixTest is Test, Deployers {
         bytes4[] memory poolSelectors = new bytes4[](1);
         poolSelectors[0] = reg.registerPool.selector;
         am.setTargetFunctionRole(address(reg), poolSelectors, REGISTRAR_ROLE);
+
+        // Assign poker role to poke function on Hook
+        bytes4[] memory pokeSelectors = new bytes4[](1);
+        pokeSelectors[0] = Alphix(hookAddr).poke.selector;
+        am.setTargetFunctionRole(hookAddr, pokeSelectors, POKER_ROLE);
     }
 
     /**
