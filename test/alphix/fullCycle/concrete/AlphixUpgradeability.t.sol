@@ -8,6 +8,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -60,29 +61,7 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
      * @dev Verifies proxy upgrade mechanism works correctly
      */
     function test_basic_upgrade_to_new_implementation() public {
-        // Record state before upgrade
-        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig(poolId);
-        address logicAddressBefore = hook.getLogic();
-
-        // Deploy new implementation
-        vm.startPrank(owner);
-        AlphixLogic newLogicImplementation = new AlphixLogic();
-
-        // Upgrade through proxy
-        bytes memory emptyData = "";
-        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), emptyData);
-        vm.stopPrank();
-
-        // Verify upgrade
-        address logicAddressAfter = hook.getLogic();
-        assertEq(logicAddressBefore, logicAddressAfter, "Hook should still point to same proxy");
-
-        // Verify state preserved
-        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(poolId);
-        assertEq(configAfter.initialFee, configBefore.initialFee, "Initial fee should be preserved");
-        assertEq(configAfter.initialTargetRatio, configBefore.initialTargetRatio, "Target ratio should be preserved");
-        assertEq(uint8(configAfter.poolType), uint8(configBefore.poolType), "Pool type should be preserved");
-        assertTrue(configAfter.isConfigured, "Pool should remain configured");
+        _testBasicUpgrade(poolId);
     }
 
     /**
@@ -91,30 +70,7 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
      */
     function test_basic_upgrade_to_new_implementation_standard() public {
         (, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
-
-        // Record state before upgrade
-        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig(testPoolId);
-        address logicAddressBefore = hook.getLogic();
-
-        // Deploy new implementation
-        vm.startPrank(owner);
-        AlphixLogic newLogicImplementation = new AlphixLogic();
-
-        // Upgrade through proxy
-        bytes memory emptyData = "";
-        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), emptyData);
-        vm.stopPrank();
-
-        // Verify upgrade
-        address logicAddressAfter = hook.getLogic();
-        assertEq(logicAddressBefore, logicAddressAfter, "Hook should still point to same proxy");
-
-        // Verify state preserved
-        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(testPoolId);
-        assertEq(configAfter.initialFee, configBefore.initialFee, "Initial fee should be preserved");
-        assertEq(configAfter.initialTargetRatio, configBefore.initialTargetRatio, "Target ratio should be preserved");
-        assertEq(uint8(configAfter.poolType), uint8(configBefore.poolType), "Pool type should be preserved");
-        assertTrue(configAfter.isConfigured, "Pool should remain configured");
+        _testBasicUpgrade(testPoolId);
     }
 
     /**
@@ -123,30 +79,7 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
      */
     function test_basic_upgrade_to_new_implementation_volatile() public {
         (, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
-
-        // Record state before upgrade
-        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig(testPoolId);
-        address logicAddressBefore = hook.getLogic();
-
-        // Deploy new implementation
-        vm.startPrank(owner);
-        AlphixLogic newLogicImplementation = new AlphixLogic();
-
-        // Upgrade through proxy
-        bytes memory emptyData = "";
-        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), emptyData);
-        vm.stopPrank();
-
-        // Verify upgrade
-        address logicAddressAfter = hook.getLogic();
-        assertEq(logicAddressBefore, logicAddressAfter, "Hook should still point to same proxy");
-
-        // Verify state preserved
-        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(testPoolId);
-        assertEq(configAfter.initialFee, configBefore.initialFee, "Initial fee should be preserved");
-        assertEq(configAfter.initialTargetRatio, configBefore.initialTargetRatio, "Target ratio should be preserved");
-        assertEq(uint8(configAfter.poolType), uint8(configBefore.poolType), "Pool type should be preserved");
-        assertTrue(configAfter.isConfigured, "Pool should remain configured");
+        _testBasicUpgrade(testPoolId);
     }
 
     /**
@@ -182,7 +115,7 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
         AlphixLogic newLogicImplementation = new AlphixLogic();
 
         vm.prank(unauthorized);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, unauthorized));
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
     }
 
@@ -592,7 +525,7 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
         // Unauthorized user cannot upgrade
         vm.startPrank(unauthorized);
         AlphixLogic anotherLogic = new AlphixLogic();
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, unauthorized));
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(anotherLogic), "");
         vm.stopPrank();
     }
@@ -600,6 +533,36 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
     /* ========================================================================== */
     /*                              HELPER FUNCTIONS                              */
     /* ========================================================================== */
+
+    /**
+     * @notice Helper to test basic upgrade flow with a specific pool
+     * @dev Reduces duplication across pool type upgrade tests
+     */
+    function _testBasicUpgrade(PoolId testPoolId) internal {
+        // Record state before upgrade
+        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig(testPoolId);
+        address logicAddressBefore = hook.getLogic();
+
+        // Deploy new implementation
+        vm.startPrank(owner);
+        AlphixLogic newLogicImplementation = new AlphixLogic();
+
+        // Upgrade through proxy
+        bytes memory emptyData = "";
+        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), emptyData);
+        vm.stopPrank();
+
+        // Verify upgrade
+        address logicAddressAfter = hook.getLogic();
+        assertEq(logicAddressBefore, logicAddressAfter, "Hook should still point to same proxy");
+
+        // Verify state preserved
+        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(testPoolId);
+        assertEq(configAfter.initialFee, configBefore.initialFee, "Initial fee should be preserved");
+        assertEq(configAfter.initialTargetRatio, configBefore.initialTargetRatio, "Target ratio should be preserved");
+        assertEq(uint8(configAfter.poolType), uint8(configBefore.poolType), "Pool type should be preserved");
+        assertTrue(configAfter.isConfigured, "Pool should remain configured");
+    }
 
     /**
      * @notice Helper to test pool operations after upgrade
