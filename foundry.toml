@@ -11,6 +11,11 @@ via_ir = false
 [fuzz]
 runs = 512
 
+[invariant]
+runs = 512
+depth = 50
+fail_on_revert = false
+
 [profile.lint]
 exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]
 
