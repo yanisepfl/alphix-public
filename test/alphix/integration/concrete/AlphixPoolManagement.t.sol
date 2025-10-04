@@ -22,6 +22,7 @@ import "../../BaseAlphix.t.sol";
 import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {IRegistry} from "../../../../src/interfaces/IRegistry.sol";
+import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 import {MockReenteringLogic} from "../../../utils/mocks/MockReenteringLogic.sol";
 
 contract AlphixPoolManagementTest is BaseAlphixTest {
@@ -652,6 +653,25 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         vm.prank(owner);
         hook.setGlobalMaxAdjRate(newRate);
         assertEq(logic.getGlobalMaxAdjRate(), newRate);
+    }
+
+    /**
+     * @notice Test setGlobalMaxAdjRate reverts when rate is zero
+     */
+    function test_setGlobalMaxAdjRate_revertsOnZero() public {
+        vm.prank(owner);
+        vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
+        hook.setGlobalMaxAdjRate(0);
+    }
+
+    /**
+     * @notice Test setGlobalMaxAdjRate reverts when rate exceeds maximum
+     */
+    function test_setGlobalMaxAdjRate_revertsOnTooHigh() public {
+        uint256 tooHigh = AlphixGlobalConstants.MAX_ADJUSTMENT_RATE + 1;
+        vm.prank(owner);
+        vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
+        hook.setGlobalMaxAdjRate(tooHigh);
     }
 
     /**
