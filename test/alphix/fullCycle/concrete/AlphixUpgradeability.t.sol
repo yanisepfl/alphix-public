@@ -34,6 +34,7 @@ import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
+import {MockAlphixLogic} from "../../../utils/mocks/MockAlphixLogic.sol";
 
 /**
  * @title AlphixUpgradeabilityTest
@@ -150,22 +151,26 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
 
     /**
      * @notice Test upgrade with initialization data
-     * @dev Verifies upgradeToAndCall with initialization logic
+     * @dev Verifies upgradeToAndCall with initialization logic using MockAlphixLogic
      */
     function test_upgrade_with_initialization_data() public {
-        // Deploy new implementation
-        AlphixLogic newLogicImplementation = new AlphixLogic();
+        // Deploy new mock implementation with a reinitializer
+        MockAlphixLogic mockImplementation = new MockAlphixLogic();
 
-        // Prepare initialization data (if new implementation has init function)
-        bytes memory initData = "";
+        // Prepare initialization data for initializeV2(uint24 _mockFee)
+        uint24 mockFeeValue = 1234; // Arbitrary fee value for testing
+        bytes memory initData = abi.encodeWithSignature("initializeV2(uint24)", mockFeeValue);
 
         vm.prank(owner);
         vm.expectEmit(true, false, false, false, address(logicProxy));
-        emit Upgraded(address(newLogicImplementation));
-        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), initData);
+        emit Upgraded(address(mockImplementation));
+        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(mockImplementation), initData);
 
-        // Verify upgrade successful
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+        // Verify upgrade successful - if initData was processed without reverting, initialization worked
+        // (MockAlphixLogic.mockFee is private, so we verify through successful execution)
+
+        // Verify original pool config was preserved
+        IAlphixLogic.PoolConfig memory config = IAlphixLogic(address(logicProxy)).getPoolConfig(poolId);
         assertTrue(config.isConfigured, "Pool should remain configured after upgrade");
     }
 

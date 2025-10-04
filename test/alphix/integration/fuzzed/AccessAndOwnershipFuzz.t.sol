@@ -8,6 +8,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
+import {IAccessManaged} from "@openzeppelin/contracts/access/manager/IAccessManaged.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -168,9 +169,9 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
         vm.prank(owner);
         accessManager.revokeRole(REGISTRAR_ROLE, grantee);
 
-        // Should not be able to register
+        // Should not be able to register - expect AccessManaged revert
         vm.prank(grantee);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, grantee));
         registry.registerContract(IRegistry.ContractKey.AlphixLogic, address(logicProxy));
     }
 

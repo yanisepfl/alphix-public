@@ -261,19 +261,18 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        // Mint tokens to all traders
-        uint256 totalSwapNeeded = swap1 + swap2 + swap3 + swap4 + swap5;
+        // Mint tokens to all traders (each trader gets only what they need for their swap)
         vm.startPrank(owner);
-        MockERC20(Currency.unwrap(testKey.currency0)).mint(bob, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency1)).mint(bob, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency0)).mint(charlie, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency1)).mint(charlie, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency0)).mint(dave, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency1)).mint(dave, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency0)).mint(user1, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency1)).mint(user1, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency0)).mint(user2, totalSwapNeeded);
-        MockERC20(Currency.unwrap(testKey.currency1)).mint(user2, totalSwapNeeded);
+        MockERC20(Currency.unwrap(testKey.currency0)).mint(bob, swap1);
+        MockERC20(Currency.unwrap(testKey.currency1)).mint(bob, swap1);
+        MockERC20(Currency.unwrap(testKey.currency0)).mint(charlie, swap2);
+        MockERC20(Currency.unwrap(testKey.currency1)).mint(charlie, swap2);
+        MockERC20(Currency.unwrap(testKey.currency0)).mint(dave, swap3);
+        MockERC20(Currency.unwrap(testKey.currency1)).mint(dave, swap3);
+        MockERC20(Currency.unwrap(testKey.currency0)).mint(user1, swap4);
+        MockERC20(Currency.unwrap(testKey.currency1)).mint(user1, swap4);
+        MockERC20(Currency.unwrap(testKey.currency0)).mint(user2, swap5);
+        MockERC20(Currency.unwrap(testKey.currency1)).mint(user2, swap5);
         vm.stopPrank();
 
         // Day 1: Multiple traders create volume
