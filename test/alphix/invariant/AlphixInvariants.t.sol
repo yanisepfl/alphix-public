@@ -525,13 +525,14 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
      * @dev Ghost variables should accumulate when pokes succeed
      */
     function invariant_pokeTrackingConsistent() public view {
-        (uint256 sumFees,,,, uint256 maxFee,,) = handler.getGhostVariables();
-        uint256 pokeCount = handler.callCount_poke();
+        (uint256 sumFees,, uint256 maxFee,,,,) = handler.getGhostVariables();
 
-        if (pokeCount > 0) {
-            // If pokes occurred, at least one of the tracking variables should be non-zero
-            // (either sumFees or maxFee, depending on whether pokes succeeded)
-            assertTrue(sumFees > 0 || maxFee == 0 || maxFee == type(uint256).max, "Poke tracking consistent");
+        // Ghost variables should not overflow
+        assertTrue(sumFees < type(uint256).max / 2, "Sum fees overflow risk");
+
+        // If maxFee was observed, it should be within valid LP fee range
+        if (maxFee > 0 && maxFee < type(uint256).max) {
+            assertLe(maxFee, LPFeeLibrary.MAX_LP_FEE, "Max fee exceeds LP fee limit");
         }
     }
 

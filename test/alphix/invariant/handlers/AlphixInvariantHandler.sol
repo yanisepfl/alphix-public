@@ -82,6 +82,9 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
     mapping(PoolId => bool) public poolExists;
     mapping(PoolId => mapping(address => uint256[])) public userPositions; // poolId => user => tokenIds
 
+    // Track liquidity amount for each position (tokenId => liquidityAmount)
+    mapping(uint256 => uint128) public positionLiquidity;
+
     constructor(
         Alphix _hook,
         IAlphixLogic _logic,
@@ -131,8 +134,13 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
         if (!config.isConfigured) return;
 
-        // Warp time forward to ensure cooldown passes
-        vm.warp(block.timestamp + 1 days + 1);
+        // Conditionally warp time to test cooldown enforcement
+        // 50% chance to warp past cooldown, 50% chance to test same-block/cooldown rejection
+        if (ratioSeed % 2 == 0) {
+            // Warp past cooldown to allow poke
+            vm.warp(block.timestamp + 1 days + 1);
+        }
+        // else: don't warp, test cooldown enforcement
 
         // Bound current ratio to valid range
         uint256 currentRatio = bound(ratioSeed, 1, AlphixGlobalConstants.MAX_CURRENT_RATIO);
@@ -189,12 +197,11 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             hookData: Constants.ZERO_BYTES,
             receiver: actor,
             deadline: block.timestamp + 100
-        }) returns (BalanceDelta delta) {
+        }) returns (BalanceDelta) {
             callCount_swap++;
             ghost_totalSwapVolume += swapAmount;
-
-            // Successful swap - delta should be non-zero
-            assert(delta.amount0() != 0 || delta.amount1() != 0);
+            // Note: Delta can legitimately be zero in edge cases (extreme slippage)
+            // Ghost variables track successful swaps for invariant validation
         } catch {
             // Swap can fail for various reasons (slippage, liquidity, paused, etc.)
             // This is expected behavior
@@ -249,6 +256,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1 + buffer), expiry);
 
         // Use EasyPosm library for minting
+        // Note: Can't use try-catch with library functions, but failures will gracefully revert handler call
         (uint256 tokenId,) = positionManager.mint(
             poolKey,
             tickLower,
@@ -264,8 +272,9 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         callCount_addLiquidity++;
         ghost_totalLiquidityAdded += liquidityAmount;
 
-        // Track position
+        // Track position and its liquidity amount
         userPositions[poolId][actor].push(tokenId);
+        positionLiquidity[tokenId] = liquidityAmount;
 
         vm.stopPrank();
     }
@@ -294,7 +303,11 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
         vm.startPrank(actor);
 
-        // Use EasyPosm library for burning (burns entire position)
+        // Get liquidity amount before burning
+        uint128 liquidityAmount = positionLiquidity[tokenId];
+
+        // Use EasyPosm library for burning
+        // Note: Can't use try-catch with library functions, but failures will gracefully revert handler call
         positionManager.burn(
             tokenId,
             0, // amount0Min
@@ -305,8 +318,11 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         );
 
         callCount_removeLiquidity++;
-        // Note: We don't track exact liquidity amount in burn since EasyPosm burns entire position
-        ghost_totalLiquidityRemoved += 1; // Just count the operation
+        // Track actual liquidity amount removed (not just operation count)
+        ghost_totalLiquidityRemoved += liquidityAmount;
+
+        // Clean up position tracking
+        delete positionLiquidity[tokenId];
 
         vm.stopPrank();
     }

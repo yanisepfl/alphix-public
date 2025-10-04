@@ -12,7 +12,7 @@ All tests should be passing.
 
 ## Directory Structure
 
-```
+```text
 test/alphix/
 ├── integration/          # Component integration tests
 │   ├── concrete/        # Deterministic integration tests
