@@ -24,15 +24,36 @@ Fee updates are computed from deviations between current and target volume/TVL r
 
 ## Architecture
 
-The system consists of a Uniswap V4 hook that delegates all callbacks to an upgradeable logic contract, plus a pure math library and interfaces for coordination and registration.
-Administrative functions are managed by the hook owner, while per-pool state and algorithms reside in the logic contract deployed behind an ERC1967 proxy with UUPS authorization.
+The system follows a three-layer architecture with clear separation of concerns:
 
-The repository is organized into three main layers:
-- **Hook entrypoint ([Alphix](src/Alphix.sol)):** Alphix forwards all before/after initialize, add/remove liquidity, and swap callbacks to the logic and exposes admin operations, including fee pokes and pool lifecycle management.
-- **Upgradeable logic ([AlphixLogic](src/AlphixLogic.sol)):** AlphixLogic implements fee computation, EMA target updates, cooldown checks, per-pool configuration, and active/configured/paused pool status tracking.
-- **Dynamic Fee Library ([DynamicFeeLib](src/libraries/DynamicFee.sol)):** DynamicFeeLib provides pure math helper functions for fee deltas, clamping, OOB tracking, and EMA.
+### Core Components
 
-We also created a [Registry](src/Registry.sol) that automatically stores our deployed contracts and pools using AccessManager roles. Finally, we added [Interfaces](src/interfaces/) to define the external API for our contracts.
+1. **Hook Entrypoint** ([`Alphix.sol`](src/Alphix.sol))
+   - Implements Uniswap V4 `IHooks` interface
+   - Delegates all callbacks to upgradeable logic contract
+   - Manages pool lifecycle (initialization, activation, deactivation)
+   - Exposes fee poke functionality and administrative operations
+   - Integrates with Registry for automatic tracking
+
+2. **Upgradeable Logic** ([`AlphixLogic.sol`](src/AlphixLogic.sol))
+   - Deployed behind ERC1967 proxy with UUPS upgradeability
+   - Implements fee computation algorithms and EMA target updates
+   - Manages per-pool configuration and state
+   - Enforces cooldowns, bounds, and side-specific throttling
+   - Tracks active/configured/paused pool status
+
+3. **Math Library** ([`DynamicFee.sol`](src/libraries/DynamicFee.sol))
+   - Pure functions for fee calculations
+   - EMA computation with configurable lookback periods
+   - Fee clamping and out-of-bounds (OOB) detection
+   - Streak tracking for consecutive OOB hits
+
+### Supporting Infrastructure
+
+- **Registry** ([`Registry.sol`](src/Registry.sol)): Automatic deployment and pool tracking using AccessManager roles
+- **Global Constants** ([`AlphixGlobalConstants.sol`](src/libraries/AlphixGlobalConstants.sol)): System-wide bounds and configuration limits
+- **Interfaces** ([`src/interfaces/`](src/interfaces/)): External API definitions for all contracts
+- **Base Contracts** ([`BaseDynamicFee.sol`](src/BaseDynamicFee.sol)): OpenZeppelin-based foundation for dynamic fee hooks
 
 ## Pool Types & Parameters
 
@@ -57,16 +78,92 @@ Each of those parameters are bounded by global constants for additional security
 
 ## Security & Upgradability
 
-- Utilizes **OpenZeppelin Upgradable** patterns: Ownable2StepUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable, and ERC165 support. 
-- The owner address will be a **multisig**.
-- **Registry** uses AccessManager for granular role control over registrations.
-- **Upgradeable logic** through UUPS: `authorizeUpgrade` restricts to owner and enforces `IAlphixLogic` interface compliance.
+### Security Patterns
+
+- **OpenZeppelin 5 Upgradeable Contracts**: Ownable2StepUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable
+- **Access Control**:
+  - Hook owner (will be multisig)
+  - AccessManager for Registry with role-based permissions (REGISTRAR_ROLE, POKER_ROLE)
+  - Two-step ownership transfers to prevent accidental transfers
+- **State Protection**:
+  - ReentrancyGuard on sensitive operations
+  - Pausable for emergency stops
+  - Cooldowns to prevent manipulation
+- **Upgrade Safety**:
+  - UUPS pattern with owner-only authorization
+  - Interface compliance checks (`IAlphixLogic` enforcement)
+  - State preservation across upgrades
+
+### Economic Security
+
+- **Global Bounds**: System-wide limits on fees, ratios, and parameters
+- **Pool Type Bounds**: Category-specific constraints (STABLE, STANDARD, VOLATILE)
+- **Cooldown Enforcement**: Time-based rate limiting on fee updates
+- **Side-Specific Throttling**: Asymmetric adjustments via upper/lower side factors
+- **Streak Multipliers**: Progressive fee adjustments for sustained out-of-bounds conditions
+
+## Testing
+
+The protocol includes comprehensive testing across multiple layers:
+
+- **Unit Tests**: Isolated component validation (libraries, math functions)
+- **Integration Tests**: Cross-component interaction verification
+- **Full Cycle Tests**: End-to-end lifecycle scenarios including 30-day simulations
+- **Invariant Tests**: Property-based stateful fuzzing to ensure critical invariants hold
+- **Fuzz Testing**: Randomized input testing with 512 runs per test
+
+All tests are built with Foundry. See [`test/alphix/README.md`](test/alphix/README.md) for detailed documentation.
+
+## Development
+
+### Prerequisites
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+- Git with submodules support
+
+### Setup
+
+```bash
+# Clone repository with submodules
+git clone --recurse-submodules https://github.com/yanisepfl/alphix-atrium.git
+cd alphix-atrium
+
+# Install dependencies
+forge install
+
+# Build contracts
+forge build
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+forge test
+
+# Run with gas reporting
+forge test --gas-report
+
+# Run specific test suite
+forge test --match-path "test/alphix/integration/**/*.sol"
+
+# Run with verbosity
+forge test -vvv
+```
+
+### Deployment
+
+Coming Soon.
+
+### Addresses
+
+Coming Soon.
 
 ## Links & Resources
 
-- [Working Paper (WIP)](./Alphix_Working_Paper.pdf)
 - [Website](https://www.alphix.fi/)
-- [Documentation (WIP)](https://alphix.gitbook.io/docs)
+- [Documentation](https://alphix.gitbook.io/docs)
+- [Working Paper (WIP)](./Alphix_Working_Paper.pdf)
 - [Branding Material](./branding-materials/)
 
 ## Partners
