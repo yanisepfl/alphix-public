@@ -63,12 +63,6 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint24 feeRate;
     }
 
-    struct FeeGrowthSnapshot {
-        uint256 feeGrowth0;
-        uint256 feeGrowth1;
-    }
-
-    uint256 constant MIN_RATIO = 0;
     uint256 constant MAX_RATIO = 1e18;
 
     function setUp() public override {
@@ -1043,25 +1037,6 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(c1)).mint(user, amount);
     }
 
-    function _simulateWeekOfTrading(uint256 dailyVolume) internal {
-        for (uint256 i = 0; i < 7; i++) {
-            vm.startPrank(bob);
-            _performSwap(bob, key, dailyVolume, i % 2 == 0);
-            vm.stopPrank();
-            vm.warp(block.timestamp + 1 days);
-        }
-    }
-
-    /**
-     * @notice Helper function to perform a swap and verify fee is charged
-     * @dev Uses small swap relative to liquidity to minimize price impact
-     * @param trader Address performing the swap
-     * @param poolKey Pool to swap in
-     * @param poolId Pool ID for getting fee
-     * @param swapAmount Amount to swap
-     * @param zeroForOne Direction of swap
-     * @return feeCharged Approximate fee charged (includes small price impact)
-     */
     /**
      * @notice Precisely verify trader pays exact fees using feeGrowthGlobal
      * @dev Uses Uniswap V4's internal fee accounting for accuracy

@@ -41,10 +41,9 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
      * @param newOwnerSeed Seed to generate new owner address
      */
     function testFuzz_hook_ownership_transfer_to_any_address(uint256 newOwnerSeed) public {
-        // Generate a valid address (not zero, not owner)
+        // Generate a valid address (not zero, not owner) - bound already excludes zero
         address newOwner = address(uint160(bound(newOwnerSeed, 1, type(uint160).max)));
         vm.assume(newOwner != owner);
-        vm.assume(newOwner != address(0));
 
         // Initiate transfer
         vm.prank(owner);
@@ -68,10 +67,9 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
      * @param newOwnerSeed Seed to generate new owner address
      */
     function testFuzz_logic_ownership_transfer_to_any_address(uint256 newOwnerSeed) public {
-        // Generate a valid address
+        // Generate a valid address - bound already excludes zero
         address newOwner = address(uint160(bound(newOwnerSeed, 1, type(uint160).max)));
         vm.assume(newOwner != owner);
-        vm.assume(newOwner != address(0));
 
         // Initiate transfer
         vm.prank(owner);

@@ -160,7 +160,7 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
         bytes memory initData = "";
 
         vm.prank(owner);
-        vm.expectEmit(true, false, false, false);
+        vm.expectEmit(true, false, false, false, address(logicProxy));
         emit Upgraded(address(newLogicImplementation));
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), initData);
 

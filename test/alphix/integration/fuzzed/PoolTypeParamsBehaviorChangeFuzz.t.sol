@@ -765,8 +765,18 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         vm.prank(owner);
         if (shouldRevert) {
             vm.expectRevert();
+            hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
+        } else {
+            hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
+            // Verify the parameters were set correctly
+            DynamicFeeLib.PoolTypeParams memory retrieved = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+            assertEq(retrieved.minFee, minFee, "minFee mismatch");
+            assertEq(retrieved.maxFee, maxFee, "maxFee mismatch");
+            assertEq(retrieved.lookbackPeriod, lookbackPeriod, "lookbackPeriod mismatch");
+            assertEq(retrieved.minPeriod, minPeriod, "minPeriod mismatch");
+            assertEq(retrieved.ratioTolerance, ratioTolerance, "ratioTolerance mismatch");
+            assertEq(retrieved.linearSlope, linearSlope, "linearSlope mismatch");
         }
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
     }
 
     /**
@@ -786,7 +796,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         // Bound to extreme ranges
         extremeRatio = bound(extremeRatio, 1e15, 1e21); // 0.1% to 100%
         baseMaxFeeDelta = uint24(bound(baseMaxFeeDelta, 1, 200));
-        maxFee = uint24(bound(maxFee, 1000, 50000));
+        maxFee = uint24(bound(maxFee, 1000, LPFeeLibrary.MAX_LP_FEE)); // Use protocol max
         linearSlope = bound(linearSlope, MIN_LINEAR_SLOPE_FUZZ, MAX_LINEAR_SLOPE_FUZZ);
 
         // Create parameters that can handle extreme ratios
@@ -1334,7 +1344,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     function _getAboveToleranceRatio(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
         // Add 0.1% relative to target ratio (1e15 * targetRatio / 1e18)
         uint256 additionalMargin = (1e15 * targetRatio) / 1e18;
-        return _getUpperToleranceBound(targetRatio, ratioTolerance) + additionalMargin;
+        uint256 result = _getUpperToleranceBound(targetRatio, ratioTolerance) + additionalMargin;
+        // Clamp to MAX_CURRENT_RATIO to avoid spurious reverts
+        return result > AlphixGlobalConstants.MAX_CURRENT_RATIO ? AlphixGlobalConstants.MAX_CURRENT_RATIO : result;
     }
 
     /**

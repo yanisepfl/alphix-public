@@ -21,6 +21,9 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
+/* OZ IMPORTS */
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
@@ -1065,9 +1068,10 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         hook.pause();
 
         // Verify hook operations are blocked during pause
-        vm.prank(owner);
-        vm.expectRevert();
+        vm.startPrank(owner);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         hook.poke(key, 5e17);
+        vm.stopPrank();
 
         // Day 21: Resume operations and weekly fee adjustment
         vm.warp(block.timestamp + 1 days);
