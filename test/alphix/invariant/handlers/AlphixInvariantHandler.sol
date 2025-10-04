@@ -384,10 +384,11 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             poolExists[poolId] = true;
 
             // Register pool with test contract for invariant tracking
-            // Note: msg.sender should be AlphixInvariantsTest when called during fuzzing
+            // When called from test contract (setUp or fuzzing), msg.sender is AlphixInvariantsTest
+            // The low-level call allows graceful handling if called from other contexts
             (bool success,) =
                 msg.sender.call(abi.encodeWithSignature("trackPool((address,address,uint24,int24,address))", poolKey));
-            // Silently ignore if call fails (e.g., when called from setUp)
+            // Ignore return value - failure only occurs if called from non-test context
             success; // Suppress unused variable warning
         }
     }

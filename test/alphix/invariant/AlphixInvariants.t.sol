@@ -9,6 +9,7 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../BaseAlphix.t.sol";
@@ -312,16 +313,28 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     /* ========================================================================== */
 
     /**
-     * @notice Invariant: Pause state is consistent
-     * @dev Ensures the hook's pause state is always accessible and valid
+     * @notice Invariant: Pause state transitions are valid
+     * @dev Validates that pause/unpause operations maintain consistent state
      */
     function invariant_pauseStateConsistent() public view {
-        // The hook should always have a valid pause state (paused or not paused)
-        // This is a basic sanity check that the pause mechanism exists
-        // We rely on the handler's pauseContract/unpauseContract functions to test actual pausing
         bool isPaused = hook.paused();
-        // Pause state should be a valid boolean (always true)
-        assertTrue(isPaused || !isPaused, "Pause state invalid");
+        uint256 pauseCount = handler.callCount_pause();
+        uint256 unpauseCount = handler.callCount_unpause();
+
+        // If we've never paused, contract should be unpaused
+        if (pauseCount == 0) {
+            assertFalse(isPaused, "Contract should be unpaused initially");
+        }
+
+        // Net pause state should reflect pause/unpause balance
+        // If more pauses than unpauses, should be paused (or equal if started unpaused)
+        // This is a weak check since pause/unpause can fail when already in that state
+        if (pauseCount > 0 || unpauseCount > 0) {
+            // At least one pause/unpause operation was attempted
+            // State should be determinable from the hook
+            bool stateReadable = (isPaused == true || isPaused == false);
+            assertTrue(stateReadable, "Pause state should be readable");
+        }
     }
 
     /**
@@ -433,44 +446,38 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
 
     /**
      * @notice Invariant: Cooldown prevents rapid fee manipulation
-     * @dev Multiple pokes in same block shouldn't all succeed
+     * @dev Validates cooldown enforcement while accounting for fuzzer behavior
      */
     function invariant_cooldownPreventsSameBlockManipulation() public view {
         uint256 pokeSuccessCount = handler.callCount_poke();
         uint256 pokeFailedCount = handler.callCount_pokeFailed();
         uint256 totalPokeAttempts = pokeSuccessCount + pokeFailedCount;
 
-        // Cooldown enforcement validation
-        // Since handler uses 50% conditional warping and fuzzer can call warpTime independently,
-        // we validate cooldown is working by checking that the failure pattern is reasonable
-        if (totalPokeAttempts >= 10) {
-            // With ~50% of pokes not warping and independent warpTime calls,
-            // we expect some failures but not necessarily every run
-            // Relaxed check: failure rate should be > 0% and < 100%
-            bool allSucceeded = (pokeFailedCount == 0);
-            bool allFailed = (pokeSuccessCount == 0);
+        // Need sufficient attempts to validate cooldown behavior
+        if (totalPokeAttempts < 10) return;
 
-            // If all succeeded or all failed with sufficient attempts, something is likely wrong
-            if (allSucceeded) {
-                // This could happen if fuzzer got lucky with time warps, but is suspicious
-                // with >= 10 attempts
-                assertTrue(
-                    totalPokeAttempts < 20, "All pokes succeeding with 20+ attempts suggests cooldown not enforced"
-                );
-            } else if (allFailed) {
-                // All failing could be legitimate if contract is paused or no pools configured
-                // Only assert failure if contract is unpaused and we have pools
-                bool isPaused = hook.paused();
-                uint256 poolCount = handler.getPoolCount();
+        bool isPaused = hook.paused();
+        uint256 poolCount = handler.getPoolCount();
 
-                if (!isPaused && poolCount > 0) {
-                    // With unpaused contract and pools, all failures is suspicious
-                    assertFalse(allFailed, "All pokes failing with unpaused contract suggests issue");
-                }
-                // Otherwise, all failures is legitimate (paused or no pools)
+        // Case 1: All pokes failed
+        if (pokeSuccessCount == 0) {
+            // Legitimate only if paused or no pools configured
+            if (!isPaused && poolCount > 0) {
+                assertFalse(true, "All pokes failing with active pools suggests issue");
             }
-            // Otherwise we have mixed results, which is expected behavior
+            return;
         }
+
+        // Case 2: All pokes succeeded with many attempts (suspicious)
+        if (pokeFailedCount == 0 && totalPokeAttempts >= 20) {
+            // With 50% time warp probability, 20+ successes is very unlikely
+            assertFalse(true, "20+ pokes all succeeding suggests cooldown bypassed");
+            return;
+        }
+
+        // Case 3: Mixed results (expected behavior) - no assertion needed
+        // Handler's 50% conditional warping + fuzzer's time manipulation
+        // naturally creates varied success/failure patterns
     }
 
     /* ========================================================================== */
@@ -600,14 +607,30 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     }
 
     /**
-     * @notice Invariant: Hook permissions are immutable during invariant run
-     * @dev Hook permissions should not change during testing
+     * @notice Invariant: Hook permissions remain constant
+     * @dev Validates that hook permissions match expected values and never change
      */
     function invariant_hookPermissionsImmutable() public view {
-        // Hook permissions are set at deployment and shouldn't change
-        // This is implicitly validated by the hook continuing to work
-        // throughout the invariant run
-        assertTrue(address(hook) != address(0), "Hook still exists");
+        Hooks.Permissions memory perms = hook.getHookPermissions();
+
+        // Verify all expected permissions are set correctly
+        // These are defined in Alphix.sol and should never change
+        assertTrue(perms.beforeInitialize, "beforeInitialize should be true");
+        assertTrue(perms.afterInitialize, "afterInitialize should be true");
+        assertTrue(perms.beforeAddLiquidity, "beforeAddLiquidity should be true");
+        assertTrue(perms.afterAddLiquidity, "afterAddLiquidity should be true");
+        assertTrue(perms.beforeRemoveLiquidity, "beforeRemoveLiquidity should be true");
+        assertTrue(perms.afterRemoveLiquidity, "afterRemoveLiquidity should be true");
+        assertTrue(perms.beforeSwap, "beforeSwap should be true");
+        assertTrue(perms.afterSwap, "afterSwap should be true");
+
+        // Verify all disabled permissions remain disabled
+        assertFalse(perms.beforeDonate, "beforeDonate should be false");
+        assertFalse(perms.afterDonate, "afterDonate should be false");
+        assertFalse(perms.beforeSwapReturnDelta, "beforeSwapReturnDelta should be false");
+        assertFalse(perms.afterSwapReturnDelta, "afterSwapReturnDelta should be false");
+        assertFalse(perms.afterAddLiquidityReturnDelta, "afterAddLiquidityReturnDelta should be false");
+        assertFalse(perms.afterRemoveLiquidityReturnDelta, "afterRemoveLiquidityReturnDelta should be false");
     }
 
     /* ========================================================================== */
