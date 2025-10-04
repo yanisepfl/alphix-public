@@ -436,14 +436,32 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
      * @dev Multiple pokes in same block shouldn't all succeed
      */
     function invariant_cooldownPreventsSameBlockManipulation() public view {
-        // If we have multiple pokes, check that cooldown is working
-        uint256 pokeCount = handler.callCount_poke();
+        uint256 pokeSuccessCount = handler.callCount_poke();
+        uint256 pokeFailedCount = handler.callCount_pokeFailed();
+        uint256 totalPokeAttempts = pokeSuccessCount + pokeFailedCount;
 
-        if (pokeCount > 1) {
-            // At least some pokes should have been rejected due to cooldown
-            // This is validated by the fact that not all pokes succeeded
-            // (the difference between calls and successful updates)
-            assertTrue(pokeCount > 0, "Poke count tracked");
+        // Cooldown enforcement validation
+        // Since handler uses 50% conditional warping and fuzzer can call warpTime independently,
+        // we validate cooldown is working by checking that the failure pattern is reasonable
+        if (totalPokeAttempts >= 10) {
+            // With ~50% of pokes not warping and independent warpTime calls,
+            // we expect some failures but not necessarily every run
+            // Relaxed check: failure rate should be > 0% and < 100%
+            bool allSucceeded = (pokeFailedCount == 0);
+            bool allFailed = (pokeSuccessCount == 0);
+
+            // If all succeeded or all failed with sufficient attempts, something is likely wrong
+            if (allSucceeded) {
+                // This could happen if fuzzer got lucky with time warps, but is suspicious
+                // with >= 10 attempts
+                assertTrue(
+                    totalPokeAttempts < 20, "All pokes succeeding with 20+ attempts suggests cooldown not enforced"
+                );
+            } else if (allFailed) {
+                // All failing is very unlikely and suggests a bug
+                assertFalse(allFailed, "All pokes failing suggests setup issue");
+            }
+            // Otherwise we have mixed results, which is expected behavior
         }
     }
 

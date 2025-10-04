@@ -60,6 +60,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
     // Call counters for statistics
     uint256 public callCount_poke;
+    uint256 public callCount_pokeFailed; // Track failed poke attempts for cooldown validation
     uint256 public callCount_swap;
     uint256 public callCount_addLiquidity;
     uint256 public callCount_removeLiquidity;
@@ -159,7 +160,8 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             config = logic.getPoolConfig(poolId);
             ghost_sumOfTargetRatios += config.initialTargetRatio;
         } catch {
-            // Poke can fail for various valid reasons (paused, etc.)
+            // Poke can fail for various valid reasons (cooldown, paused, zero ratio, etc.)
+            callCount_pokeFailed++;
         }
     }
 
@@ -256,7 +258,8 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1 + buffer), expiry);
 
         // Use EasyPosm library for minting
-        // Note: Can't use try-catch with library functions, but failures will gracefully revert handler call
+        // Note: EasyPosm library calls are internal wrappers, so try-catch would require external wrapper
+        // Instead, we let failures bubble up - fuzzer will handle gracefully via fail_on_revert = false
         (uint256 tokenId,) = positionManager.mint(
             poolKey,
             tickLower,
@@ -269,14 +272,14 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             Constants.ZERO_BYTES
         );
 
+        vm.stopPrank();
+
         callCount_addLiquidity++;
         ghost_totalLiquidityAdded += liquidityAmount;
 
         // Track position and its liquidity amount
         userPositions[poolId][actor].push(tokenId);
         positionLiquidity[tokenId] = liquidityAmount;
-
-        vm.stopPrank();
     }
 
     /**
@@ -307,7 +310,8 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         uint128 liquidityAmount = positionLiquidity[tokenId];
 
         // Use EasyPosm library for burning
-        // Note: Can't use try-catch with library functions, but failures will gracefully revert handler call
+        // Note: EasyPosm library calls are internal wrappers, so try-catch would require external wrapper
+        // Instead, we let failures bubble up - fuzzer will handle gracefully via fail_on_revert = false
         positionManager.burn(
             tokenId,
             0, // amount0Min
@@ -317,6 +321,8 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             Constants.ZERO_BYTES
         );
 
+        vm.stopPrank();
+
         callCount_removeLiquidity++;
         // Track actual liquidity amount removed (not just operation count)
         ghost_totalLiquidityRemoved += liquidityAmount;
@@ -324,7 +330,12 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         // Clean up position tracking
         delete positionLiquidity[tokenId];
 
-        vm.stopPrank();
+        // Remove tokenId from userPositions array (swap with last and pop)
+        uint256 lastIdx = userPositions[poolId][actor].length - 1;
+        if (positionIdx != lastIdx) {
+            userPositions[poolId][actor][positionIdx] = userPositions[poolId][actor][lastIdx];
+        }
+        userPositions[poolId][actor].pop();
     }
 
     /**
@@ -363,7 +374,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
     /**
      * @notice Add a pool to the handler's tracking
-     * @dev Called during setup
+     * @dev Called during setup and registers pool with test contract for invariant tracking
      */
     function addPool(PoolKey memory poolKey) external {
         PoolId poolId = poolKey.toId();
@@ -371,6 +382,13 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             pools.push(poolKey);
             poolIndex[poolId] = pools.length - 1;
             poolExists[poolId] = true;
+
+            // Register pool with test contract for invariant tracking
+            // Note: msg.sender should be AlphixInvariantsTest when called during fuzzing
+            (bool success,) =
+                msg.sender.call(abi.encodeWithSignature("trackPool((address,address,uint24,int24,address))", poolKey));
+            // Silently ignore if call fails (e.g., when called from setUp)
+            success; // Suppress unused variable warning
         }
     }
 
