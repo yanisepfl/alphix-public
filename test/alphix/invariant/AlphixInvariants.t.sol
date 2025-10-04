@@ -458,8 +458,16 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
                     totalPokeAttempts < 20, "All pokes succeeding with 20+ attempts suggests cooldown not enforced"
                 );
             } else if (allFailed) {
-                // All failing is very unlikely and suggests a bug
-                assertFalse(allFailed, "All pokes failing suggests setup issue");
+                // All failing could be legitimate if contract is paused or no pools configured
+                // Only assert failure if contract is unpaused and we have pools
+                bool isPaused = hook.paused();
+                uint256 poolCount = handler.getPoolCount();
+
+                if (!isPaused && poolCount > 0) {
+                    // With unpaused contract and pools, all failures is suspicious
+                    assertFalse(allFailed, "All pokes failing with unpaused contract suggests issue");
+                }
+                // Otherwise, all failures is legitimate (paused or no pools)
             }
             // Otherwise we have mixed results, which is expected behavior
         }
