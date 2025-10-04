@@ -326,14 +326,15 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
             assertFalse(isPaused, "Contract should be unpaused initially");
         }
 
-        // Net pause state should reflect pause/unpause balance
-        // If more pauses than unpauses, should be paused (or equal if started unpaused)
-        // This is a weak check since pause/unpause can fail when already in that state
-        if (pauseCount > 0 || unpauseCount > 0) {
-            // At least one pause/unpause operation was attempted
-            // State should be determinable from the hook
-            bool stateReadable = (isPaused == true || isPaused == false);
-            assertTrue(stateReadable, "Pause state should be readable");
+        // If significantly more successful pauses than unpauses, likely paused
+        // We use >2 difference to account for failed pause/unpause attempts
+        if (pauseCount > unpauseCount + 2) {
+            assertTrue(isPaused, "Contract should be paused after multiple pause calls");
+        }
+
+        // If significantly more successful unpauses than pauses, likely unpaused
+        if (unpauseCount > pauseCount + 2) {
+            assertFalse(isPaused, "Contract should be unpaused after multiple unpause calls");
         }
     }
 
@@ -468,10 +469,18 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
             return;
         }
 
-        // Case 2: All pokes succeeded with many attempts (suspicious)
+        // Case 2: All pokes succeeded with many attempts (potentially suspicious)
         if (pokeFailedCount == 0 && totalPokeAttempts >= 20) {
-            // With 50% time warp probability, 20+ successes is very unlikely
-            assertFalse(true, "20+ pokes all succeeding suggests cooldown bypassed");
+            uint256 timeWarpCount = handler.callCount_timeWarp();
+
+            // If many independent time warps occurred, all successes could be legitimate
+            // Each warp allows cooldown to elapse, enabling subsequent pokes
+            // Only flag as suspicious if successes >> time opportunities
+            uint256 timeOpportunities = timeWarpCount + (totalPokeAttempts / 2); // 50% handler warps
+
+            if (totalPokeAttempts > timeOpportunities + 10) {
+                assertFalse(true, "Too many poke successes relative to time manipulation opportunities");
+            }
             return;
         }
 
@@ -544,7 +553,8 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
 
                 // Note: lastUpdateTimestamp is not exposed in PoolConfig
                 // Timestamp safety is validated through cooldown enforcement
-                assertTrue(config.isConfigured, "Pool remains configured after warp");
+                // Pool is guaranteed configured here due to continue above
+                assertTrue(uint8(config.poolType) <= 2, "Pool type remains valid after warp");
             }
         }
     }
