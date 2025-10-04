@@ -15,6 +15,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IAccessManaged} from "@openzeppelin/contracts/access/manager/IAccessManaged.sol";
 
 /* LOCAL IMPORTS */
 import "../../BaseAlphix.t.sol";
@@ -383,7 +384,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice poke should revert when called by non-owner.
+     * @notice poke should revert when called by non-poker-role.
      */
     function test_poke_revertsOnNonOwner() public {
         (PoolKey memory k,) = _initPool(
@@ -397,11 +398,80 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         );
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
         hook.poke(k, INITIAL_TARGET_RATIO);
 
         vm.prank(address(logic));
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(logic)));
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, address(logic)));
+        hook.poke(k, INITIAL_TARGET_RATIO);
+    }
+
+    /**
+     * @notice poke can be called by any address with POKER_ROLE.
+     */
+    function test_poke_success_withPokerRole() public {
+        (PoolKey memory k,) = _initPool(
+            IAlphixLogic.PoolType.STANDARD,
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1
+        );
+
+        // user1 doesn't have POKER_ROLE, should fail
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
+        hook.poke(k, INITIAL_TARGET_RATIO);
+
+        // Grant POKER_ROLE to user1
+        vm.prank(owner);
+        accessManager.grantRole(POKER_ROLE, user1, 0);
+
+        // Wait for cooldown
+        vm.warp(block.timestamp + 1 days + 1);
+
+        // Now user1 can call poke
+        vm.prank(user1);
+        hook.poke(k, INITIAL_TARGET_RATIO);
+    }
+
+    /**
+     * @notice poke should fail after POKER_ROLE is revoked.
+     */
+    function test_poke_revertsAfterPokerRoleRevoked() public {
+        (PoolKey memory k,) = _initPool(
+            IAlphixLogic.PoolType.STANDARD,
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1
+        );
+
+        // Grant POKER_ROLE to user1
+        vm.prank(owner);
+        accessManager.grantRole(POKER_ROLE, user1, 0);
+
+        // Wait for cooldown
+        vm.warp(block.timestamp + 1 days + 1);
+
+        // user1 can call poke
+        vm.prank(user1);
+        hook.poke(k, INITIAL_TARGET_RATIO);
+
+        // Revoke POKER_ROLE from user1
+        vm.prank(owner);
+        accessManager.revokeRole(POKER_ROLE, user1);
+
+        // Wait for cooldown again
+        vm.warp(block.timestamp + 1 days + 1);
+
+        // Now user1 cannot call poke
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
         hook.poke(k, INITIAL_TARGET_RATIO);
     }
 
@@ -469,6 +539,11 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
 
         // Deploy the re-entering logic and set it as the hook owner
         MockReenteringLogic reenterLogic = new MockReenteringLogic(address(hook));
+
+        // Grant POKER_ROLE to reenterLogic so it can call poke
+        vm.prank(owner);
+        accessManager.grantRole(POKER_ROLE, address(reenterLogic), 0);
+
         vm.prank(owner);
         // Transfer hook ownership so getFee->poke happens as owner
         hook.transferOwnership(address(reenterLogic));
@@ -514,9 +589,9 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         testHook.poke(k, INITIAL_TARGET_RATIO);
         vm.stopPrank();
 
-        // Any non-owner caller reverts with Ownable
+        // Any non-poker-role caller reverts with AccessManaged
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
         testHook.poke(k, INITIAL_TARGET_RATIO);
     }
 

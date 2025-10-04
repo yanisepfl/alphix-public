@@ -51,14 +51,14 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         // Reverts because the Hook address has not been mined as per Uniswap V4's requirement
         address predicted = vm.computeCreateAddress(owner, vm.getNonce(owner));
         vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, predicted));
-        new Alphix(IPoolManager(address(0)), owner, address(registry));
+        new Alphix(IPoolManager(address(0)), owner, address(accessManager), address(registry));
 
         // Reverts because of Alphix Hook constructor restriction
         AccessManager testAm = new AccessManager(owner);
         Registry testReg = new Registry(address(testAm));
         address hookAddr = _computeNextHookAddress();
         _setupAccessManagerRoles(hookAddr, testAm, testReg);
-        bytes memory ctor = abi.encode(IPoolManager(address(0)), owner, address(testReg));
+        bytes memory ctor = abi.encode(IPoolManager(address(0)), owner, address(testAm), address(testReg));
         vm.expectRevert(IAlphix.InvalidAddress.selector);
         deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
         vm.stopPrank();
@@ -72,14 +72,14 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         // Reverts because the Hook address has not been mined as per Uniswap V4's requirement
         address predicted = vm.computeCreateAddress(owner, vm.getNonce(owner));
         vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, predicted));
-        new Alphix(poolManager, address(0), address(registry));
+        new Alphix(poolManager, address(0), address(accessManager), address(registry));
 
         // Reverts because of Alphix Hook constructor restriction
         AccessManager testAm = new AccessManager(owner);
         Registry testReg = new Registry(address(testAm));
         address hookAddr = _computeNextHookAddress();
         _setupAccessManagerRoles(hookAddr, testAm, testReg);
-        bytes memory ctor = abi.encode(poolManager, address(0), address(testReg));
+        bytes memory ctor = abi.encode(poolManager, address(0), address(testAm), address(testReg));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
         deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
         vm.stopPrank();
@@ -93,13 +93,13 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         // Reverts because the Hook address has not been mined as per Uniswap V4's requirement
         address predicted = vm.computeCreateAddress(owner, vm.getNonce(owner));
         vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, predicted));
-        new Alphix(poolManager, owner, address(0));
+        new Alphix(poolManager, owner, address(accessManager), address(0));
 
         // Reverts because of Alphix Hook constructor restriction
         AccessManager testAm = new AccessManager(owner);
         address hookAddr = _computeNextHookAddress();
         _setupAccessManagerRoles(hookAddr, testAm, Registry(address(0)));
-        bytes memory ctor = abi.encode(poolManager, owner, address(0));
+        bytes memory ctor = abi.encode(poolManager, owner, address(testAm), address(0));
         vm.expectRevert(IAlphix.InvalidAddress.selector);
         deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
         vm.stopPrank();
@@ -120,7 +120,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, hookAddr));
 
         // Deploy hook via CREATE2 at hookAddr; constructor will call registry.registerContract and revert
-        bytes memory ctor = abi.encode(poolManager, owner, address(badReg));
+        bytes memory ctor = abi.encode(poolManager, owner, address(badAm), address(badReg));
         deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
         vm.stopPrank();
     }

@@ -5,8 +5,8 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 
 /* LOCAL IMPORTS */
-import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
-import {AlphixGlobalConstants} from "../../src/libraries/AlphixGlobalConstants.sol";
+import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
+import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 
 /**
  * @title DynamicFeeTest

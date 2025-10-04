@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 /* OZ IMPORTS */
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {AccessManaged} from "@openzeppelin/contracts/access/manager/AccessManaged.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -30,7 +31,7 @@ import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
  * @notice Uniswap v4 Dynamic Fee Hook delegating logic to AlphixLogic.
  * @dev Uses OpenZeppelin 5 security patterns.
  */
-contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Initializable, IAlphix {
+contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard, Pausable, Initializable, IAlphix {
     using StateLibrary for IPoolManager;
 
     /* STORAGE */
@@ -57,27 +58,18 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
         _;
     }
 
-    /**
-     * @notice Enforce sender logic to be logic.
-     */
-    modifier onlyLogic() {
-        if (msg.sender != logic) {
-            revert IAlphixLogic.InvalidCaller();
-        }
-        _;
-    }
-
     /* CONSTRUCTOR */
 
     /**
-     * @notice Initialize with PoolManager and alphixManager addresses.
+     * @notice Initialize with PoolManager, alphixManager, and accessManager addresses.
      * @dev Check for _alphixManager != address(0) is done in Ownable.
      */
-    constructor(IPoolManager _poolManager, address _alphixManager, address _registry)
+    constructor(IPoolManager _poolManager, address _alphixManager, address _accessManager, address _registry)
         BaseDynamicFee(_poolManager)
         Ownable(_alphixManager)
+        AccessManaged(_accessManager)
     {
-        if (address(_poolManager) == address(0) || _registry == address(0)) {
+        if (address(_poolManager) == address(0) || _registry == address(0) || _accessManager == address(0)) {
             revert InvalidAddress();
         }
         registry = _registry;
@@ -233,12 +225,13 @@ contract Alphix is BaseDynamicFee, Ownable2Step, ReentrancyGuard, Pausable, Init
 
     /**
      * @dev See {BaseDynamicFee-poke}.
+     * @notice Can be called by addresses with the POKER_ROLE granted via AccessManager
      */
     function poke(PoolKey calldata key, uint256 currentRatio)
         external
         override
         onlyValidPools(key.hooks)
-        onlyOwner
+        restricted
         nonReentrant
         whenNotPaused
     {
