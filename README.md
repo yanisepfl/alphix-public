@@ -125,8 +125,8 @@ All tests are built with Foundry. See [`test/alphix/README.md`](test/alphix/READ
 
 ```bash
 # Clone repository with submodules
-git clone --recurse-submodules https://github.com/yanisepfl/alphix-atrium.git
-cd alphix-atrium
+git clone --recurse-submodules https://github.com/yanisepfl/alphix-public.git
+cd alphix-public
 
 # Install dependencies
 forge install
@@ -149,6 +149,20 @@ forge test --match-path "test/alphix/integration/**/*.sol"
 
 # Run with verbosity
 forge test -vvv
+```
+
+### Running Slither Static Analysis
+
+To run Slither analysis on the Alphix codebase:
+
+```bash
+./run_slither.sh
+```
+
+Or manually:
+
+```bash
+slither . --filter-paths "lib/|test/|script/" --json slither-report.json
 ```
 
 ### Deployment
