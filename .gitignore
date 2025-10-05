@@ -20,3 +20,7 @@ node_modules/
 # Coverage files
 lcov.info
 coverage/
+
+# Slither reports
+slither-report.*
+slither-out/
