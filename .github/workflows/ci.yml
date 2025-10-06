@@ -59,6 +59,8 @@ jobs:
   coverage:
     name: Coverage Report
     runs-on: ubuntu-latest
+    # Only run coverage on push to main or PRs from the same repo (where secrets are available)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
         with:
