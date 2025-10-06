@@ -35,9 +35,16 @@ import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
  * - DEPLOYMENT_TOKEN1_{NETWORK}: Second token address (must be > TOKEN0)
  * - POOL_TICK_SPACING_{NETWORK}: Tick spacing for the pool
  * - POOL_START_PRICE_{NETWORK}: Starting sqrtPriceX96
- * - POOL_TOKEN0_AMOUNT_{NETWORK}: Human-readable amount of token0 (e.g., "100")
- * - POOL_TOKEN1_AMOUNT_{NETWORK}: Human-readable amount of token1 (e.g., "100")
+ * - POOL_TOKEN0_AMOUNT_{NETWORK}: Amount in base units/wei (e.g., "100000000" for 0.1 USDC with 6 decimals)
+ * - POOL_TOKEN1_AMOUNT_{NETWORK}: Amount in base units/wei (e.g., "100000000000000000" for 0.1 ETH with 18 decimals)
  * - POOL_LIQUIDITY_RANGE_{NETWORK}: Range in tick spacings around current price (e.g., "100")
+ *
+ * IMPORTANT: Token amounts must be specified in base units (wei), NOT human-readable units.
+ * Examples:
+ *   - For 0.1 USDC (6 decimals): POOL_TOKEN0_AMOUNT_SEPOLIA=100000
+ *   - For 0.5 ETH (18 decimals):  POOL_TOKEN0_AMOUNT_SEPOLIA=500000000000000000
+ *   - For 100 USDC (6 decimals):  POOL_TOKEN0_AMOUNT_SEPOLIA=100000000
+ *   - You can use scientific notation: cast --to-wei 0.1 ether
  * - POOL_INITIAL_FEE_{NETWORK}: Initial dynamic fee
  * - POOL_INITIAL_TARGET_RATIO_{NETWORK}: Initial target ratio
  * - POOL_TYPE_{NETWORK}: Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
@@ -72,8 +79,6 @@ contract CreatePoolAndAddLiquidityScript is Script {
     }
 
     struct LiquidityConfig {
-        uint256 token0AmountRaw;
-        uint256 token1AmountRaw;
         uint8 token0Decimals;
         uint8 token1Decimals;
         uint256 token0Amount;
@@ -121,11 +126,12 @@ contract CreatePoolAndAddLiquidityScript is Script {
         envVar = string.concat("POOL_START_PRICE_", config.network);
         config.startPrice = uint160(vm.envUint(envVar));
 
+        // Get token amounts (already in base units/wei)
         envVar = string.concat("POOL_TOKEN0_AMOUNT_", config.network);
-        liq.token0AmountRaw = vm.envUint(envVar);
+        liq.token0Amount = vm.envUint(envVar);
 
         envVar = string.concat("POOL_TOKEN1_AMOUNT_", config.network);
-        liq.token1AmountRaw = vm.envUint(envVar);
+        liq.token1Amount = vm.envUint(envVar);
 
         envVar = string.concat("POOL_LIQUIDITY_RANGE_", config.network);
         config.liquidityRange = vm.envUint(envVar);
@@ -144,12 +150,9 @@ contract CreatePoolAndAddLiquidityScript is Script {
         Currency currency0 = Currency.wrap(config.token0Addr);
         Currency currency1 = Currency.wrap(config.token1Addr);
 
-        // Get token decimals and convert human-readable amounts to wei
+        // Get token decimals for display purposes
         liq.token0Decimals = currency0.isAddressZero() ? 18 : IERC20(config.token0Addr).decimals();
         liq.token1Decimals = currency1.isAddressZero() ? 18 : IERC20(config.token1Addr).decimals();
-
-        liq.token0Amount = liq.token0AmountRaw * (10 ** liq.token0Decimals);
-        liq.token1Amount = liq.token1AmountRaw * (10 ** liq.token1Decimals);
 
         // Calculate tick bounds around current price
         // Uses TickBitmap.compress to ensure ticks are multiples of tickSpacing
@@ -168,13 +171,9 @@ contract CreatePoolAndAddLiquidityScript is Script {
         console.log("Tick Spacing:", uint256(uint24(config.tickSpacing)));
         console.log("Start Price:", config.startPrice);
         console.log("");
-        console.log("Token Amounts (human-readable):");
-        console.log("  - Token0: %s (decimals: %s)", liq.token0AmountRaw, liq.token0Decimals);
-        console.log("  - Token1: %s (decimals: %s)", liq.token1AmountRaw, liq.token1Decimals);
-        console.log("");
-        console.log("Token Amounts (wei):");
-        console.log("  - Token0: %s", liq.token0Amount);
-        console.log("  - Token1: %s", liq.token1Amount);
+        console.log("Token Amounts:");
+        console.log("  - Token0: %s wei (%s decimals)", liq.token0Amount, liq.token0Decimals);
+        console.log("  - Token1: %s wei (%s decimals)", liq.token1Amount, liq.token1Decimals);
         console.log("");
         console.log("Tick Range:");
         console.log("  - Current Tick: %d", currentTick);

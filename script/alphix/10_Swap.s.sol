@@ -14,7 +14,7 @@ import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 /**
  * @title Swap Tokens
  * @notice Executes swaps on a Uniswap V4 pool with Alphix Hook
- * @dev Uses PoolSwapTest router for testing swaps, handles human-readable amounts
+ * @dev Uses PoolSwapTest router for testing swaps
  *
  * USAGE: Run this script to test swaps and observe dynamic fee adjustments
  *
@@ -25,9 +25,17 @@ import {TickMath} from "v4-core/src/libraries/TickMath.sol";
  * - DEPLOYMENT_TOKEN1_{NETWORK}: Token1 address
  * - POOL_TICK_SPACING_{NETWORK}: Pool tick spacing
  * - ALPHIX_HOOK_{NETWORK}: Alphix Hook address
- * - SWAP_AMOUNT_{NETWORK}: Human-readable amount to swap (e.g., "1" for 1 token)
+ * - SWAP_AMOUNT_{NETWORK}: Amount in base units/wei (e.g., "100000000000000000" for 0.1 ETH with 18 decimals)
  * - SWAP_EXACT_INPUT_{NETWORK}: 1 for exact input swap, 0 for exact output swap
  * - SWAP_ZERO_FOR_ONE_{NETWORK}: 1 for token0→token1, 0 for token1→token0
+ *
+ * IMPORTANT: SWAP_AMOUNT must be in base units (wei), NOT human-readable units.
+ * - For exact input: Amount of INPUT token in base units
+ * - For exact output: Amount of OUTPUT token in base units
+ * Examples:
+ *   - Swap 0.1 ETH (18 decimals): SWAP_AMOUNT_SEPOLIA=100000000000000000
+ *   - Swap 50 USDC (6 decimals):  SWAP_AMOUNT_SEPOLIA=50000000
+ *   - Use `cast --to-wei 0.1 ether` for 18-decimal tokens
  *
  * Note:
  * - Exact input: You specify how much you want to sell
@@ -45,7 +53,7 @@ contract SwapScript is Script {
         address token1Addr;
         int24 tickSpacing;
         address hookAddr;
-        uint256 swapAmountRaw;
+        uint256 swapAmount;
         bool isExactInput;
         bool zeroForOne;
     }
@@ -60,8 +68,8 @@ contract SwapScript is Script {
         // Get contract addresses
         config.swapRouterAddr = _getEnvAddress("POOL_SWAP_TEST_ROUTER_", config.network);
 
-        // Get swap parameters
-        config.swapAmountRaw = _getEnvUint("SWAP_AMOUNT_", config.network);
+        // Get swap parameters (amount is already in base units/wei)
+        config.swapAmount = _getEnvUint("SWAP_AMOUNT_", config.network);
         config.isExactInput = _getEnvUint("SWAP_EXACT_INPUT_", config.network) == 1;
         config.zeroForOne = _getEnvUint("SWAP_ZERO_FOR_ONE_", config.network) == 1;
 
@@ -72,7 +80,7 @@ contract SwapScript is Script {
         console.log("Swap Router:", config.swapRouterAddr);
         console.log("");
         console.log("Swap Parameters:");
-        console.log("  - Amount (human-readable): %s", config.swapAmountRaw);
+        console.log("  - Amount (wei): %s", config.swapAmount);
         console.log("  - Type: %s", config.isExactInput ? "Exact Input" : "Exact Output");
         console.log("  - Direction: %s", config.zeroForOne ? "Token0 -> Token1" : "Token1 -> Token0");
         console.log("");
@@ -102,18 +110,18 @@ contract SwapScript is Script {
         console.log("What happened:");
         if (config.isExactInput) {
             if (config.zeroForOne) {
-                console.log("  - Sold %s Token0", config.swapAmountRaw);
+                console.log("  - Sold %s wei of Token0", config.swapAmount);
                 console.log("  - Received Token1 (check balance)");
             } else {
-                console.log("  - Sold %s Token1", config.swapAmountRaw);
+                console.log("  - Sold %s wei of Token1", config.swapAmount);
                 console.log("  - Received Token0 (check balance)");
             }
         } else {
             if (config.zeroForOne) {
-                console.log("  - Bought %s Token1", config.swapAmountRaw);
+                console.log("  - Bought %s wei of Token1", config.swapAmount);
                 console.log("  - Spent Token0 (check balance)");
             } else {
-                console.log("  - Bought %s Token0", config.swapAmountRaw);
+                console.log("  - Bought %s wei of Token0", config.swapAmount);
                 console.log("  - Spent Token1 (check balance)");
             }
         }
@@ -145,26 +153,11 @@ contract SwapScript is Script {
             hooks: IHooks(config.hookAddr)
         });
 
-        // Determine which token decimals to use for amount
-        // Exact input: use input token decimals
-        // Exact output: use output token decimals
-        Currency amountToken;
-        {
-            bool useToken0 = config.isExactInput ? config.zeroForOne : !config.zeroForOne;
-            amountToken = useToken0 ? currency0 : currency1;
-        }
-
-        // Convert amount to wei
-        uint8 decimals = amountToken.isAddressZero() ? 18 : IERC20(Currency.unwrap(amountToken)).decimals();
-        uint256 swapAmountWei = config.swapAmountRaw * (10 ** decimals);
-
-        console.log("Amount Conversion:");
-        console.log("  - Currency: %s", Currency.unwrap(amountToken));
-        console.log("  - Decimals: %s", decimals);
-        console.log("  - Amount (wei): %s", swapAmountWei);
-        console.log("");
+        // Amount is already in base units (wei)
+        uint256 swapAmountWei = config.swapAmount;
 
         // Prepare amount with sign
+        // Exact input: negative (selling), Exact output: positive (buying)
         int256 amountSpecified = config.isExactInput ? -int256(swapAmountWei) : int256(swapAmountWei);
         console.log("Amount Specified: %d", amountSpecified);
         console.log("");
@@ -175,8 +168,10 @@ contract SwapScript is Script {
         {
             Currency inputToken = config.zeroForOne ? currency0 : currency1;
             if (inputToken.isAddressZero()) {
+                // Native ETH - send value
                 valueToPass = config.isExactInput ? swapAmountWei : (swapAmountWei * 2);
             } else {
+                // ERC20 - approve
                 tokenToApprove = Currency.unwrap(inputToken);
             }
         }
