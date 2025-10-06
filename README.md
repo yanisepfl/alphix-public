@@ -199,7 +199,35 @@ forge script script/alphix/11_PokeFee.s.sol --rpc-url $RPC_URL --broadcast
 
 ### Testnet Addresses
 
-Coming Soon.
+**Base Sepolia Deployment**
+
+Core Contracts:
+```
+# Registry contract address
+REGISTRY_BASE_SEPOLIA=0x5a22AA4a4B62E3Ee72cb6d077b0873d6aA794B54
+
+# Alphix Hook contract address (this is the main hook contract)
+ALPHIX_HOOK_BASE_SEPOLIA=0x285A195230239822AdBC6Fd2281c7b1De1a17Fc0
+
+# AlphixLogic implementation contract address
+ALPHIX_LOGIC_IMPL_BASE_SEPOLIA=0x3c59d4d01682c6180a564f52573C07372bD07cb0
+
+# AlphixLogic proxy contract address (this is what Alphix Hook uses)
+ALPHIX_LOGIC_PROXY_BASE_SEPOLIA=0x8768950eB999Faa53c8b0aA0Cd7dCC19b9D23A34
+```
+
+Active Pools:
+```
+# aUSDC/aDAI pool
+Pool ID: 0x4bd4386e6ef583af6cea0e010a7118f41c4d3315e88b81a88fc7fd3822bf766b
+
+# aDAI/aETH pool
+Pool ID: 0x47da32fed07f99dc9a10744a58f43bf563909d8b46203c300487caf3edd8b1f3
+```
+
+### Mainnet Addresses
+
+Coming Soon!
 
 ## Links & Resources
 
