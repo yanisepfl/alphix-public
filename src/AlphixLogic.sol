@@ -24,7 +24,6 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeS
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* LOCAL IMPORTS */
-import {IAlphix} from "./interfaces/IAlphix.sol";
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "./libraries/AlphixGlobalConstants.sol";

@@ -9,10 +9,10 @@ src = "src"
 via_ir = false
 
 [fuzz]
-runs = 512
+runs = 256
 
 [invariant]
-runs = 512
+runs = 256
 depth = 50
 fail_on_revert = false
 

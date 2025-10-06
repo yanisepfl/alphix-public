@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -15,7 +14,6 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 /* SOLMATE IMPORTS */
-import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";

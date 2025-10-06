@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -10,7 +10,6 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
@@ -388,8 +387,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
             data._lowerTick = TickMath.getTickAtSqrtPrice(data.lowerPrice);
             data._upperTick = TickMath.getTickAtSqrtPrice(data.upperPrice);
             unchecked {
-                data.lowerTick = int24((data._lowerTick / int256(data.tickSpacing)) * int256(data.tickSpacing));
-                data.upperTick = int24((data._upperTick / int256(data.tickSpacing)) * int256(data.tickSpacing));
+                int256 lowerTickRounded = data._lowerTick / int256(data.tickSpacing);
+                int256 upperTickRounded = data._upperTick / int256(data.tickSpacing);
+                data.lowerTick = int24(lowerTickRounded * int256(data.tickSpacing));
+                data.upperTick = int24(upperTickRounded * int256(data.tickSpacing));
             }
         }
 

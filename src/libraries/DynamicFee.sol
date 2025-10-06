@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* UNISWAP V4 IMPORTS */
-import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 
 /* LOCAL IMPORTS */

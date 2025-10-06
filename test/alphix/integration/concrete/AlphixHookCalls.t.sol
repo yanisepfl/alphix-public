@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 
 /* OZ IMPORTS */
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
@@ -26,7 +25,6 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 /* LOCAL IMPORTS */
 import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";

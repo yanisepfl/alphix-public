@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
