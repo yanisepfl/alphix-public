@@ -2,16 +2,14 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
@@ -29,7 +27,7 @@ contract TestBaseDynamicFeeFuzz is BaseDynamicFee {
     uint24 public mockFee = 500;
     uint256 public mockOldTargetRatio = 5e17;
     uint256 public mockNewTargetRatio = 6e17;
-    DynamicFeeLib.OOBState public mockOOBState;
+    DynamicFeeLib.OobState public mockOobState;
     bool public shouldRevertOnGetFee = false;
 
     constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) {}
@@ -38,12 +36,12 @@ contract TestBaseDynamicFeeFuzz is BaseDynamicFee {
         internal
         view
         override
-        returns (uint24, uint256, uint256, DynamicFeeLib.OOBState memory)
+        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory)
     {
         if (shouldRevertOnGetFee) {
             revert("Mock revert in _getFee");
         }
-        return (mockFee, mockOldTargetRatio, mockNewTargetRatio, mockOOBState);
+        return (mockFee, mockOldTargetRatio, mockNewTargetRatio, mockOobState);
     }
 
     // Test helper functions
@@ -51,16 +49,16 @@ contract TestBaseDynamicFeeFuzz is BaseDynamicFee {
         uint24 _fee,
         uint256 _oldTargetRatio,
         uint256 _newTargetRatio,
-        DynamicFeeLib.OOBState memory _oobState
+        DynamicFeeLib.OobState memory _oobState
     ) external {
         mockFee = _fee;
         mockOldTargetRatio = _oldTargetRatio;
         mockNewTargetRatio = _newTargetRatio;
-        mockOOBState = _oobState;
+        mockOobState = _oobState;
     }
 
-    function getMockOOBState() external view returns (DynamicFeeLib.OOBState memory) {
-        return mockOOBState;
+    function getMockOobState() external view returns (DynamicFeeLib.OobState memory) {
+        return mockOobState;
     }
 
     function setShouldRevertOnGetFee(bool _shouldRevert) external {
@@ -226,7 +224,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
         // Set mock values
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, oobState);
 
         // Poke the pool
@@ -242,26 +240,26 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @dev Should handle all valid OOB state combinations
      * @param mockFee Fee to set
      * @param currentRatio Current ratio
-     * @param lastOOBWasUpper Whether last OOB was upper
-     * @param consecutiveOOBHits Number of consecutive OOB hits
+     * @param lastOobWasUpper Whether last OOB was upper
+     * @param consecutiveOobHits Number of consecutive OOB hits
      */
-    function testFuzz_poke_success_withDifferentOOBStates(
+    function testFuzz_poke_success_withDifferentOobStates(
         uint24 mockFee,
         uint256 currentRatio,
-        bool lastOOBWasUpper,
-        uint24 consecutiveOOBHits
+        bool lastOobWasUpper,
+        uint24 consecutiveOobHits
     ) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
-        consecutiveOOBHits = uint24(bound(consecutiveOOBHits, MIN_OOB_HITS_FUZZ, MAX_OOB_HITS_FUZZ));
+        consecutiveOobHits = uint24(bound(consecutiveOobHits, MIN_OOB_HITS_FUZZ, MAX_OOB_HITS_FUZZ));
 
         // Initialize pool
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
         // Set mock values with OOB state
-        DynamicFeeLib.OOBState memory oobState =
-            DynamicFeeLib.OOBState({lastOOBWasUpper: lastOOBWasUpper, consecutiveOOBHits: consecutiveOOBHits});
+        DynamicFeeLib.OobState memory oobState =
+            DynamicFeeLib.OobState({lastOobWasUpper: lastOobWasUpper, consecutiveOobHits: consecutiveOobHits});
         testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
 
         // Poke the pool
@@ -272,9 +270,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         assertEq(newFee, mockFee, "Fee should be updated to mock value");
 
         // Verify OOB state was stored
-        DynamicFeeLib.OOBState memory retrievedState = testHook.getMockOOBState();
-        assertEq(retrievedState.lastOOBWasUpper, lastOOBWasUpper, "OOB state lastOOBWasUpper should match");
-        assertEq(retrievedState.consecutiveOOBHits, consecutiveOOBHits, "OOB state consecutiveOOBHits should match");
+        DynamicFeeLib.OobState memory retrievedState = testHook.getMockOobState();
+        assertEq(retrievedState.lastOobWasUpper, lastOobWasUpper, "OOB state lastOobWasUpper should match");
+        assertEq(retrievedState.consecutiveOobHits, consecutiveOobHits, "OOB state consecutiveOobHits should match");
     }
 
     /**
@@ -288,7 +286,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
         currentRatio = bound(currentRatio, 0, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
 
         // Initialize pool first
@@ -317,7 +315,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         oldTargetRatio = bound(oldTargetRatio, 0, MAX_RATIO_FUZZ);
         newTargetRatio = bound(newTargetRatio, 0, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, oobState);
 
         // Initialize pool first
@@ -339,7 +337,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
 
         uint256 maxRatio = MAX_RATIO_FUZZ;
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(mockFee, maxRatio, maxRatio, oobState);
 
         // Initialize pool first
@@ -368,7 +366,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
         // Set initial fee
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(initialFee, 5e17, 6e17, oobState);
         testHook.poke(dynamicFeeKey, currentRatio);
 
@@ -397,7 +395,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         uint24 mockFee = useMinFee ? MIN_FEE_FUZZ : MAX_FEE_FUZZ;
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
 
         // Initialize pool
@@ -416,43 +414,43 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @param mockFee Fee to set
      * @param oldTargetRatio Old target ratio
      * @param newTargetRatio New target ratio
-     * @param lastOOBWasUpper OOB state flag
-     * @param consecutiveOOBHits OOB hit count
+     * @param lastOobWasUpper OOB state flag
+     * @param consecutiveOobHits OOB hit count
      */
     function testFuzz_mockValues_setAndRetrieve(
         uint24 mockFee,
         uint256 oldTargetRatio,
         uint256 newTargetRatio,
-        bool lastOOBWasUpper,
-        uint24 consecutiveOOBHits
+        bool lastOobWasUpper,
+        uint24 consecutiveOobHits
     ) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
         oldTargetRatio = bound(oldTargetRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
         newTargetRatio = bound(newTargetRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
-        consecutiveOOBHits = uint24(bound(consecutiveOOBHits, MIN_OOB_HITS_FUZZ, MAX_OOB_HITS_FUZZ));
+        consecutiveOobHits = uint24(bound(consecutiveOobHits, MIN_OOB_HITS_FUZZ, MAX_OOB_HITS_FUZZ));
 
-        DynamicFeeLib.OOBState memory expectedOOBState =
-            DynamicFeeLib.OOBState({lastOOBWasUpper: lastOOBWasUpper, consecutiveOOBHits: consecutiveOOBHits});
+        DynamicFeeLib.OobState memory expectedOobState =
+            DynamicFeeLib.OobState({lastOobWasUpper: lastOobWasUpper, consecutiveOobHits: consecutiveOobHits});
 
         // Set mock values
-        testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, expectedOOBState);
+        testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, expectedOobState);
 
         // Verify values are set correctly
         assertEq(testHook.mockFee(), mockFee, "Mock fee should be set");
         assertEq(testHook.mockOldTargetRatio(), oldTargetRatio, "Mock old target ratio should be set");
         assertEq(testHook.mockNewTargetRatio(), newTargetRatio, "Mock new target ratio should be set");
 
-        DynamicFeeLib.OOBState memory retrievedOOBState = testHook.getMockOOBState();
+        DynamicFeeLib.OobState memory retrievedOobState = testHook.getMockOobState();
         assertEq(
-            retrievedOOBState.lastOOBWasUpper,
-            expectedOOBState.lastOOBWasUpper,
-            "Mock OOB state lastOOBWasUpper should be set"
+            retrievedOobState.lastOobWasUpper,
+            expectedOobState.lastOobWasUpper,
+            "Mock OOB state lastOobWasUpper should be set"
         );
         assertEq(
-            retrievedOOBState.consecutiveOOBHits,
-            expectedOOBState.consecutiveOOBHits,
-            "Mock OOB state consecutiveOOBHits should be set"
+            retrievedOobState.consecutiveOobHits,
+            expectedOobState.consecutiveOobHits,
+            "Mock OOB state consecutiveOobHits should be set"
         );
     }
 
@@ -473,7 +471,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         ratio2 = bound(ratio2, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
         ratio3 = bound(ratio3, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
 
         // Initialize pool
@@ -518,7 +516,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         // Ensure they're different
         vm.assume(oldTargetRatio != newTargetRatio);
 
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, oobState);
 
         // Initialize pool

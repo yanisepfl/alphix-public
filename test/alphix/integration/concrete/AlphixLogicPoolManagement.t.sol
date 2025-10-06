@@ -918,7 +918,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Prepare finalize parameters
         uint256 newTargetRatio = 1.5e18;
-        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+        DynamicFeeLib.OobState memory sOut = DynamicFeeLib.OobState({consecutiveOobHits: 1, lastOobWasUpper: true});
 
         // Should revert immediately after pool activation (cooldown not elapsed)
         vm.prank(address(hook));
@@ -963,7 +963,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Prepare finalize parameters
         uint256 newTargetRatio = 1.5e18;
-        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+        DynamicFeeLib.OobState memory sOut = DynamicFeeLib.OobState({consecutiveOobHits: 1, lastOobWasUpper: true});
 
         // Should revert when called by non-hook (user1)
         vm.prank(user1);
@@ -991,7 +991,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Prepare finalize parameters
         uint256 newTargetRatio = 1.5e18;
-        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+        DynamicFeeLib.OobState memory sOut = DynamicFeeLib.OobState({consecutiveOobHits: 1, lastOobWasUpper: true});
 
         // Should revert due to pool being inactive
         vm.prank(address(hook));
@@ -1019,7 +1019,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Prepare finalize parameters
         uint256 newTargetRatio = 1.5e18;
-        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+        DynamicFeeLib.OobState memory sOut = DynamicFeeLib.OobState({consecutiveOobHits: 1, lastOobWasUpper: true});
 
         // Should revert due to contract being paused
         vm.prank(address(hook));
@@ -1044,7 +1044,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         vm.warp(block.timestamp + pp.minPeriod);
 
         // Create some OOB state
-        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({lastOOBWasUpper: true, consecutiveOOBHits: 1});
+        DynamicFeeLib.OobState memory sOut = DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: 1});
 
         // Attempt to finalize with zero targetRatio should revert
         vm.prank(address(hook));
@@ -1070,7 +1070,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
 
         // Prepare finalize parameters
         uint256 newTargetRatio = 2.5e18;
-        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 3, lastOOBWasUpper: false});
+        DynamicFeeLib.OobState memory sOut = DynamicFeeLib.OobState({consecutiveOobHits: 3, lastOobWasUpper: false});
 
         // Execute finalization
         vm.prank(address(hook));
@@ -1115,7 +1115,7 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
         vm.warp(block.timestamp + pp.minPeriod);
 
-        DynamicFeeLib.OOBState memory sOut = DynamicFeeLib.OOBState({consecutiveOOBHits: 1, lastOOBWasUpper: true});
+        DynamicFeeLib.OobState memory sOut = DynamicFeeLib.OobState({consecutiveOobHits: 1, lastOobWasUpper: true});
 
         // Set a target ratio that's at the current limit
         uint256 validHighRatio = pp.maxCurrentRatio; // Use current max (1e21)

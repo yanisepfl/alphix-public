@@ -41,7 +41,7 @@ abstract contract BaseDynamicFee is BaseHook {
     function _getFee(PoolKey calldata key, uint256 currentRatio)
         internal
         virtual
-        returns (uint24, uint256, uint256, DynamicFeeLib.OOBState memory);
+        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory);
 
     /**
      * @dev Set the fee after the pool is initialized.

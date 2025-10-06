@@ -305,10 +305,10 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         vm.expectRevert();
         hook.setLogic(address(maliciousContract));
 
-        MockERC165 mockERC165 = new MockERC165();
+        MockERC165 mockErc165 = new MockERC165();
         vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidLogicContract.selector);
-        hook.setLogic(address(mockERC165));
+        hook.setLogic(address(mockErc165));
     }
 
     /**

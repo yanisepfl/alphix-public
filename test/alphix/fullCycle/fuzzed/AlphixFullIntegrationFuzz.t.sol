@@ -49,7 +49,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
     uint256 constant MAX_SWAP_AMOUNT = 50e18;
 
     // Structs to avoid stack too deep
-    struct LPConfig {
+    struct LpConfig {
         uint128 aliceLiq;
         uint128 bobLiq;
         uint128 charlieLiq;
@@ -513,7 +513,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
         (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
 
-        LPConfig memory lpConfig = LPConfig({
+        LpConfig memory lpConfig = LpConfig({
             aliceLiq: uint128(bound(aliceLiq, MIN_LIQUIDITY * 100, MAX_LIQUIDITY / 3)),
             bobLiq: uint128(bound(bobLiq, MIN_LIQUIDITY * 100, MAX_LIQUIDITY / 3)),
             charlieLiq: uint128(bound(charlieLiq, MIN_LIQUIDITY * 100, MAX_LIQUIDITY / 3)),
@@ -535,21 +535,21 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         _addLiquidityForUser(alice, testKey, tickLower, tickUpper, lpConfig.aliceLiq);
         vm.stopPrank();
 
-        (uint256 feeGrowth0_start,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
+        (uint256 feeGrowth0Start,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
         for (uint256 i = 0; i < 2; i++) {
             _performSwapAndVerifyFee(dave, testKey, testPoolId, swapConfig.swapAmount, lpConfig.aliceLiq, true);
         }
-        _verifyLPFeesEarned(
+        _verifyLpFeesEarned(
             testPoolId,
             tickLower,
             tickUpper,
             lpConfig.aliceLiq,
-            feeGrowth0_start,
+            feeGrowth0Start,
             (swapConfig.swapAmount * swapConfig.feeRate * 2) / 1_000_000
         );
 
         // Phase 2: Bob joins
-        (uint256 feeGrowth0_bobJoins,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
+        (uint256 feeGrowth0BobJoins,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
         vm.warp(block.timestamp + (weeksBetween * 7 days));
         vm.startPrank(bob);
         _addLiquidityForUser(bob, testKey, tickLower, tickUpper, lpConfig.bobLiq);
@@ -561,26 +561,26 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         }
 
         uint256 totalFees = (swapConfig.swapAmount * swapConfig.feeRate * 2) / 1_000_000;
-        _verifyLPFeesEarned(
+        _verifyLpFeesEarned(
             testPoolId,
             tickLower,
             tickUpper,
             lpConfig.aliceLiq,
-            feeGrowth0_bobJoins,
+            feeGrowth0BobJoins,
             totalFees * lpConfig.aliceLiq / lpConfig.totalLiquidity
         );
-        _verifyLPFeesEarned(
+        _verifyLpFeesEarned(
             testPoolId,
             tickLower,
             tickUpper,
             lpConfig.bobLiq,
-            feeGrowth0_bobJoins,
+            feeGrowth0BobJoins,
             totalFees * lpConfig.bobLiq / lpConfig.totalLiquidity
         );
 
         // Phase 3: Charlie joins
         {
-            (uint256 feeGrowth0_charlieJoins,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
+            (uint256 feeGrowth0CharlieJoins,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
             vm.warp(block.timestamp + (weeksBetween * 7 days));
 
             vm.startPrank(charlie);
@@ -595,28 +595,28 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
             }
 
             totalFees = (swapConfig.swapAmount * swapConfig.feeRate * 2) / 1_000_000;
-            _verifyLPFeesEarned(
+            _verifyLpFeesEarned(
                 testPoolId,
                 tickLower,
                 tickUpper,
                 lpConfig.aliceLiq,
-                feeGrowth0_charlieJoins,
+                feeGrowth0CharlieJoins,
                 totalFees * lpConfig.aliceLiq / lpConfig.totalLiquidity
             );
-            _verifyLPFeesEarned(
+            _verifyLpFeesEarned(
                 testPoolId,
                 tickLower,
                 tickUpper,
                 lpConfig.bobLiq,
-                feeGrowth0_charlieJoins,
+                feeGrowth0CharlieJoins,
                 totalFees * lpConfig.bobLiq / lpConfig.totalLiquidity
             );
-            _verifyLPFeesEarned(
+            _verifyLpFeesEarned(
                 testPoolId,
                 tickLower,
                 tickUpper,
                 lpConfig.charlieLiq,
-                feeGrowth0_charlieJoins,
+                feeGrowth0CharlieJoins,
                 totalFees * lpConfig.charlieLiq / lpConfig.totalLiquidity
             );
         }
@@ -627,7 +627,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @dev Uses feeGrowthInside to verify each LP earns 25% of total fees
      */
     function testFuzz_equal_LPs_equal_timeline(
-        uint128 liquidityPerLP,
+        uint128 liquidityPerLp,
         uint256 swapAmount,
         uint8 numSwaps,
         uint8 poolTypeRaw
@@ -638,24 +638,24 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         SwapConfig memory swapConfig;
         swapConfig.swapAmount = bound(swapAmount, MIN_SWAP_AMOUNT * 10, MAX_SWAP_AMOUNT / 10);
         swapConfig.numSwaps = uint8(bound(numSwaps, 5, 10));
-        liquidityPerLP = uint128(bound(liquidityPerLP, MIN_LIQUIDITY * 100, MAX_LIQUIDITY / 4));
+        liquidityPerLp = uint128(bound(liquidityPerLp, MIN_LIQUIDITY * 100, MAX_LIQUIDITY / 4));
 
         int24 tickLower = TickMath.minUsableTick(testKey.tickSpacing);
         int24 tickUpper = TickMath.maxUsableTick(testKey.tickSpacing);
 
         // Add equal liquidity for 4 LPs
-        _addFourEqualLPs(testKey, tickLower, tickUpper, liquidityPerLP);
+        _addFourEqualLPs(testKey, tickLower, tickUpper, liquidityPerLp);
 
-        _testEqualDistribution(testKey, testPoolId, tickLower, tickUpper, liquidityPerLP, swapConfig);
+        _testEqualDistribution(testKey, testPoolId, tickLower, tickUpper, liquidityPerLp, swapConfig);
     }
 
-    function _addFourEqualLPs(PoolKey memory testKey, int24 tickLower, int24 tickUpper, uint128 liquidityPerLP)
+    function _addFourEqualLPs(PoolKey memory testKey, int24 tickLower, int24 tickUpper, uint128 liquidityPerLp)
         internal
     {
         address[4] memory lps = [alice, bob, charlie, dave];
         for (uint256 i = 0; i < lps.length; i++) {
             vm.startPrank(lps[i]);
-            _addLiquidityForUser(lps[i], testKey, tickLower, tickUpper, liquidityPerLP);
+            _addLiquidityForUser(lps[i], testKey, tickLower, tickUpper, liquidityPerLp);
             vm.stopPrank();
         }
     }
@@ -665,12 +665,12 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         PoolId testPoolId,
         int24 tickLower,
         int24 tickUpper,
-        uint128 liquidityPerLP,
+        uint128 liquidityPerLp,
         SwapConfig memory swapConfig
     ) internal {
-        uint128 totalLiquidity = liquidityPerLP * 4;
+        uint128 totalLiquidity = liquidityPerLp * 4;
         (,,, swapConfig.feeRate) = poolManager.getSlot0(testPoolId);
-        (uint256 feeGrowth0_start,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
+        (uint256 feeGrowth0Start,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
 
         // Mint and swap
         vm.startPrank(owner);
@@ -681,8 +681,8 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         _performMultipleSwaps(user1, testKey, testPoolId, swapConfig.swapAmount, totalLiquidity, swapConfig.numSwaps);
 
         // Each LP should earn 25%
-        uint256 expectedFeesPerLP = ((swapConfig.swapAmount * swapConfig.feeRate * swapConfig.numSwaps) / 1_000_000) / 4;
-        _verifyLPFeesEarned(testPoolId, tickLower, tickUpper, liquidityPerLP, feeGrowth0_start, expectedFeesPerLP);
+        uint256 expectedFeesPerLp = ((swapConfig.swapAmount * swapConfig.feeRate * swapConfig.numSwaps) / 1_000_000) / 4;
+        _verifyLpFeesEarned(testPoolId, tickLower, tickUpper, liquidityPerLp, feeGrowth0Start, expectedFeesPerLp);
     }
 
     /* ========================================================================== */
@@ -1080,7 +1080,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @notice Verify LP earns exact fees proportional to their liquidity
      * @dev Uses feeGrowthInside for position-specific fee tracking
      */
-    function _verifyLPFeesEarned(
+    function _verifyLpFeesEarned(
         PoolId poolId,
         int24 tickLower,
         int24 tickUpper,

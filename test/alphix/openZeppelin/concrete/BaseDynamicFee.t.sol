@@ -2,16 +2,14 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
@@ -28,7 +26,7 @@ contract TestBaseDynamicFee is BaseDynamicFee {
     uint24 public mockFee = 500;
     uint256 public mockOldTargetRatio = 5e17;
     uint256 public mockNewTargetRatio = 6e17;
-    DynamicFeeLib.OOBState public mockOOBState;
+    DynamicFeeLib.OobState public mockOobState;
     bool public shouldRevertOnGetFee = false;
 
     constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) {}
@@ -37,12 +35,12 @@ contract TestBaseDynamicFee is BaseDynamicFee {
         internal
         view
         override
-        returns (uint24, uint256, uint256, DynamicFeeLib.OOBState memory)
+        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory)
     {
         if (shouldRevertOnGetFee) {
             revert("Mock revert in _getFee");
         }
-        return (mockFee, mockOldTargetRatio, mockNewTargetRatio, mockOOBState);
+        return (mockFee, mockOldTargetRatio, mockNewTargetRatio, mockOobState);
     }
 
     // Test helper functions
@@ -50,16 +48,16 @@ contract TestBaseDynamicFee is BaseDynamicFee {
         uint24 _fee,
         uint256 _oldTargetRatio,
         uint256 _newTargetRatio,
-        DynamicFeeLib.OOBState memory _oobState
+        DynamicFeeLib.OobState memory _oobState
     ) external {
         mockFee = _fee;
         mockOldTargetRatio = _oldTargetRatio;
         mockNewTargetRatio = _newTargetRatio;
-        mockOOBState = _oobState;
+        mockOobState = _oobState;
     }
 
-    function getMockOOBState() external view returns (DynamicFeeLib.OOBState memory) {
-        return mockOOBState;
+    function getMockOobState() external view returns (DynamicFeeLib.OobState memory) {
+        return mockOobState;
     }
 
     function setShouldRevertOnGetFee(bool _shouldRevert) external {
@@ -159,7 +157,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
         // Set mock values
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(expectedFee, 5e17, 6e17, oobState);
 
         // Get initial fee
@@ -196,7 +194,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
 
     function test_poke_withDifferentCurrentRatios() public {
         uint24 baseFee = 750;
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(baseFee, 5e17, 6e17, oobState);
 
         // Initialize pool first
@@ -223,7 +221,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
 
     function test_poke_zeroCurrentRatio() public {
         uint24 expectedFee = 300;
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(expectedFee, 0, 0, oobState);
 
         // Initialize pool first
@@ -238,7 +236,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
     function test_poke_maxCurrentRatio() public {
         uint24 expectedFee = 9999;
         uint256 maxRatio = type(uint256).max;
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(expectedFee, maxRatio, maxRatio, oobState);
 
         // Initialize pool first
@@ -256,27 +254,27 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         uint24 expectedFee = 1500;
         uint256 expectedOldRatio = 4e17;
         uint256 expectedNewRatio = 7e17;
-        DynamicFeeLib.OOBState memory expectedOOBState =
-            DynamicFeeLib.OOBState({lastOOBWasUpper: true, consecutiveOOBHits: 3});
+        DynamicFeeLib.OobState memory expectedOobState =
+            DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: 3});
 
         // Set mock values
-        testHook.setMockValues(expectedFee, expectedOldRatio, expectedNewRatio, expectedOOBState);
+        testHook.setMockValues(expectedFee, expectedOldRatio, expectedNewRatio, expectedOobState);
 
         // Verify values are set correctly
         assertEq(testHook.mockFee(), expectedFee, "Mock fee should be set");
         assertEq(testHook.mockOldTargetRatio(), expectedOldRatio, "Mock old target ratio should be set");
         assertEq(testHook.mockNewTargetRatio(), expectedNewRatio, "Mock new target ratio should be set");
 
-        DynamicFeeLib.OOBState memory retrievedOOBState = testHook.getMockOOBState();
+        DynamicFeeLib.OobState memory retrievedOobState = testHook.getMockOobState();
         assertEq(
-            retrievedOOBState.lastOOBWasUpper,
-            expectedOOBState.lastOOBWasUpper,
-            "Mock OOB state lastOOBWasUpper should be set"
+            retrievedOobState.lastOobWasUpper,
+            expectedOobState.lastOobWasUpper,
+            "Mock OOB state lastOobWasUpper should be set"
         );
         assertEq(
-            retrievedOOBState.consecutiveOOBHits,
-            expectedOOBState.consecutiveOOBHits,
-            "Mock OOB state consecutiveOOBHits should be set"
+            retrievedOobState.consecutiveOobHits,
+            expectedOobState.consecutiveOobHits,
+            "Mock OOB state consecutiveOobHits should be set"
         );
     }
 
@@ -300,7 +298,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
         uint24 newFee = 1250;
-        DynamicFeeLib.OOBState memory oobState;
+        DynamicFeeLib.OobState memory oobState;
         testHook.setMockValues(newFee, 5e17, 6e17, oobState);
 
         // Get fee before poke

@@ -5,7 +5,6 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 
 /* OZ IMPORTS */
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -14,7 +13,6 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* LOCAL IMPORTS */
-import {MockAlphixLogic} from "./MockAlphixLogic.sol";
 import {MockERC165} from "./MockERC165.sol";
 import {MockReenteringLogic} from "./MockReenteringLogic.sol";
 import {IAlphixLogic} from "../../../src/interfaces/IAlphixLogic.sol";
@@ -26,39 +24,39 @@ import {DynamicFeeLib} from "../../../src/libraries/DynamicFee.sol";
  * @notice Test contract for mock implementations used in testing
  */
 contract MockAlphixLogicTest is Test {
-    MockERC165 public mockERC165;
+    MockERC165 public mockErc165;
     MockReenteringLogic public mockReenteringLogic;
     address public mockHook;
 
     function setUp() public {
-        mockERC165 = new MockERC165();
+        mockErc165 = new MockERC165();
         mockHook = address(0x1234); // Mock hook address
         mockReenteringLogic = new MockReenteringLogic(mockHook);
     }
 
     /* MOCK ERC165 TESTS */
 
-    function test_mockERC165_supportsInterface_returnsFalse() public view {
+    function test_mockErc165_supportsInterface_returnsFalse() public view {
         // Test that MockERC165 always returns false for interface support
         bytes4 arbitraryInterface = 0x12345678;
-        assertFalse(mockERC165.supportsInterface(arbitraryInterface), "MockERC165 should always return false");
+        assertFalse(mockErc165.supportsInterface(arbitraryInterface), "MockERC165 should always return false");
 
         // Test with IAlphixLogic interface
         bytes4 alphixLogicInterface = type(IAlphixLogic).interfaceId;
-        assertFalse(mockERC165.supportsInterface(alphixLogicInterface), "MockERC165 should not support IAlphixLogic");
+        assertFalse(mockErc165.supportsInterface(alphixLogicInterface), "MockERC165 should not support IAlphixLogic");
     }
 
-    function test_mockERC165_implementsIERC165() public view {
+    function test_mockErc165_implementsIERC165() public view {
         // Verify it implements IERC165
         bytes4 erc165Interface = 0x01ffc9a7; // IERC165 interface ID
         // Note: MockERC165 returns false for everything, including IERC165 itself
-        assertFalse(mockERC165.supportsInterface(erc165Interface), "MockERC165 returns false for everything");
+        assertFalse(mockErc165.supportsInterface(erc165Interface), "MockERC165 returns false for everything");
     }
 
     /* MOCK REENTERING LOGIC TESTS */
 
     function test_mockReenteringLogic_constructor() public view {
-        assertEq(mockReenteringLogic.hook(), mockHook, "Hook address should be set correctly");
+        assertEq(mockReenteringLogic.HOOK(), mockHook, "Hook address should be set correctly");
     }
 
     function test_mockReenteringLogic_supportsInterface_returnsTrue() public view {
@@ -106,15 +104,15 @@ contract MockAlphixLogicTest is Test {
         });
 
         // This should succeed and call the mock hook's poke function
-        (uint24 fee, uint256 oldRatio, uint256 newRatio, DynamicFeeLib.OOBState memory oobState) =
+        (uint24 fee, uint256 oldRatio, uint256 newRatio, DynamicFeeLib.OobState memory oobState) =
             reenteringLogic.computeFeeAndTargetRatio(key, 5e17);
 
         // Verify the returned values match the mock implementation
         assertEq(fee, 3000, "Should return mock fee");
         assertEq(oldRatio, 0, "Should return zero old ratio");
         assertEq(newRatio, 0, "Should return zero new ratio");
-        assertFalse(oobState.lastOOBWasUpper, "Should return false for lastOOBWasUpper");
-        assertEq(oobState.consecutiveOOBHits, 0, "Should return zero consecutive hits");
+        assertFalse(oobState.lastOobWasUpper, "Should return false for lastOobWasUpper");
+        assertEq(oobState.consecutiveOobHits, 0, "Should return zero consecutive hits");
 
         // Verify the mock hook's poke was called
         assertTrue(mockHookWithPoke.pokeCalled(), "Poke should have been called");
@@ -166,10 +164,10 @@ contract MockAlphixLogicTest is Test {
 
     function test_oobState_struct() public pure {
         // Test OOB state struct
-        DynamicFeeLib.OOBState memory oobState = DynamicFeeLib.OOBState({lastOOBWasUpper: true, consecutiveOOBHits: 5});
+        DynamicFeeLib.OobState memory oobState = DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: 5});
 
-        assertTrue(oobState.lastOOBWasUpper, "Last OOB should be upper");
-        assertEq(oobState.consecutiveOOBHits, 5, "Consecutive hits should be 5");
+        assertTrue(oobState.lastOobWasUpper, "Last OOB should be upper");
+        assertEq(oobState.consecutiveOobHits, 5, "Consecutive hits should be 5");
     }
 
     function test_error_selectors() public pure {

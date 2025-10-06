@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -350,11 +349,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             _getAboveToleranceRatio(INITIAL_TARGET_RATIO, restrictiveParams.ratioTolerance) + ratioDeviation;
 
         // Create two separate pools for clean comparison
-        (Currency c0_perm, Currency c1_perm) = deployCurrencyPairWithDecimals(18, 18);
-        (Currency c0_rest, Currency c1_rest) = deployCurrencyPairWithDecimals(18, 18);
+        (Currency c0Perm, Currency c1Perm) = deployCurrencyPairWithDecimals(18, 18);
+        (Currency c0Rest, Currency c1Rest) = deployCurrencyPairWithDecimals(18, 18);
 
-        PoolKey memory permissiveKey = PoolKey(c0_perm, c1_perm, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
-        PoolKey memory restrictiveKey = PoolKey(c0_rest, c1_rest, LPFeeLibrary.DYNAMIC_FEE_FLAG, 80, IHooks(hook));
+        PoolKey memory permissiveKey = PoolKey(c0Perm, c1Perm, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        PoolKey memory restrictiveKey = PoolKey(c0Rest, c1Rest, LPFeeLibrary.DYNAMIC_FEE_FLAG, 80, IHooks(hook));
 
         // Initialize both pools
         poolManager.initialize(permissiveKey, Constants.SQRT_PRICE_1_1);
@@ -937,24 +936,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint24 /* baseMaxFeeDelta */
     ) internal {
         // Create two separate pools with different currencies
-        (Currency c0_1, Currency c1_1) = deployCurrencyPairWithDecimals(18, 18);
-        (Currency c0_2, Currency c1_2) = deployCurrencyPairWithDecimals(18, 18);
+        (Currency c01, Currency c11) = deployCurrencyPairWithDecimals(18, 18);
+        (Currency c02, Currency c12) = deployCurrencyPairWithDecimals(18, 18);
 
-        testData.key1 = PoolKey({
-            currency0: c0_1,
-            currency1: c1_1,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: hook
-        });
+        testData.key1 =
+            PoolKey({currency0: c01, currency1: c11, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
 
-        testData.key2 = PoolKey({
-            currency0: c0_2,
-            currency1: c1_2,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: hook
-        });
+        testData.key2 =
+            PoolKey({currency0: c02, currency1: c12, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
 
         // Initialize both pools
         poolManager.initialize(testData.key1, Constants.SQRT_PRICE_1_1);
@@ -1378,24 +1367,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      * @return key2 Second pool key
      */
     function _createParameterComparisonPools() internal returns (PoolKey memory key1, PoolKey memory key2) {
-        (Currency c0_1, Currency c1_1) = deployCurrencyPairWithDecimals(18, 18);
-        (Currency c0_2, Currency c1_2) = deployCurrencyPairWithDecimals(18, 18);
+        (Currency c01, Currency c11) = deployCurrencyPairWithDecimals(18, 18);
+        (Currency c02, Currency c12) = deployCurrencyPairWithDecimals(18, 18);
 
-        key1 = PoolKey({
-            currency0: c0_1,
-            currency1: c1_1,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: hook
-        });
+        key1 =
+            PoolKey({currency0: c01, currency1: c11, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
 
-        key2 = PoolKey({
-            currency0: c0_2,
-            currency1: c1_2,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: hook
-        });
+        key2 =
+            PoolKey({currency0: c02, currency1: c12, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
 
         // Initialize both pools
         poolManager.initialize(key1, Constants.SQRT_PRICE_1_1);

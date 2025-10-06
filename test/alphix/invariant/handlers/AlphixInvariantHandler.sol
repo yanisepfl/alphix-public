@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 import {CommonBase} from "forge-std/Base.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {StdUtils} from "forge-std/StdUtils.sol";
@@ -27,7 +26,6 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Alphix} from "../../../../src/Alphix.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
-import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 
 /**
@@ -59,23 +57,23 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
     Currency public currency1;
 
     // Call counters for statistics
-    uint256 public callCount_poke;
-    uint256 public callCount_pokeFailed; // Track failed poke attempts for cooldown validation
-    uint256 public callCount_swap;
-    uint256 public callCount_addLiquidity;
-    uint256 public callCount_removeLiquidity;
-    uint256 public callCount_timeWarp;
-    uint256 public callCount_pause;
-    uint256 public callCount_unpause;
+    uint256 public callCountpoke;
+    uint256 public callCountpokeFailed; // Track failed poke attempts for cooldown validation
+    uint256 public callCountswap;
+    uint256 public callCountaddLiquidity;
+    uint256 public callCountremoveLiquidity;
+    uint256 public callCounttimeWarp;
+    uint256 public callCountpause;
+    uint256 public callCountunpause;
 
     // Ghost variables for tracking state
-    uint256 public ghost_sumOfFees;
-    uint256 public ghost_sumOfTargetRatios;
-    uint256 public ghost_maxFeeObserved;
-    uint256 public ghost_minFeeObserved = type(uint256).max;
-    uint256 public ghost_totalSwapVolume;
-    uint256 public ghost_totalLiquidityAdded;
-    uint256 public ghost_totalLiquidityRemoved;
+    uint256 public ghostsumOfFees;
+    uint256 public ghostsumOfTargetRatios;
+    uint256 public ghostmaxFeeObserved;
+    uint256 public ghostminFeeObserved = type(uint256).max;
+    uint256 public ghosttotalSwapVolume;
+    uint256 public ghosttotalLiquidityAdded;
+    uint256 public ghosttotalLiquidityRemoved;
 
     // Pool tracking
     PoolKey[] public pools;
@@ -149,19 +147,19 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         // Poke as owner
         vm.prank(owner);
         try hook.poke(poolKey, currentRatio) {
-            callCount_poke++;
+            callCountpoke++;
 
             // Update ghost variables
             uint24 newFee = hook.getFee(poolKey);
-            ghost_sumOfFees += newFee;
-            if (newFee > ghost_maxFeeObserved) ghost_maxFeeObserved = newFee;
-            if (newFee < ghost_minFeeObserved) ghost_minFeeObserved = newFee;
+            ghostsumOfFees += newFee;
+            if (newFee > ghostmaxFeeObserved) ghostmaxFeeObserved = newFee;
+            if (newFee < ghostminFeeObserved) ghostminFeeObserved = newFee;
 
             config = logic.getPoolConfig(poolId);
-            ghost_sumOfTargetRatios += config.initialTargetRatio;
+            ghostsumOfTargetRatios += config.initialTargetRatio;
         } catch {
             // Poke can fail for various valid reasons (cooldown, paused, zero ratio, etc.)
-            callCount_pokeFailed++;
+            callCountpokeFailed++;
         }
     }
 
@@ -200,8 +198,8 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             receiver: actor,
             deadline: block.timestamp + 100
         }) returns (BalanceDelta) {
-            callCount_swap++;
-            ghost_totalSwapVolume += swapAmount;
+            callCountswap++;
+            ghosttotalSwapVolume += swapAmount;
             // Note: Delta can legitimately be zero in edge cases (extreme slippage)
             // Ghost variables track successful swaps for invariant validation
         } catch {
@@ -274,8 +272,8 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
         vm.stopPrank();
 
-        callCount_addLiquidity++;
-        ghost_totalLiquidityAdded += liquidityAmount;
+        callCountaddLiquidity++;
+        ghosttotalLiquidityAdded += liquidityAmount;
 
         // Track position and its liquidity amount
         userPositions[poolId][actor].push(tokenId);
@@ -323,9 +321,9 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
         vm.stopPrank();
 
-        callCount_removeLiquidity++;
+        callCountremoveLiquidity++;
         // Track actual liquidity amount removed (not just operation count)
-        ghost_totalLiquidityRemoved += liquidityAmount;
+        ghosttotalLiquidityRemoved += liquidityAmount;
 
         // Clean up position tracking
         delete positionLiquidity[tokenId];
@@ -345,7 +343,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
     function warpTime(uint256 timeDelta) public {
         timeDelta = bound(timeDelta, 1 hours, 30 days);
         vm.warp(block.timestamp + timeDelta);
-        callCount_timeWarp++;
+        callCounttimeWarp++;
     }
 
     /**
@@ -354,7 +352,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
     function pauseContract() public {
         vm.prank(owner);
         try hook.pause() {
-            callCount_pause++;
+            callCountpause++;
         } catch {
             // Already paused or other error
         }
@@ -366,7 +364,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
     function unpauseContract() public {
         vm.prank(owner);
         try hook.unpause() {
-            callCount_unpause++;
+            callCountunpause++;
         } catch {
             // Already unpaused or other error
         }
@@ -407,13 +405,13 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256)
     {
         return (
-            ghost_sumOfFees,
-            ghost_sumOfTargetRatios,
-            ghost_maxFeeObserved,
-            ghost_minFeeObserved,
-            ghost_totalSwapVolume,
-            ghost_totalLiquidityAdded,
-            ghost_totalLiquidityRemoved
+            ghostsumOfFees,
+            ghostsumOfTargetRatios,
+            ghostmaxFeeObserved,
+            ghostminFeeObserved,
+            ghosttotalSwapVolume,
+            ghosttotalLiquidityAdded,
+            ghosttotalLiquidityRemoved
         );
     }
 

@@ -36,7 +36,9 @@ import {Registry} from "../../src/Registry.sol";
  * - afterSwap: Track swap events
  */
 contract DeployAlphixScript is Script {
+    uint64 constant REGISTRAR_ROLE = 2;
     // Struct to avoid stack too deep errors
+
     struct DeploymentData {
         string network;
         address poolManagerAddr;
@@ -127,8 +129,6 @@ contract DeployAlphixScript is Script {
 
         AccessManager accessMgr = AccessManager(data.accessManager);
         Registry reg = Registry(data.registry);
-
-        uint64 REGISTRAR_ROLE = 2;
 
         vm.startBroadcast();
 
