@@ -19,7 +19,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
-import {IRegistry} from "../../../../src/Registry.sol";
+import {IRegistry} from "../../../../src/interfaces/IRegistry.sol";
 
 /**
  * @title AccessAndOwnershipTest

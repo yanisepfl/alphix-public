@@ -411,7 +411,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice poke can be called by any address with POKER_ROLE.
+     * @notice poke can be called by any address with FEE_POKER_ROLE.
      */
     function test_poke_success_withPokerRole() public {
         (PoolKey memory k,) = _initPool(
@@ -424,14 +424,14 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             Constants.SQRT_PRICE_1_1
         );
 
-        // user1 doesn't have POKER_ROLE, should fail
+        // user1 doesn't have FEE_POKER_ROLE, should fail
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
         hook.poke(k, INITIAL_TARGET_RATIO);
 
-        // Grant POKER_ROLE to user1
+        // Grant FEE_POKER_ROLE to user1
         vm.prank(owner);
-        accessManager.grantRole(POKER_ROLE, user1, 0);
+        accessManager.grantRole(FEE_POKER_ROLE, user1, 0);
 
         // Wait for cooldown
         vm.warp(block.timestamp + 1 days + 1);
@@ -442,7 +442,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice poke should fail after POKER_ROLE is revoked.
+     * @notice poke should fail after FEE_POKER_ROLE is revoked.
      */
     function test_poke_revertsAfterPokerRoleRevoked() public {
         (PoolKey memory k,) = _initPool(
@@ -455,9 +455,9 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             Constants.SQRT_PRICE_1_1
         );
 
-        // Grant POKER_ROLE to user1
+        // Grant FEE_POKER_ROLE to user1
         vm.prank(owner);
-        accessManager.grantRole(POKER_ROLE, user1, 0);
+        accessManager.grantRole(FEE_POKER_ROLE, user1, 0);
 
         // Wait for cooldown
         vm.warp(block.timestamp + 1 days + 1);
@@ -466,9 +466,9 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         vm.prank(user1);
         hook.poke(k, INITIAL_TARGET_RATIO);
 
-        // Revoke POKER_ROLE from user1
+        // Revoke FEE_POKER_ROLE from user1
         vm.prank(owner);
-        accessManager.revokeRole(POKER_ROLE, user1);
+        accessManager.revokeRole(FEE_POKER_ROLE, user1);
 
         // Wait for cooldown again
         vm.warp(block.timestamp + 1 days + 1);
@@ -544,9 +544,9 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         // Deploy the re-entering logic and set it as the hook owner
         MockReenteringLogic reenterLogic = new MockReenteringLogic(address(hook));
 
-        // Grant POKER_ROLE to reenterLogic so it can call poke
+        // Grant FEE_POKER_ROLE to reenterLogic so it can call poke
         vm.prank(owner);
-        accessManager.grantRole(POKER_ROLE, address(reenterLogic), 0);
+        accessManager.grantRole(FEE_POKER_ROLE, address(reenterLogic), 0);
 
         vm.prank(owner);
         // Transfer hook ownership so getFee->poke happens as owner

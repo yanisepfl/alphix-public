@@ -668,6 +668,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint128 liquidityPerLp,
         SwapConfig memory swapConfig
     ) internal {
+        // Safe multiplication: liquidityPerLp is bounded in fuzz tests, max value ensures no overflow
         uint128 totalLiquidity = liquidityPerLp * 4;
         (,,, swapConfig.feeRate) = poolManager.getSlot0(testPoolId);
         (uint256 feeGrowth0Start,) = poolManager.getFeeGrowthInside(testPoolId, tickLower, tickUpper);
@@ -1089,6 +1090,10 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint256 expectedFees
     ) internal view {
         (uint256 feeGrowth0After,) = poolManager.getFeeGrowthInside(poolId, tickLower, tickUpper);
+
+        // Assert monotonicity: feeGrowthInside should never decrease
+        assertGe(feeGrowth0After, feeGrowth0Before, "feeGrowthInside must be non-decreasing");
+
         uint256 feeGrowthDelta = feeGrowth0After - feeGrowth0Before;
         uint256 actualFeesEarned = FullMath.mulDiv(feeGrowthDelta, lpLiquidity, 1 << 128);
 

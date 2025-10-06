@@ -41,8 +41,8 @@ library DynamicFeeLib {
 
     /**
      * @dev Tracks out-of-band dynamics per pool.
-     * - consecutiveOOBHits increases within a same-side run and resets in band.
-     * - lastOOBWasUpper records side to reset streak on flip.
+     * - consecutiveOobHits increases within a same-side run and resets in band.
+     * - lastOobWasUpper records side to reset streak on flip.
      */
     struct OobState {
         bool lastOobWasUpper;
@@ -94,7 +94,9 @@ library DynamicFeeLib {
         PoolTypeParams memory p,
         OobState memory s
     ) internal pure returns (uint24 newFee, OobState memory sOut) {
-        sOut = s;
+        // Create a proper copy of the input state
+        sOut.lastOobWasUpper = s.lastOobWasUpper;
+        sOut.consecutiveOobHits = s.consecutiveOobHits;
 
         (bool isUpper, bool inBand) = withinBounds(targetRatio, p.ratioTolerance, currentRatio);
         if (targetRatio == 0 || inBand) {
@@ -117,17 +119,12 @@ library DynamicFeeLib {
         OobState memory sOut,
         bool isUpper
     ) private pure returns (uint24 newFee, OobState memory) {
-        // Update streak
-        uint24 streak = (isUpper != sOut.lastOobWasUpper) ? 1 : sOut.consecutiveOobHits + 1;
-        sOut.lastOobWasUpper = isUpper;
-        sOut.consecutiveOobHits = streak;
-
         // Compute adjustment
         uint256 deviation = isUpper ? (currentRatio - targetRatio) : (targetRatio - currentRatio);
         uint256 adjustmentRate = deviation.mulDiv(p.linearSlope, targetRatio);
         if (adjustmentRate > globalMaxAdjRate) adjustmentRate = globalMaxAdjRate;
 
-        return _applyFeeAdjustment(currentFee, adjustmentRate, p, streak, isUpper);
+        return _applyFeeAdjustment(currentFee, adjustmentRate, p, sOut, isUpper);
     }
 
     /**
@@ -137,9 +134,14 @@ library DynamicFeeLib {
         uint24 currentFee,
         uint256 adjustmentRate,
         PoolTypeParams memory p,
-        uint24 streak,
+        OobState memory sOut,
         bool isUpper
-    ) private pure returns (uint24, OobState memory sOut) {
+    ) private pure returns (uint24, OobState memory) {
+        // Compute and update streak
+        uint24 streak = (isUpper != sOut.lastOobWasUpper) ? 1 : sOut.consecutiveOobHits + 1;
+        sOut.lastOobWasUpper = isUpper;
+        sOut.consecutiveOobHits = streak;
+
         uint256 feeDelta = uint256(currentFee).mulDiv(adjustmentRate, AlphixGlobalConstants.ONE_WAD);
 
         // throttle by streak
@@ -157,8 +159,6 @@ library DynamicFeeLib {
         } else {
             uint256 deltaDown = feeDelta.mulDiv(p.lowerSideFactor, AlphixGlobalConstants.ONE_WAD);
             if (deltaDown >= feeAcc) {
-                sOut.lastOobWasUpper = isUpper;
-                sOut.consecutiveOobHits = streak;
                 return (p.minFee, sOut);
             } else {
                 unchecked {
@@ -167,8 +167,6 @@ library DynamicFeeLib {
             }
         }
 
-        sOut.lastOobWasUpper = isUpper;
-        sOut.consecutiveOobHits = streak;
         return (clampFee(feeAcc, p.minFee, p.maxFee), sOut);
     }
 

@@ -74,8 +74,8 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint24 constant INITIAL_FEE = 500; // 0.05%
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
-    uint64 constant REGISTRAR_ROLE = 1;
-    uint64 constant POKER_ROLE = 2;
+    uint64 constant FEE_POKER_ROLE = 1;
+    uint64 constant REGISTRAR_ROLE = 2;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
@@ -459,7 +459,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         am.grantRole(REGISTRAR_ROLE, hookAddr, 0);
 
         // Grant poker role to owner (by default, tests can override)
-        am.grantRole(POKER_ROLE, owner, 0);
+        am.grantRole(FEE_POKER_ROLE, owner, 0);
 
         // Assign role to specific functions on Registry
         bytes4[] memory contractSelectors = new bytes4[](1);
@@ -473,7 +473,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Assign poker role to poke function on Hook
         bytes4[] memory pokeSelectors = new bytes4[](1);
         pokeSelectors[0] = Alphix(hookAddr).poke.selector;
-        am.setTargetFunctionRole(hookAddr, pokeSelectors, POKER_ROLE);
+        am.setTargetFunctionRole(hookAddr, pokeSelectors, FEE_POKER_ROLE);
     }
 
     /**
