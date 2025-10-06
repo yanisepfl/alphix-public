@@ -167,9 +167,37 @@ slither . --filter-paths "lib/|test/|script/" --json slither-report.json
 
 ### Deployment
 
-Coming Soon.
+Located in `script/alphix/`.
 
-### Addresses
+#### Running Scripts 
+
+```bash
+# 1. Set up environment
+cp .env.example .env
+# Edit .env with your configuration
+# Load your environment
+source .env
+
+# 1.5. (Optional for Beta) Deploy Mock Tokens and Faucet
+forge script script/alphix/00_DeployMockERC20.s.sol --rpc-url $RPC_URL --broadcast --verify
+forge script script/alphix/01_DeployMockFaucet.s.sol --rpc-url $RPC_URL --broadcast --verify
+
+# 2. Deploy core system (scripts 02-06)
+forge script script/alphix/02_DeployAccessManager.s.sol --rpc-url $RPC_URL --broadcast --verify
+forge script script/alphix/03_DeployRegistry.s.sol --rpc-url $RPC_URL --broadcast --verify
+forge script script/alphix/04_DeployAlphixLogic.s.sol --rpc-url $RPC_URL --broadcast --verify
+forge script script/alphix/05_DeployAlphix.s.sol --rpc-url $RPC_URL --broadcast --verify
+forge script script/alphix/06_ConfigureSystem.s.sol --rpc-url $RPC_URL --broadcast
+
+# 3. Create your first pool
+forge script script/alphix/09_CreatePoolAndAddLiquidity.s.sol --rpc-url $RPC_URL --broadcast
+
+# 4. Test swaps and dynamic fees
+forge script script/alphix/10_Swap.s.sol --rpc-url $RPC_URL --broadcast
+forge script script/alphix/11_PokeFee.s.sol --rpc-url $RPC_URL --broadcast
+```
+
+### Testnet Addresses
 
 Coming Soon.
 
@@ -182,7 +210,9 @@ Coming Soon.
 
 ## Partners
 
-More partners to come.
+- Base: Base Batch 001 & IncuBase. 
+- Uniswap Foundation: Buildathon Season. 
+- More partners to come!
 
 ## Acknowledgements
 

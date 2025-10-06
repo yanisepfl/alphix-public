@@ -74,7 +74,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         }
         registry = _registry;
         IRegistry(registry).registerContract(IRegistry.ContractKey.Alphix, address(this));
-        pause();
+        _pause(); // Use internal function to bypass onlyOwner check in constructor
     }
 
     /* INITIALIZER */
@@ -88,7 +88,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         }
         _setLogic(_logic);
         IRegistry(registry).registerContract(IRegistry.ContractKey.AlphixLogic, _logic);
-        unpause();
+        _unpause();
     }
 
     /* HOOK PERMISSIONS */
@@ -328,14 +328,14 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
     /**
      * @dev See {IAlphix-pause}.
      */
-    function pause() public override onlyOwner {
+    function pause() external override onlyOwner {
         _pause();
     }
 
     /**
      * @dev See {IAlphix-unpause}.
      */
-    function unpause() public override onlyOwner {
+    function unpause() external override onlyOwner {
         _unpause();
     }
 
