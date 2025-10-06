@@ -28,9 +28,19 @@ jobs:
           forge --version
           forge fmt --check
 
-      - name: Build
+      - name: Build (PR)
+        if: github.event_name == 'pull_request'
         run: |
           forge build --sizes
+        env:
+          FOUNDRY_PROFILE: default
+
+      - name: Build (Main branch)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          forge build --sizes
+        env:
+          FOUNDRY_PROFILE: main
 
       - name: Run tests (PR)
         if: github.event_name == 'pull_request'
