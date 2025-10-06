@@ -111,6 +111,9 @@ contract SwapScript is Script {
         config.tickSpacing = int24(uint24(vm.envUint(string.concat("POOL_TICK_SPACING_", config.network))));
         config.hookAddr = vm.envAddress(string.concat("ALPHIX_HOOK_", config.network));
 
+        // Validate token ordering (token0 must be numerically less than token1)
+        require(config.token0Addr < config.token1Addr, "Invalid token order: TOKEN0 must be < TOKEN1");
+
         console.log("Pool Details:");
         console.log("  - Token0:", config.token0Addr);
         console.log("  - Token1:", config.token1Addr);
