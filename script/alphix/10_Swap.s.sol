@@ -26,19 +26,25 @@ import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
  * - DEPLOYMENT_TOKEN1_{NETWORK}: Token1 address
  * - POOL_TICK_SPACING_{NETWORK}: Pool tick spacing
  * - ALPHIX_HOOK_{NETWORK}: Alphix Hook address
- * - SWAP_AMOUNT_{NETWORK}: Amount in base units/wei (e.g., "100000000000000000" for 0.1 ETH with 18 decimals)
+ * - SWAP_AMOUNT_{NETWORK}: Amount in base units/wei
  * - SWAP_EXACT_INPUT_{NETWORK}: 1 for exact input swap, 0 for exact output swap
  * - SWAP_ZERO_FOR_ONE_{NETWORK}: 1 for token0→token1, 0 for token1→token0
+ * - SWAP_MAX_INPUT_{NETWORK}: (Required ONLY for exact output) Max input amount in INPUT token base units
  *
  * IMPORTANT: SWAP_AMOUNT must be in base units (wei), NOT human-readable units.
  * - For exact input swaps (SWAP_EXACT_INPUT=1): Amount in INPUT token decimals
  *   Example: Selling 0.1 ETH (18 decimals) → SWAP_AMOUNT=100000000000000000
  * - For exact output swaps (SWAP_EXACT_INPUT=0): Amount in OUTPUT token decimals
  *   Example: Buying 50 USDC (6 decimals) → SWAP_AMOUNT=50000000
+ *   ALSO SET: SWAP_MAX_INPUT (in INPUT token decimals, e.g., 100000000000000000 for 0.1 ETH max)
  *
  * Examples:
- *   - Sell 0.1 ETH for USDC: SWAP_AMOUNT=100000000000000000 (use ETH decimals: 18)
- *   - Buy 50 USDC with ETH:  SWAP_AMOUNT=50000000 (use USDC decimals: 6)
+ *   - Sell 0.1 ETH for USDC (exact input):
+ *     SWAP_AMOUNT=100000000000000000 (ETH decimals: 18)
+ *     SWAP_MAX_INPUT not needed
+ *   - Buy 50 USDC with ETH (exact output):
+ *     SWAP_AMOUNT=50000000 (USDC decimals: 6)
+ *     SWAP_MAX_INPUT=100000000000000000 (max 0.1 ETH to spend, ETH decimals: 18)
  *   - Use `cast --to-wei 0.1 ether` for 18-decimal tokens
  *
  * Note:
@@ -58,6 +64,7 @@ contract SwapScript is Script {
         int24 tickSpacing;
         address hookAddr;
         uint256 swapAmount;
+        uint256 maxInputAmount;
         bool isExactInput;
         bool zeroForOne;
     }
@@ -77,6 +84,12 @@ contract SwapScript is Script {
         config.isExactInput = _getEnvUint("SWAP_EXACT_INPUT_", config.network) == 1;
         config.zeroForOne = _getEnvUint("SWAP_ZERO_FOR_ONE_", config.network) == 1;
 
+        // For exact output, get max input amount (in input token decimals)
+        if (!config.isExactInput) {
+            config.maxInputAmount = _getEnvUint("SWAP_MAX_INPUT_", config.network);
+            require(config.maxInputAmount > 0, "SWAP_MAX_INPUT required for exact output swaps");
+        }
+
         console.log("===========================================");
         console.log("EXECUTING SWAP");
         console.log("===========================================");
@@ -86,6 +99,9 @@ contract SwapScript is Script {
         console.log("Swap Parameters:");
         console.log("  - Amount (wei): %s", config.swapAmount);
         console.log("  - Type: %s", config.isExactInput ? "Exact Input" : "Exact Output");
+        if (!config.isExactInput) {
+            console.log("  - Max Input (wei): %s", config.maxInputAmount);
+        }
         console.log("  - Direction: %s", config.zeroForOne ? "Token0 -> Token1" : "Token1 -> Token0");
         console.log("");
 
@@ -169,14 +185,24 @@ contract SwapScript is Script {
         // Determine approval/value for INPUT token
         address tokenToApprove;
         uint256 valueToPass;
+        uint256 approvalAmount;
         {
             Currency inputToken = config.zeroForOne ? currency0 : currency1;
             if (inputToken.isAddressZero()) {
-                // Native ETH - send value
-                valueToPass = config.isExactInput ? swapAmountWei : (swapAmountWei * 2);
+                // Native ETH - send value (in input token decimals)
+                if (config.isExactInput) {
+                    valueToPass = swapAmountWei; // Exact amount to sell
+                } else {
+                    valueToPass = config.maxInputAmount; // Max to spend
+                }
             } else {
-                // ERC20 - approve
+                // ERC20 - approve (in input token decimals)
                 tokenToApprove = Currency.unwrap(inputToken);
+                if (config.isExactInput) {
+                    approvalAmount = swapAmountWei; // Exact amount to sell
+                } else {
+                    approvalAmount = config.maxInputAmount; // Max to spend
+                }
             }
         }
 
@@ -196,18 +222,9 @@ contract SwapScript is Script {
         vm.startBroadcast();
 
         // Approve token if not native ETH
-        // For exact input: approve exact amount
-        // For exact output: approve generous amount to cover slippage
         if (tokenToApprove != address(0)) {
-            uint256 approveAmount;
-            if (config.isExactInput) {
-                approveAmount = swapAmountWei;
-            } else {
-                // For exact output, approve 2x the output amount as buffer
-                approveAmount = swapAmountWei * 2;
-            }
-            console.log("Approving token %s for amount %s", tokenToApprove, approveAmount);
-            IERC20(tokenToApprove).approve(address(swapRouter), approveAmount);
+            console.log("Approving token %s for amount %s", tokenToApprove, approvalAmount);
+            IERC20(tokenToApprove).approve(address(swapRouter), approvalAmount);
         }
 
         if (valueToPass > 0) {
