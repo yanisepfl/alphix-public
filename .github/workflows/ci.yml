@@ -1,4 +1,4 @@
-name: Test Suite
+name: CI
 
 on:
   workflow_dispatch:
@@ -10,8 +10,8 @@ on:
       - main
 
 jobs:
-  format-and-test:
-    name: Format Check & Tests
+  format-build-test:
+    name: Format, Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,3 +55,29 @@ jobs:
           forge test -vv
         env:
           FOUNDRY_PROFILE: main
+
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Run coverage
+        run: |
+          forge coverage --report lcov
+        env:
+          FOUNDRY_PROFILE: coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: false
