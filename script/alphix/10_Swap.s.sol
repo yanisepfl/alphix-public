@@ -10,6 +10,7 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 
 /**
  * @title Swap Tokens
@@ -30,11 +31,14 @@ import {TickMath} from "v4-core/src/libraries/TickMath.sol";
  * - SWAP_ZERO_FOR_ONE_{NETWORK}: 1 for token0→token1, 0 for token1→token0
  *
  * IMPORTANT: SWAP_AMOUNT must be in base units (wei), NOT human-readable units.
- * - For exact input: Amount of INPUT token in base units
- * - For exact output: Amount of OUTPUT token in base units
+ * - For exact input swaps (SWAP_EXACT_INPUT=1): Amount in INPUT token decimals
+ *   Example: Selling 0.1 ETH (18 decimals) → SWAP_AMOUNT=100000000000000000
+ * - For exact output swaps (SWAP_EXACT_INPUT=0): Amount in OUTPUT token decimals
+ *   Example: Buying 50 USDC (6 decimals) → SWAP_AMOUNT=50000000
+ *
  * Examples:
- *   - Swap 0.1 ETH (18 decimals): SWAP_AMOUNT_SEPOLIA=100000000000000000
- *   - Swap 50 USDC (6 decimals):  SWAP_AMOUNT_SEPOLIA=50000000
+ *   - Sell 0.1 ETH for USDC: SWAP_AMOUNT=100000000000000000 (use ETH decimals: 18)
+ *   - Buy 50 USDC with ETH:  SWAP_AMOUNT=50000000 (use USDC decimals: 6)
  *   - Use `cast --to-wei 0.1 ether` for 18-decimal tokens
  *
  * Note:
@@ -213,9 +217,18 @@ contract SwapScript is Script {
         // Execute swap
         console.log("");
         console.log("Executing swap...");
-        swapRouter.swap{value: valueToPass}(poolKey, swapParams, testSettings, hookData);
+        BalanceDelta delta = swapRouter.swap{value: valueToPass}(poolKey, swapParams, testSettings, hookData);
 
         vm.stopBroadcast();
+
+        // Log actual amounts transacted
+        console.log("");
+        console.log("Swap executed successfully!");
+        console.log("Actual amounts transacted (BalanceDelta):");
+        console.log("  - Amount0: %d wei", delta.amount0());
+        console.log("  - Amount1: %d wei", delta.amount1());
+        console.log("");
+        console.log("Note: Negative values = tokens debited (sent), Positive values = tokens credited (received)");
     }
 
     /**

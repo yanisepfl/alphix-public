@@ -82,13 +82,13 @@ contract TransferOwnershipScript is Script {
         console.log("  - AlphixLogic:", currentLogicOwner);
         console.log("");
 
-        // Verify broadcaster is current owner
+        vm.startBroadcast();
+
+        // Verify broadcaster is current owner (must be after startBroadcast)
         require(currentHookOwner == msg.sender, "Broadcaster is not current Alphix Hook owner");
         require(currentLogicOwner == msg.sender, "Broadcaster is not current AlphixLogic owner");
         console.log("Verification: Broadcaster is current owner of both contracts");
         console.log("");
-
-        vm.startBroadcast();
 
         // Transfer Alphix Hook ownership
         console.log("Initiating ownership transfer for Alphix Hook...");
