@@ -189,10 +189,8 @@ contract SwapScript is Script {
         });
 
         // Test settings - take ERC20s, not claims
-        PoolSwapTest.TestSettings memory testSettings = PoolSwapTest.TestSettings({
-            takeClaims: false,
-            settleUsingBurn: false
-        });
+        PoolSwapTest.TestSettings memory testSettings =
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
         bytes memory hookData = "";
 
@@ -201,7 +199,7 @@ contract SwapScript is Script {
         // Approve token if not native ETH
         // IMPORTANT: Always approve the absolute value (no negative amounts)
         if (tokenToApprove != address(0)) {
-            uint256 approveAmount = swapAmountWei;  // Always positive
+            uint256 approveAmount = swapAmountWei; // Always positive
             console.log("Approving token %s for amount %s", tokenToApprove, approveAmount);
             IERC20(tokenToApprove).approve(address(swapRouter), approveAmount);
         }

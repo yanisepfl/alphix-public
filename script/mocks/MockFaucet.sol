@@ -21,7 +21,12 @@ contract MockFaucet {
 
     // Events
     event TokensSent(
-        address indexed user, uint256 amountToken0, uint256 amountToken1, uint256 amountToken2, uint256 amountToken3, uint256 amountToken4
+        address indexed user,
+        uint256 amountToken0,
+        uint256 amountToken1,
+        uint256 amountToken2,
+        uint256 amountToken3,
+        uint256 amountToken4
     );
 
     // Constructor to set the token addresses

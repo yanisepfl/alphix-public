@@ -197,7 +197,7 @@ contract CreatePoolAndAddLiquidityScript is Script {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,  // Required for dynamic fees
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, // Required for dynamic fees
             tickSpacing: config.tickSpacing,
             hooks: IHooks(config.alphixHookAddr)
         });
@@ -302,12 +302,9 @@ contract CreatePoolAndAddLiquidityScript is Script {
     /**
      * @dev Add liquidity to the pool
      */
-    function _addLiquidity(
-        IPositionManager posm,
-        PoolKey memory poolKey,
-        LiquidityConfig memory liq,
-        bool isNativeETH
-    ) internal {
+    function _addLiquidity(IPositionManager posm, PoolKey memory poolKey, LiquidityConfig memory liq, bool isNativeETH)
+        internal
+    {
         bytes memory hookData = "";
         bytes memory actions;
         bytes[] memory params;
@@ -318,23 +315,11 @@ contract CreatePoolAndAddLiquidityScript is Script {
 
         if (isNativeETH) {
             (actions, params) = _mintLiquidityParamsWithSweep(
-                poolKey,
-                liq.tickLower,
-                liq.tickUpper,
-                liq.liquidity,
-                amount0Max,
-                amount1Max,
-                hookData
+                poolKey, liq.tickLower, liq.tickUpper, liq.liquidity, amount0Max, amount1Max, hookData
             );
         } else {
             (actions, params) = _mintLiquidityParams(
-                poolKey,
-                liq.tickLower,
-                liq.tickUpper,
-                liq.liquidity,
-                amount0Max,
-                amount1Max,
-                hookData
+                poolKey, liq.tickLower, liq.tickUpper, liq.liquidity, amount0Max, amount1Max, hookData
             );
         }
 
@@ -356,16 +341,7 @@ contract CreatePoolAndAddLiquidityScript is Script {
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
 
         bytes[] memory params = new bytes[](2);
-        params[0] = abi.encode(
-            poolKey,
-            _tickLower,
-            _tickUpper,
-            liquidity,
-            amount0Max,
-            amount1Max,
-            msg.sender,
-            hookData
-        );
+        params[0] = abi.encode(poolKey, _tickLower, _tickUpper, liquidity, amount0Max, amount1Max, msg.sender, hookData);
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
 
         return (actions, params);
@@ -383,23 +359,11 @@ contract CreatePoolAndAddLiquidityScript is Script {
         uint256 amount1Max,
         bytes memory hookData
     ) internal view returns (bytes memory, bytes[] memory) {
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.MINT_POSITION),
-            uint8(Actions.SETTLE_PAIR),
-            uint8(Actions.SWEEP)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP));
 
         bytes[] memory params = new bytes[](3);
-        params[0] = abi.encode(
-            poolKey,
-            _tickLower,
-            _tickUpper,
-            liquidity,
-            amount0Max,
-            amount1Max,
-            msg.sender,
-            hookData
-        );
+        params[0] = abi.encode(poolKey, _tickLower, _tickUpper, liquidity, amount0Max, amount1Max, msg.sender, hookData);
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
         params[2] = abi.encode(Currency.wrap(address(0)), msg.sender); // Sweep ETH to sender
 

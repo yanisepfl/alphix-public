@@ -117,11 +117,7 @@ contract ConfigureRolesScript is Script {
             // Set function as restricted to FEE_POKER_ROLE
             bytes4[] memory pokeSelectors = new bytes4[](1);
             pokeSelectors[0] = pokeSelector;
-            accessManager.setTargetFunctionRole(
-                alphixHookAddr,
-                pokeSelectors,
-                FEE_POKER_ROLE
-            );
+            accessManager.setTargetFunctionRole(alphixHookAddr, pokeSelectors, FEE_POKER_ROLE);
 
             // Grant FEE_POKER_ROLE to the fee poker address
             accessManager.grantRole(FEE_POKER_ROLE, feePoker, 0); // 0 = immediate effect

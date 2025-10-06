@@ -14,7 +14,10 @@ import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
 
 // Minimal interface to access PositionManager's public poolKeys mapping
 interface IPositionManagerPoolKeys {
-    function poolKeys(bytes25 poolId) external view returns (Currency currency0, Currency currency1, uint24 fee, int24 tickSpacing, IHooks hooks);
+    function poolKeys(bytes25 poolId)
+        external
+        view
+        returns (Currency currency0, Currency currency1, uint24 fee, int24 tickSpacing, IHooks hooks);
 }
 
 /**
@@ -116,7 +119,8 @@ contract PokeFeeScript is Script {
 
         // Fetch pool info from PoolId
         bytes25 poolIdBytes25 = bytes25(config.poolIdFull);
-        (Currency currency0, Currency currency1, uint24 fee, int24 tickSpacing, IHooks hooks) = posm.poolKeys(poolIdBytes25);
+        (Currency currency0, Currency currency1, uint24 fee, int24 tickSpacing, IHooks hooks) =
+            posm.poolKeys(poolIdBytes25);
 
         // Get Alphix hook address from the pool info
         Alphix alphix = Alphix(address(hooks));
@@ -131,13 +135,8 @@ contract PokeFeeScript is Script {
         console.log("");
 
         // Create PoolKey
-        PoolKey memory poolKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: fee,
-            tickSpacing: tickSpacing,
-            hooks: hooks
-        });
+        PoolKey memory poolKey =
+            PoolKey({currency0: currency0, currency1: currency1, fee: fee, tickSpacing: tickSpacing, hooks: hooks});
 
         PoolId poolId = poolKey.toId();
 
