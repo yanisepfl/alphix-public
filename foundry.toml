@@ -23,3 +23,9 @@ exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]
 include = ["src/**/*.sol"]
 exclude = ["lib/**", "test/**", "script/**"]
 report = "lcov"
+
+# Profile for main branch PR merge testing with high fuzz runs
+[profile.main]
+fuzz.runs = 2048
+invariant.runs = 2048
+invariant.depth = 100
