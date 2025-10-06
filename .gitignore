@@ -24,3 +24,9 @@ coverage/
 # Slither reports
 slither-report.*
 slither-out/
+
+# Scripts documentation
+script/alphix/DEPLOYMENT.md
+
+# Broadcast files
+broadcast/
