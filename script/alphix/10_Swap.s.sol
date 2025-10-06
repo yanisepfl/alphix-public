@@ -145,40 +145,40 @@ contract SwapScript is Script {
             hooks: IHooks(config.hookAddr)
         });
 
-        // Determine which currency we're selling/buying
-        Currency swapCurrency = config.zeroForOne ? currency0 : currency1;
+        // Determine which token decimals to use for amount
+        // Exact input: use input token decimals
+        // Exact output: use output token decimals
+        Currency amountToken;
+        {
+            bool useToken0 = config.isExactInput ? config.zeroForOne : !config.zeroForOne;
+            amountToken = useToken0 ? currency0 : currency1;
+        }
 
-        // Get decimals and convert to wei
-        uint8 decimals = swapCurrency.isAddressZero() ? 18 : IERC20(Currency.unwrap(swapCurrency)).decimals();
+        // Convert amount to wei
+        uint8 decimals = amountToken.isAddressZero() ? 18 : IERC20(Currency.unwrap(amountToken)).decimals();
         uint256 swapAmountWei = config.swapAmountRaw * (10 ** decimals);
 
         console.log("Amount Conversion:");
-        console.log("  - Currency: %s", Currency.unwrap(swapCurrency));
+        console.log("  - Currency: %s", Currency.unwrap(amountToken));
         console.log("  - Decimals: %s", decimals);
         console.log("  - Amount (wei): %s", swapAmountWei);
         console.log("");
 
-        // Apply sign based on exact input/output
-        // Exact input: negative (we specify how much we sell)
-        // Exact output: positive (we specify how much we buy)
+        // Prepare amount with sign
         int256 amountSpecified = config.isExactInput ? -int256(swapAmountWei) : int256(swapAmountWei);
-
         console.log("Amount Specified: %d", amountSpecified);
         console.log("");
 
-        // Determine token to approve and value to send
+        // Determine approval/value for INPUT token
         address tokenToApprove;
         uint256 valueToPass;
-
-        if (config.zeroForOne) {
-            if (currency0.isAddressZero()) {
-                // Native ETH swap
-                valueToPass = swapAmountWei;
+        {
+            Currency inputToken = config.zeroForOne ? currency0 : currency1;
+            if (inputToken.isAddressZero()) {
+                valueToPass = config.isExactInput ? swapAmountWei : (swapAmountWei * 2);
             } else {
-                tokenToApprove = Currency.unwrap(currency0);
+                tokenToApprove = Currency.unwrap(inputToken);
             }
-        } else {
-            tokenToApprove = Currency.unwrap(currency1);
         }
 
         // Prepare swap parameters
@@ -197,9 +197,16 @@ contract SwapScript is Script {
         vm.startBroadcast();
 
         // Approve token if not native ETH
-        // IMPORTANT: Always approve the absolute value (no negative amounts)
+        // For exact input: approve exact amount
+        // For exact output: approve generous amount to cover slippage
         if (tokenToApprove != address(0)) {
-            uint256 approveAmount = swapAmountWei; // Always positive
+            uint256 approveAmount;
+            if (config.isExactInput) {
+                approveAmount = swapAmountWei;
+            } else {
+                // For exact output, approve 2x the output amount as buffer
+                approveAmount = swapAmountWei * 2;
+            }
             console.log("Approving token %s for amount %s", tokenToApprove, approveAmount);
             IERC20(tokenToApprove).approve(address(swapRouter), approveAmount);
         }

@@ -78,24 +78,21 @@ contract DeployMockFaucetScript is Script {
         token4 = MockERC20Token(token4Addr);
 
         /// DEPLOYING FAUCET ///
-        vm.broadcast();
+        vm.startBroadcast();
+
         faucet = new MockFaucet(token0, token1, token2, token3, token4);
         console.log("Faucet Address:", address(faucet));
 
-        // Set the faucet address for each token
-        vm.broadcast();
+        // Set the faucet address for each token (batched for gas efficiency)
         token0.setFaucet(address(faucet));
-        vm.broadcast();
         token1.setFaucet(address(faucet));
-        vm.broadcast();
         token2.setFaucet(address(faucet));
-        vm.broadcast();
         token3.setFaucet(address(faucet));
-        vm.broadcast();
         token4.setFaucet(address(faucet));
 
         /// USING FAUCET ///
-        vm.broadcast();
         faucet.faucet();
+
+        vm.stopBroadcast();
     }
 }

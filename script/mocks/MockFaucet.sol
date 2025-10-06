@@ -36,11 +36,11 @@ contract MockFaucet {
         token2 = _token2;
         token3 = _token3;
         token4 = _token4;
-        token0Amount = 100000 * 10 ** MockERC20(token0).decimals() / 1000; // 100 aUSDC
-        token1Amount = 100000 * 10 ** MockERC20(token1).decimals() / 1000; // 100 aUSDT
-        token2Amount = 50 * 10 ** MockERC20(token2).decimals() / 1000; // 0.05 aETH
-        token3Amount = 10 ** MockERC20(token3).decimals() / 1000; // 0.001 aBTC
-        token4Amount = 100000 * 10 ** MockERC20(token4).decimals() / 1000; // 100 aDAI
+        token0Amount = 100000 * 10 ** token0.decimals() / 1000; // 100 aUSDC
+        token1Amount = 100000 * 10 ** token1.decimals() / 1000; // 100 aUSDT
+        token2Amount = 50 * 10 ** token2.decimals() / 1000; // 0.05 aETH
+        token3Amount = 10 ** token3.decimals() / 1000; // 0.001 aBTC
+        token4Amount = 100000 * 10 ** token4.decimals() / 1000; // 100 aDAI
     }
 
     // Function to send tokens to caller

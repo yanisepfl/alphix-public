@@ -92,28 +92,28 @@ contract TransferAccessManagerAdminScript is Script {
 
         if (newAdminHasRole) {
             console.log("INFO: New admin already has ADMIN_ROLE");
-            console.log("This is safe - proceeding anyway (idempotent operation)");
+            console.log("Skipping grant to avoid revert (role already granted)");
             console.log("");
+        } else {
+            vm.startBroadcast();
+
+            console.log("Granting ADMIN_ROLE to multisig...");
+            console.log("  - Role ID: %s (ADMIN_ROLE)", ADMIN_ROLE);
+            console.log("  - Recipient: %s", newAdmin);
+            console.log("  - Execution delay: 0 (immediate effect)");
+            console.log("");
+
+            try accessManager.grantRole(ADMIN_ROLE, newAdmin, 0) {
+                console.log("  - ADMIN_ROLE granted successfully");
+            } catch Error(string memory reason) {
+                console.log("  - FAILED:", reason);
+                revert(reason);
+            }
+
+            vm.stopBroadcast();
         }
 
-        vm.startBroadcast();
-
-        console.log("Granting ADMIN_ROLE to multisig...");
-        console.log("  - Role ID: %s (ADMIN_ROLE)", ADMIN_ROLE);
-        console.log("  - Recipient: %s", newAdmin);
-        console.log("  - Execution delay: 0 (immediate effect)");
-        console.log("");
-
-        try accessManager.grantRole(ADMIN_ROLE, newAdmin, 0) {
-            console.log("  - ADMIN_ROLE granted successfully");
-        } catch Error(string memory reason) {
-            console.log("  - FAILED:", reason);
-            revert(reason);
-        }
-
-        vm.stopBroadcast();
-
-        // Verify role was granted
+        // Re-fetch and verify role status
         (bool verified,) = accessManager.hasRole(ADMIN_ROLE, newAdmin);
 
         console.log("");

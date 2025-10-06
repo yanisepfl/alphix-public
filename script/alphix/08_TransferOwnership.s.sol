@@ -71,7 +71,6 @@ contract TransferOwnershipScript is Script {
 
         Alphix alphix = Alphix(alphixHookAddr);
         AlphixLogic logic = AlphixLogic(alphixLogicAddr);
-        AccessManager accessManager = AccessManager(accessManagerAddr);
 
         // Get current owners for verification
         address currentHookOwner = alphix.owner();
@@ -81,6 +80,12 @@ contract TransferOwnershipScript is Script {
         console.log("Current owners:");
         console.log("  - Alphix Hook:", currentHookOwner);
         console.log("  - AlphixLogic:", currentLogicOwner);
+        console.log("");
+
+        // Verify broadcaster is current owner
+        require(currentHookOwner == msg.sender, "Broadcaster is not current Alphix Hook owner");
+        require(currentLogicOwner == msg.sender, "Broadcaster is not current AlphixLogic owner");
+        console.log("Verification: Broadcaster is current owner of both contracts");
         console.log("");
 
         vm.startBroadcast();

@@ -102,8 +102,7 @@ contract UpgradeAlphixLogicScript is Script {
     function _getImplementation(address proxy) internal view returns (address impl) {
         // ERC1967 implementation slot: keccak256("eip1967.proxy.implementation") - 1
         bytes32 slot = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
-        assembly {
-            impl := sload(slot)
-        }
+        bytes32 data = vm.load(proxy, slot);
+        impl = address(uint160(uint256(data)));
     }
 }
