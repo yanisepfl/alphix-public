@@ -199,10 +199,11 @@ forge script script/alphix/11_PokeFee.s.sol --rpc-url $RPC_URL --broadcast
 
 ### Testnet Addresses
 
-**Base Sepolia Deployment**
+#### Base Sepolia Deployment
 
 Core Contracts:
-```
+
+```bash
 # Registry contract address
 REGISTRY_BASE_SEPOLIA=0x5a22AA4a4B62E3Ee72cb6d077b0873d6aA794B54
 
@@ -217,7 +218,8 @@ ALPHIX_LOGIC_PROXY_BASE_SEPOLIA=0x8768950eB999Faa53c8b0aA0Cd7dCC19b9D23A34
 ```
 
 Active Pools:
-```
+
+```text
 # aUSDC/aDAI pool
 Pool ID: 0x4bd4386e6ef583af6cea0e010a7118f41c4d3315e88b81a88fc7fd3822bf766b
 
