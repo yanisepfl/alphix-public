@@ -60,7 +60,7 @@ contract MockAlphixLogic is
     mapping(PoolId => PoolConfig) private poolConfig;
 
     // 5. OOB state
-    mapping(PoolId => DynamicFeeLib.OOBState) private oobState;
+    mapping(PoolId => DynamicFeeLib.OobState) private oobState;
 
     // 6. Target ratio
     mapping(PoolId => uint256) private targetRatio;
@@ -256,7 +256,7 @@ contract MockAlphixLogic is
         onlyAlphixHook
         poolActivated(key)
         whenNotPaused
-        returns (uint24 newFee, uint256 oldTarget, uint256 newTarget, DynamicFeeLib.OOBState memory sOut)
+        returns (uint24 newFee, uint256 oldTarget, uint256 newTarget, DynamicFeeLib.OobState memory sOut)
     {
         PoolId poolId = key.toId();
         PoolConfig memory cfg = poolConfig[poolId];
@@ -293,9 +293,9 @@ contract MockAlphixLogic is
 
     /**
      * @notice Finalize after fee update by persisting target ratio, OOB state, and timestamp
-     * @dev This matches the hook’s post-manager-update finalize step
+     * @dev This matches the hook's post-manager-update finalize step
      */
-    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTarget, DynamicFeeLib.OOBState calldata sOut)
+    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTarget, DynamicFeeLib.OobState calldata sOut)
         external
         override
         onlyAlphixHook

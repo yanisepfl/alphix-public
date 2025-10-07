@@ -239,7 +239,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
 
         // Compute new fee and target ratio
-        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut) =
+        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut) =
             _getFee(key, currentRatio);
 
         // Update the fee
@@ -422,7 +422,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         view
         override
         validLogic
-        returns (uint24 fee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut)
+        returns (uint24 fee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut)
     {
         return IAlphixLogic(logic).computeFeeAndTargetRatio(key, currentRatio);
     }

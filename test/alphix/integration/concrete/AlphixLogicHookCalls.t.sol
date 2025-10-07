@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 
 /* OZ IMPORTS */
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
@@ -12,7 +11,6 @@ import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";

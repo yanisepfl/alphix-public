@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 /* UNISWAP V4 IMPORTS */
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
@@ -307,21 +307,21 @@ interface IAlphixLogic {
      * @return newFee The new fee of the pool.
      * @return oldTargetRatio The old target ratio of the pool.
      * @return newTargetRatio The new target ratio of the pool.
-     * @return sOut The OOBState of the pool.
+     * @return sOut The OobState of the pool.
      */
     function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
         external
         view
-        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut);
+        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut);
 
     /**
      * @notice Store new values right after a fee update.
      * @param key The key of the pool.
      * @param newTargetRatio The new target ratio of the pool.
-     * @param sOut The OOBState of the pool.
+     * @param sOut The OobState of the pool.
      * @return targetRatioAfterUpdate The target ratio after the update.
      */
-    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OOBState calldata sOut)
+    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OobState calldata sOut)
         external
         returns (uint256 targetRatioAfterUpdate);
 

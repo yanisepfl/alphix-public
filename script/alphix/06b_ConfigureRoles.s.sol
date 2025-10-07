@@ -5,7 +5,6 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 import {Alphix} from "../../src/Alphix.sol";
-import {Registry} from "../../src/Registry.sol";
 
 /**
  * @title Configure Additional AccessManager Roles (Optional)

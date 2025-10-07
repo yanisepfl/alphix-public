@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 
 /* UNISWAP V4 IMPORTS */
@@ -271,7 +270,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
         assertGe(liquidityAdded, liquidityRemoved, "More liquidity removed than added");
 
         // Sum of fees should grow if poke was called
-        if (handler.callCount_poke() > 0) {
+        if (handler.callCountpoke() > 0) {
             assertGt(sumFees, 0, "Fee sum should be positive if pokes occurred");
         }
     }
@@ -288,13 +287,13 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
         (,,,, uint256 swapVolume,,) = handler.getGhostVariables();
 
         // If swaps occurred, volume should be positive
-        if (handler.callCount_swap() > 0) {
+        if (handler.callCountswap() > 0) {
             assertGt(swapVolume, 0, "Swap volume should be positive");
         }
 
         // Volume shouldn't be unreasonably large (sanity check)
         // With max 100e18 per swap and reasonable call counts
-        uint256 maxReasonableVolume = handler.callCount_swap() * 100e18;
+        uint256 maxReasonableVolume = handler.callCountswap() * 100e18;
         assertLe(swapVolume, maxReasonableVolume, "Swap volume unreasonably large");
     }
 
@@ -318,8 +317,8 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
      */
     function invariant_pauseStateConsistent() public view {
         bool isPaused = hook.paused();
-        uint256 pauseCount = handler.callCount_pause();
-        uint256 unpauseCount = handler.callCount_unpause();
+        uint256 pauseCount = handler.callCountpause();
+        uint256 unpauseCount = handler.callCountunpause();
 
         // If we've never paused, contract should be unpaused
         if (pauseCount == 0) {
@@ -450,8 +449,8 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
      * @dev Validates cooldown enforcement while accounting for fuzzer behavior
      */
     function invariant_cooldownPreventsSameBlockManipulation() public view {
-        uint256 pokeSuccessCount = handler.callCount_poke();
-        uint256 pokeFailedCount = handler.callCount_pokeFailed();
+        uint256 pokeSuccessCount = handler.callCountpoke();
+        uint256 pokeFailedCount = handler.callCountpokeFailed();
         uint256 totalPokeAttempts = pokeSuccessCount + pokeFailedCount;
 
         // Need sufficient attempts to validate cooldown behavior
@@ -471,7 +470,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
 
         // Case 2: All pokes succeeded with many attempts (potentially suspicious)
         if (pokeFailedCount == 0 && totalPokeAttempts >= 20) {
-            uint256 timeWarpCount = handler.callCount_timeWarp();
+            uint256 timeWarpCount = handler.callCounttimeWarp();
 
             // If many independent time warps occurred, all successes could be legitimate
             // Each warp allows cooldown to elapse, enabling subsequent pokes
@@ -539,7 +538,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
      * @dev Even with extreme time jumps, timestamps remain valid
      */
     function invariant_timeWarpsSafe() public view {
-        uint256 warpCount = handler.callCount_timeWarp();
+        uint256 warpCount = handler.callCounttimeWarp();
 
         if (warpCount > 0) {
             // After time warps, cooldowns should still work correctly
@@ -675,13 +674,13 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
         returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256)
     {
         return (
-            handler.callCount_poke(),
-            handler.callCount_swap(),
-            handler.callCount_addLiquidity(),
-            handler.callCount_removeLiquidity(),
-            handler.callCount_timeWarp(),
-            handler.callCount_pause(),
-            handler.callCount_unpause()
+            handler.callCountpoke(),
+            handler.callCountswap(),
+            handler.callCountaddLiquidity(),
+            handler.callCountremoveLiquidity(),
+            handler.callCounttimeWarp(),
+            handler.callCountpause(),
+            handler.callCountunpause()
         );
     }
 

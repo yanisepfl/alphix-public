@@ -24,7 +24,6 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeS
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* LOCAL IMPORTS */
-import {IAlphix} from "./interfaces/IAlphix.sol";
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "./libraries/AlphixGlobalConstants.sol";
@@ -71,7 +70,7 @@ contract AlphixLogic is
     /**
      * @dev Store per-pool Out-Of-Bound state.
      */
-    mapping(PoolId => DynamicFeeLib.OOBState) private oobState;
+    mapping(PoolId => DynamicFeeLib.OobState) private oobState;
 
     /**
      * @dev Store per-pool current target ratio.
@@ -316,7 +315,7 @@ contract AlphixLogic is
         onlyAlphixHook
         poolActivated(key)
         whenNotPaused
-        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OOBState memory sOut)
+        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut)
     {
         PoolId poolId = key.toId();
         PoolConfig memory cfg = poolConfig[poolId];
@@ -350,7 +349,7 @@ contract AlphixLogic is
     /**
      * @dev See {IAlphixLogic-finalizeAfterFeeUpdate}.
      */
-    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OOBState calldata sOut)
+    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OobState calldata sOut)
         external
         override
         onlyAlphixHook

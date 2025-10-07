@@ -15,10 +15,10 @@ import {DynamicFeeLib} from "../../../src/libraries/DynamicFee.sol";
  * @dev Minimal logic that supports IAlphixLogic and tries to re-enter hook.poke from getFee
  */
 contract MockReenteringLogic is IERC165 {
-    address public immutable hook;
+    address public immutable HOOK;
 
     constructor(address _hook) {
-        hook = _hook;
+        HOOK = _hook;
     }
 
     /**
@@ -33,10 +33,10 @@ contract MockReenteringLogic is IERC165 {
      */
     function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
         external
-        returns (uint24, uint256, uint256, DynamicFeeLib.OOBState memory)
+        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory)
     {
         // Attempt to re-enter poke
-        BaseDynamicFee(hook).poke(key, currentRatio);
-        return (3000, 0, 0, DynamicFeeLib.OOBState(false, 0));
+        BaseDynamicFee(HOOK).poke(key, currentRatio);
+        return (3000, 0, 0, DynamicFeeLib.OobState(false, 0));
     }
 }

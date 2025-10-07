@@ -6,7 +6,6 @@ import {Test} from "forge-std/Test.sol";
 
 /* LOCAL IMPORTS */
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
-import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 
 /**
  * @title DynamicFeeTest
@@ -236,17 +235,17 @@ contract DynamicFeeTest is Test {
         uint256 targetRatio = ONE_WAD;
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OOBState memory initialState =
-            DynamicFeeLib.OOBState({lastOOBWasUpper: true, consecutiveOOBHits: 5});
+        DynamicFeeLib.OobState memory initialState =
+            DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: 5});
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         // Should clamp current fee and reset streak
         uint24 expectedFee = DynamicFeeLib.clampFee(currentFee, testParams.minFee, testParams.maxFee);
         assertEq(newFee, expectedFee, "Should return clamped current fee when in band");
-        assertEq(newState.consecutiveOOBHits, 0, "Should reset consecutive hits when in band");
+        assertEq(newState.consecutiveOobHits, 0, "Should reset consecutive hits when in band");
     }
 
     function test_computeNewFee_zeroTarget() public view {
@@ -255,15 +254,15 @@ contract DynamicFeeTest is Test {
         uint256 targetRatio = 0; // Zero target should be treated as in-band
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OOBState memory initialState;
+        DynamicFeeLib.OobState memory initialState;
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         uint24 expectedFee = DynamicFeeLib.clampFee(currentFee, testParams.minFee, testParams.maxFee);
         assertEq(newFee, expectedFee, "Should treat zero target as in-band");
-        assertEq(newState.consecutiveOOBHits, 0, "Should reset streak for zero target");
+        assertEq(newState.consecutiveOobHits, 0, "Should reset streak for zero target");
     }
 
     function test_computeNewFee_upperOOB_firstTime() public view {
@@ -272,18 +271,18 @@ contract DynamicFeeTest is Test {
         uint256 currentRatio = targetRatio + testParams.ratioTolerance + 1e16; // Above upper bound
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OOBState memory initialState = DynamicFeeLib.OOBState({
-            lastOOBWasUpper: false, // Was lower, now upper -> reset streak
-            consecutiveOOBHits: 3
+        DynamicFeeLib.OobState memory initialState = DynamicFeeLib.OobState({
+            lastOobWasUpper: false, // Was lower, now upper -> reset streak
+            consecutiveOobHits: 3
         });
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         assertTrue(newFee >= currentFee, "Fee should increase when upper OOB");
-        assertEq(newState.consecutiveOOBHits, 1, "Should reset streak when switching sides");
-        assertTrue(newState.lastOOBWasUpper, "Should record upper side");
+        assertEq(newState.consecutiveOobHits, 1, "Should reset streak when switching sides");
+        assertTrue(newState.lastOobWasUpper, "Should record upper side");
     }
 
     function test_computeNewFee_lowerOOB_consecutive() public view {
@@ -292,18 +291,18 @@ contract DynamicFeeTest is Test {
         uint256 currentRatio = targetRatio - testParams.ratioTolerance - 1e16; // Below lower bound
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OOBState memory initialState = DynamicFeeLib.OOBState({
-            lastOOBWasUpper: false, // Still lower -> increment streak
-            consecutiveOOBHits: 2
+        DynamicFeeLib.OobState memory initialState = DynamicFeeLib.OobState({
+            lastOobWasUpper: false, // Still lower -> increment streak
+            consecutiveOobHits: 2
         });
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         assertTrue(newFee <= currentFee, "Fee should decrease when lower OOB");
-        assertEq(newState.consecutiveOOBHits, 3, "Should increment streak when same side");
-        assertFalse(newState.lastOOBWasUpper, "Should record lower side");
+        assertEq(newState.consecutiveOobHits, 3, "Should increment streak when same side");
+        assertFalse(newState.lastOobWasUpper, "Should record lower side");
     }
 
     function test_computeNewFee_globalMaxAdjRateLimit() public view {
@@ -312,9 +311,9 @@ contract DynamicFeeTest is Test {
         uint256 currentRatio = 10 * ONE_WAD; // Very high ratio
         uint256 globalMaxAdjRate = 1e16; // 1% max adjustment rate (very low)
 
-        DynamicFeeLib.OOBState memory initialState;
+        DynamicFeeLib.OobState memory initialState;
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
@@ -326,7 +325,7 @@ contract DynamicFeeTest is Test {
             newFee <= expectedMaxFee + testParams.baseMaxFeeDelta,
             "Should be limited by global max adj rate and base max delta"
         );
-        assertTrue(newState.lastOOBWasUpper, "Should record upper side for high ratio");
+        assertTrue(newState.lastOobWasUpper, "Should record upper side for high ratio");
     }
 
     function test_computeNewFee_sideFactor_upper() public view {
@@ -339,14 +338,14 @@ contract DynamicFeeTest is Test {
         DynamicFeeLib.PoolTypeParams memory customParams = testParams;
         customParams.upperSideFactor = HALF_WAD; // Use the HALF_WAD constant
 
-        DynamicFeeLib.OOBState memory initialState;
+        DynamicFeeLib.OobState memory initialState;
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, customParams, initialState
         );
 
         assertTrue(newFee >= currentFee, "Fee should still increase");
-        assertTrue(newState.lastOOBWasUpper, "Should be upper");
+        assertTrue(newState.lastOobWasUpper, "Should be upper");
         // The actual increase should be reduced by the side factor
     }
 
@@ -356,14 +355,14 @@ contract DynamicFeeTest is Test {
         uint256 currentRatio = targetRatio - testParams.ratioTolerance - 5e16; // Well below bound
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OOBState memory initialState;
+        DynamicFeeLib.OobState memory initialState;
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         assertTrue(newFee <= currentFee, "Fee should decrease");
-        assertFalse(newState.lastOOBWasUpper, "Should be lower");
+        assertFalse(newState.lastOobWasUpper, "Should be lower");
         // With lowerSideFactor = 2x (TWO_WAD), the decrease should be amplified
         // testParams.lowerSideFactor is set to TWO_WAD in setUp()
     }
@@ -374,15 +373,15 @@ contract DynamicFeeTest is Test {
         uint256 currentRatio = 1e15; // Very low ratio
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OOBState memory initialState;
+        DynamicFeeLib.OobState memory initialState;
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         // Should hit minimum fee
         assertEq(newFee, testParams.minFee, "Should clamp to minimum fee");
-        assertFalse(newState.lastOOBWasUpper, "Should be lower side");
+        assertFalse(newState.lastOobWasUpper, "Should be lower side");
     }
 
     function test_computeNewFee_streakAccumulation() public view {
@@ -392,20 +391,20 @@ contract DynamicFeeTest is Test {
         uint256 globalMaxAdjRate = ONE_WAD;
 
         // Start with high streak
-        DynamicFeeLib.OOBState memory initialState =
-            DynamicFeeLib.OOBState({lastOOBWasUpper: true, consecutiveOOBHits: 5});
+        DynamicFeeLib.OobState memory initialState =
+            DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: 5});
 
-        (uint24 newFee1, DynamicFeeLib.OOBState memory newState1) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee1, DynamicFeeLib.OobState memory newState1) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         // Continue streak
-        (uint24 newFee2, DynamicFeeLib.OOBState memory newState2) =
+        (uint24 newFee2, DynamicFeeLib.OobState memory newState2) =
             DynamicFeeLib.computeNewFee(newFee1, currentRatio, targetRatio, globalMaxAdjRate, testParams, newState1);
 
         // The actual behavior might increment differently based on internal logic
-        assertTrue(newState1.consecutiveOOBHits > initialState.consecutiveOOBHits, "Should increment streak");
-        assertTrue(newState2.consecutiveOOBHits >= newState1.consecutiveOOBHits, "Should not decrease streak");
+        assertTrue(newState1.consecutiveOobHits > initialState.consecutiveOobHits, "Should increment streak");
+        assertTrue(newState2.consecutiveOobHits >= newState1.consecutiveOobHits, "Should not decrease streak");
         assertTrue(newFee2 >= newFee1, "Higher streak should allow larger adjustments");
     }
 
@@ -415,14 +414,14 @@ contract DynamicFeeTest is Test {
         uint256 currentRatio = targetRatio + testParams.ratioTolerance + 5e16; // Upper OOB
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OOBState memory initialState;
+        DynamicFeeLib.OobState memory initialState;
 
-        (uint24 newFee, DynamicFeeLib.OOBState memory newState) = DynamicFeeLib.computeNewFee(
+        (uint24 newFee, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
         );
 
         assertEq(newFee, testParams.maxFee, "Should not exceed maximum fee");
-        assertTrue(newState.lastOOBWasUpper, "Should record upper side");
+        assertTrue(newState.lastOobWasUpper, "Should record upper side");
     }
 
     /* FUZZING TESTS */

@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {AlphixLogic} from "../../src/AlphixLogic.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title Upgrade AlphixLogic

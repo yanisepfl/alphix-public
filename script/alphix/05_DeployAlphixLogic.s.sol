@@ -6,7 +6,6 @@ import {console} from "forge-std/console.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {AlphixLogic} from "../../src/AlphixLogic.sol";
 import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
-import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
 
 /**
  * @title Deploy AlphixLogic (Implementation + Proxy)

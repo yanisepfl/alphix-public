@@ -2,16 +2,13 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
@@ -90,8 +87,10 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.startPrank(bob);
         int24 bobLower = -600; // Adjust to tick spacing
         int24 bobUpper = 600;
-        bobLower = (bobLower / key.tickSpacing) * key.tickSpacing;
-        bobUpper = (bobUpper / key.tickSpacing) * key.tickSpacing;
+        int24 bobLowerRounded = bobLower / key.tickSpacing;
+        int24 bobUpperRounded = bobUpper / key.tickSpacing;
+        bobLower = bobLowerRounded * key.tickSpacing;
+        bobUpper = bobUpperRounded * key.tickSpacing;
         userTokenIds[bob].push(_addLiquidityForUser(bob, key, bobLower, bobUpper, 50e18));
         vm.stopPrank();
 
@@ -99,8 +98,10 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.startPrank(charlie);
         int24 charlieLower = -2000;
         int24 charlieUpper = 2000;
-        charlieLower = (charlieLower / key.tickSpacing) * key.tickSpacing;
-        charlieUpper = (charlieUpper / key.tickSpacing) * key.tickSpacing;
+        int24 charlieLowerRounded = charlieLower / key.tickSpacing;
+        int24 charlieUpperRounded = charlieUpper / key.tickSpacing;
+        charlieLower = charlieLowerRounded * key.tickSpacing;
+        charlieUpper = charlieUpperRounded * key.tickSpacing;
         userTokenIds[charlie].push(_addLiquidityForUser(charlie, key, charlieLower, charlieUpper, 75e18));
         vm.stopPrank();
 

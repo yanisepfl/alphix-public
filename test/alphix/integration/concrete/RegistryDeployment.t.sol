@@ -2,20 +2,18 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
+import {PoolId} from "v4-core/src/types/PoolId.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* OZ IMPORTS */
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 /* SOLMATE IMPORTS */
-import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";

@@ -9,7 +9,6 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {Actions} from "v4-periphery/src/libraries/Actions.sol";
 import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
@@ -301,7 +300,7 @@ contract CreatePoolAndAddLiquidityScript is Script {
     /**
      * @dev Add liquidity to the pool
      */
-    function _addLiquidity(IPositionManager posm, PoolKey memory poolKey, LiquidityConfig memory liq, bool isNativeETH)
+    function _addLiquidity(IPositionManager posm, PoolKey memory poolKey, LiquidityConfig memory liq, bool isNativeEth)
         internal
     {
         bytes memory hookData = "";
@@ -310,9 +309,9 @@ contract CreatePoolAndAddLiquidityScript is Script {
 
         uint256 amount0Max = liq.token0Amount + 1 wei;
         uint256 amount1Max = liq.token1Amount + 1 wei;
-        uint256 valueToPass = isNativeETH ? amount0Max : 0;
+        uint256 valueToPass = isNativeEth ? amount0Max : 0;
 
-        if (isNativeETH) {
+        if (isNativeEth) {
             (actions, params) = _mintLiquidityParamsWithSweep(
                 poolKey, liq.tickLower, liq.tickUpper, liq.liquidity, amount0Max, amount1Max, hookData
             );

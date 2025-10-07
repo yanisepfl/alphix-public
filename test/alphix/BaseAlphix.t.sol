@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -10,7 +10,6 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
@@ -75,8 +74,8 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint24 constant INITIAL_FEE = 500; // 0.05%
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
-    uint64 constant REGISTRAR_ROLE = 1;
-    uint64 constant POKER_ROLE = 2;
+    uint64 constant FEE_POKER_ROLE = 1;
+    uint64 constant REGISTRAR_ROLE = 2;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
@@ -388,8 +387,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
             data._lowerTick = TickMath.getTickAtSqrtPrice(data.lowerPrice);
             data._upperTick = TickMath.getTickAtSqrtPrice(data.upperPrice);
             unchecked {
-                data.lowerTick = int24((data._lowerTick / int256(data.tickSpacing)) * int256(data.tickSpacing));
-                data.upperTick = int24((data._upperTick / int256(data.tickSpacing)) * int256(data.tickSpacing));
+                int256 lowerTickRounded = data._lowerTick / int256(data.tickSpacing);
+                int256 upperTickRounded = data._upperTick / int256(data.tickSpacing);
+                data.lowerTick = int24(lowerTickRounded * int256(data.tickSpacing));
+                data.upperTick = int24(upperTickRounded * int256(data.tickSpacing));
             }
         }
 
@@ -458,7 +459,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         am.grantRole(REGISTRAR_ROLE, hookAddr, 0);
 
         // Grant poker role to owner (by default, tests can override)
-        am.grantRole(POKER_ROLE, owner, 0);
+        am.grantRole(FEE_POKER_ROLE, owner, 0);
 
         // Assign role to specific functions on Registry
         bytes4[] memory contractSelectors = new bytes4[](1);
@@ -472,7 +473,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Assign poker role to poke function on Hook
         bytes4[] memory pokeSelectors = new bytes4[](1);
         pokeSelectors[0] = Alphix(hookAddr).poke.selector;
-        am.setTargetFunctionRole(hookAddr, pokeSelectors, POKER_ROLE);
+        am.setTargetFunctionRole(hookAddr, pokeSelectors, FEE_POKER_ROLE);
     }
 
     /**

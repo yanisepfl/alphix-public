@@ -2,12 +2,10 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {Test, console} from "forge-std/Test.sol";
 
 /* OZ IMPORTS */
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -19,10 +17,9 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
-import {Registry, IRegistry} from "../../../../src/Registry.sol";
+import {IRegistry} from "../../../../src/interfaces/IRegistry.sol";
 
 /**
  * @title AccessAndOwnershipTest

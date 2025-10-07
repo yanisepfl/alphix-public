@@ -5,7 +5,6 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {Alphix} from "../../src/Alphix.sol";
 import {AlphixLogic} from "../../src/AlphixLogic.sol";
-import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
 
 /**
  * @title Configure Alphix System
