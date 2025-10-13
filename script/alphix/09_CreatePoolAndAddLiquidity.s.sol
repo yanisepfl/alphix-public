@@ -233,7 +233,9 @@ contract CreatePoolAndAddLiquidityScript is Script {
 
         // STEP 2: Initialize Alphix dynamic fee system for this pool
         console.log("Step 2: Initializing Alphix dynamic fee system...");
-        alphix.initializePool(poolKey, config.initialFee, config.initialTargetRatio, IAlphixLogic.PoolType(config.poolTypeRaw));
+        alphix.initializePool(
+            poolKey, config.initialFee, config.initialTargetRatio, IAlphixLogic.PoolType(config.poolTypeRaw)
+        );
         console.log("  - Pool initialized successfully (Alphix)");
         console.log("");
 
