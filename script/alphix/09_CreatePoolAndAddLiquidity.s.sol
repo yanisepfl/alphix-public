@@ -216,10 +216,14 @@ contract CreatePoolAndAddLiquidityScript is Script {
         console.log("Calculated Liquidity:", liq.liquidity);
         console.log("");
 
+        // Calculate approval amounts before broadcast to reduce stack usage
+        liq.token0Amount = liq.token0Amount + 1 wei;
+        liq.token1Amount = liq.token1Amount + 1 wei;
+
         vm.startBroadcast();
 
         // Approve tokens to PERMIT2 and PositionManager
-        _approveTokens(currency0, currency1, address(posm));
+        _approveTokens(currency0, currency1, address(posm), liq.token0Amount, liq.token1Amount);
 
         // STEP 1: Initialize pool FIRST
         console.log("Step 1: Initializing pool...");
@@ -229,8 +233,7 @@ contract CreatePoolAndAddLiquidityScript is Script {
 
         // STEP 2: Initialize Alphix dynamic fee system for this pool
         console.log("Step 2: Initializing Alphix dynamic fee system...");
-        IAlphixLogic.PoolType poolType = IAlphixLogic.PoolType(config.poolTypeRaw);
-        alphix.initializePool(poolKey, config.initialFee, config.initialTargetRatio, poolType);
+        alphix.initializePool(poolKey, config.initialFee, config.initialTargetRatio, IAlphixLogic.PoolType(config.poolTypeRaw));
         console.log("  - Pool initialized successfully (Alphix)");
         console.log("");
 
@@ -284,16 +287,20 @@ contract CreatePoolAndAddLiquidityScript is Script {
     /**
      * @dev Approve tokens to PERMIT2 and PositionManager
      */
-    function _approveTokens(Currency currency0, Currency currency1, address posm) internal {
+    function _approveTokens(Currency currency0, Currency currency1, address posm, uint256 amount0, uint256 amount1)
+        internal
+    {
+        uint48 expiration = uint48(block.timestamp + 1 hours);
+
         if (!currency0.isAddressZero()) {
             address token0 = Currency.unwrap(currency0);
-            IERC20(token0).approve(address(PERMIT2), type(uint256).max);
-            PERMIT2.approve(token0, posm, type(uint160).max, type(uint48).max);
+            IERC20(token0).approve(address(PERMIT2), amount0);
+            PERMIT2.approve(token0, posm, uint160(amount0), expiration);
         }
         if (!currency1.isAddressZero()) {
             address token1 = Currency.unwrap(currency1);
-            IERC20(token1).approve(address(PERMIT2), type(uint256).max);
-            PERMIT2.approve(token1, posm, type(uint160).max, type(uint48).max);
+            IERC20(token1).approve(address(PERMIT2), amount1);
+            PERMIT2.approve(token1, posm, uint160(amount1), expiration);
         }
     }
 
