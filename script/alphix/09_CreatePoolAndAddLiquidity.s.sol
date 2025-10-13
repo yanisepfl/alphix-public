@@ -216,14 +216,10 @@ contract CreatePoolAndAddLiquidityScript is Script {
         console.log("Calculated Liquidity:", liq.liquidity);
         console.log("");
 
-        // Calculate approval amounts before broadcast to reduce stack usage
-        liq.token0Amount = liq.token0Amount + 1 wei;
-        liq.token1Amount = liq.token1Amount + 1 wei;
-
         vm.startBroadcast();
 
-        // Approve tokens to PERMIT2 and PositionManager
-        _approveTokens(currency0, currency1, address(posm), liq.token0Amount, liq.token1Amount);
+        // Approve tokens to PERMIT2 and PositionManager (token amounts + 1 wei for slippage)
+        _approveTokens(currency0, currency1, address(posm), liq.token0Amount + 1, liq.token1Amount + 1);
 
         // STEP 1: Initialize pool FIRST
         console.log("Step 1: Initializing pool...");
@@ -288,10 +284,17 @@ contract CreatePoolAndAddLiquidityScript is Script {
 
     /**
      * @dev Approve tokens to PERMIT2 and PositionManager
+     * @param amount0 Amount of token0 to approve (must fit in uint160 for PERMIT2)
+     * @param amount1 Amount of token1 to approve (must fit in uint160 for PERMIT2)
      */
     function _approveTokens(Currency currency0, Currency currency1, address posm, uint256 amount0, uint256 amount1)
         internal
     {
+        // PERMIT2 uses uint160 for amounts, ensure no overflow
+        require(amount0 <= type(uint160).max, "Amount0 exceeds uint160 max");
+        require(amount1 <= type(uint160).max, "Amount1 exceeds uint160 max");
+
+        // Set realistic expiry: 1 hour from now
         uint48 expiration = uint48(block.timestamp + 1 hours);
 
         if (!currency0.isAddressZero()) {
