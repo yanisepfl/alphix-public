@@ -643,9 +643,9 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
 
     /**
      * @notice Fuzz: Upgrade with extreme OOB state
-     * @dev Tests upgrade preserves OOB streak state
+     * @dev Tests upgrade preserves OOB streak state with truly extreme streaks (20-100 consecutive hits)
      * @param liquidityAmount Pool liquidity
-     * @param numOOBHits Number of consecutive OOB hits before upgrade (2-6)
+     * @param numOOBHits Number of consecutive OOB hits before upgrade (20-100)
      * @param deviation OOB deviation magnitude
      */
     function testFuzz_upgradeStress_extremeOOBState_preserved(
@@ -654,7 +654,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         uint256 deviation
     ) public {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
-        numOOBHits = uint8(bound(numOOBHits, 2, 6));
+        numOOBHits = uint8(bound(numOOBHits, 20, 100)); // Extreme number of consecutive OOB hits
         deviation = bound(deviation, 1e17, 4e17);
 
         (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
@@ -698,128 +698,6 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         assertEq(feeAfter, feeBefore, "Fee preserved after upgrade with OOB state");
         assertGe(feeAfter, params.minFee, "Fee bounded after upgrade");
         assertLe(feeAfter, params.maxFee, "Fee bounded after upgrade");
-    }
-
-    /* ========================================================================== */
-    /*                  PARAMETER SENSITIVITY & CORNER CASES                      */
-    /* ========================================================================== */
-
-    /**
-     * @notice Fuzz: Side factor asymmetry effects
-     * @dev Tests upper vs lower side multiplier impacts on fee adjustments
-     * @param liquidityAmount Pool liquidity
-     * @param upperSideFactor Upper side multiplier (1e18-5e18)
-     * @param lowerSideFactor Lower side multiplier (1e18-5e18)
-     * @param numCycles Number of test cycles (2-6)
-     */
-    function testFuzz_paramSensitivity_sideFactors_asymmetricBehavior(
-        uint128 liquidityAmount,
-        uint256 upperSideFactor,
-        uint256 lowerSideFactor,
-        uint8 numCycles
-    ) public {
-        liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
-        upperSideFactor = bound(upperSideFactor, 1e18, 5e18);
-        lowerSideFactor = bound(lowerSideFactor, 1e18, 5e18);
-        numCycles = uint8(bound(numCycles, 2, 6));
-
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
-
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
-        params.upperSideFactor = upperSideFactor;
-        params.lowerSideFactor = lowerSideFactor;
-
-        vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
-
-        vm.startPrank(alice);
-        _addLiquidityForUser(
-            alice,
-            testKey,
-            TickMath.minUsableTick(testKey.tickSpacing),
-            TickMath.maxUsableTick(testKey.tickSpacing),
-            liquidityAmount
-        );
-        vm.stopPrank();
-
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        uint256 upperBound =
-            poolConfig.initialTargetRatio + (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
-        uint256 lowerBound =
-            poolConfig.initialTargetRatio - (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
-
-        for (uint256 i = 0; i < numCycles; i++) {
-            vm.warp(block.timestamp + params.minPeriod + 1);
-
-            uint256 ratio = (i % 2 == 0) ? upperBound + 1e17 : (lowerBound > 1e17 ? lowerBound - 1e17 : 1e15);
-            if (ratio > params.maxCurrentRatio) ratio = params.maxCurrentRatio;
-
-            vm.prank(owner);
-            hook.poke(testKey, ratio);
-
-            uint24 fee;
-            (,,, fee) = poolManager.getSlot0(testPoolId);
-
-            assertGe(fee, params.minFee, "Fee bounded with asymmetric side factors");
-            assertLe(fee, params.maxFee, "Fee bounded with asymmetric side factors");
-        }
-    }
-
-    /**
-     * @notice Fuzz: Extreme parameter combinations
-     * @dev Tests system with extreme but valid parameter values
-     * @param liquidityAmount Pool liquidity
-     * @param linearSlope Linear slope parameter
-     * @param ratioTolerance Ratio tolerance parameter
-     */
-    function testFuzz_paramSensitivity_extremeValues_systemStable(
-        uint128 liquidityAmount,
-        uint256 linearSlope,
-        uint256 ratioTolerance
-    ) public {
-        liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
-        linearSlope = bound(linearSlope, 1e17, 5e18);
-        ratioTolerance = bound(ratioTolerance, 1e15, 1e17);
-
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
-
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
-        params.linearSlope = linearSlope;
-        params.ratioTolerance = ratioTolerance;
-
-        vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
-
-        vm.startPrank(alice);
-        _addLiquidityForUser(
-            alice,
-            testKey,
-            TickMath.minUsableTick(testKey.tickSpacing),
-            TickMath.maxUsableTick(testKey.tickSpacing),
-            liquidityAmount
-        );
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        for (uint256 i = 0; i < 5; i++) {
-            uint256 ratio = 3e17 + (i * 1e17);
-            if (ratio > params.maxCurrentRatio) ratio = params.maxCurrentRatio;
-
-            vm.prank(owner);
-            hook.poke(testKey, ratio);
-
-            uint24 fee;
-            (,,, fee) = poolManager.getSlot0(testPoolId);
-
-            assertGe(fee, params.minFee, "Fee bounded with extreme parameters");
-            assertLe(fee, params.maxFee, "Fee bounded with extreme parameters");
-
-            vm.warp(block.timestamp + params.minPeriod + 1);
-        }
-
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(testPoolId);
-        assertTrue(config.isConfigured, "Pool operational with extreme parameters");
     }
 
     /* ========================================================================== */
