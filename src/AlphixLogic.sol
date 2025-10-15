@@ -9,7 +9,8 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {
-    ERC165Upgradeable, IERC165
+    ERC165Upgradeable,
+    IERC165
 } from "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
 
 /* UNISWAP V4 IMPORTS */
@@ -484,12 +485,7 @@ contract AlphixLogic is
     /**
      * @dev See {IAlphixLogic-getPoolTypeParams}.
      */
-    function getPoolTypeParams(PoolType poolType)
-        external
-        view
-        override
-        returns (DynamicFeeLib.PoolTypeParams memory)
-    {
+    function getPoolTypeParams(PoolType poolType) external view override returns (DynamicFeeLib.PoolTypeParams memory) {
         return poolTypeParams[poolType];
     }
 

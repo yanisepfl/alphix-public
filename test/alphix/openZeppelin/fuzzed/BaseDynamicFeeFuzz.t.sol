@@ -390,7 +390,14 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @param useMinFee Whether to test min fee (true) or max fee (false)
      * @param currentRatio Current ratio
      */
-    function testFuzz_poke_boundaryFeeValues(uint24, /* feeAtBoundary */ bool useMinFee, uint256 currentRatio) public {
+    function testFuzz_poke_boundaryFeeValues(
+        uint24,
+        /* feeAtBoundary */
+        bool useMinFee,
+        uint256 currentRatio
+    )
+        public
+    {
         // Set fee to exact boundary
         uint24 mockFee = useMinFee ? MIN_FEE_FUZZ : MAX_FEE_FUZZ;
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
@@ -462,9 +469,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @param ratio2 Second ratio
      * @param ratio3 Third ratio
      */
-    function testFuzz_poke_multiplePokesSucceed(uint24 mockFee, uint256 ratio1, uint256 ratio2, uint256 ratio3)
-        public
-    {
+    function testFuzz_poke_multiplePokesSucceed(uint24 mockFee, uint256 ratio1, uint256 ratio2, uint256 ratio3) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
         ratio1 = bound(ratio1, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);

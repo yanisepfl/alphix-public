@@ -541,9 +541,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
      * @param maxCurrentRatio Max current ratio to test
      * @param testLower Whether to test lower bound (true) or upper bound (false)
      */
-    function testFuzz_setPoolTypeParams_reverts_invalidMaxCurrentRatio(uint256 maxCurrentRatio, bool testLower)
-        public
-    {
+    function testFuzz_setPoolTypeParams_reverts_invalidMaxCurrentRatio(uint256 maxCurrentRatio, bool testLower) public {
         if (testLower) {
             // Test below minimum
             maxCurrentRatio = bound(maxCurrentRatio, 0, MIN_MAX_CURRENT_RATIO_FUZZ - 1);

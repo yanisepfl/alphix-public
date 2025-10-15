@@ -333,10 +333,7 @@ contract DynamicFeeFuzzTest is Test {
      * @param current2 Second current value (higher)
      * @param lookback Lookback period
      */
-    function testFuzz_ema_monotonic(uint256 previous, uint256 current1, uint256 current2, uint24 lookback)
-        public
-        pure
-    {
+    function testFuzz_ema_monotonic(uint256 previous, uint256 current1, uint256 current2, uint24 lookback) public pure {
         previous = bound(previous, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
         current1 = bound(current1, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ - 1);
         current2 = bound(current2, current1 + 1, MAX_RATIO_FUZZ);

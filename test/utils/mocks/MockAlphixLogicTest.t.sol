@@ -143,10 +143,7 @@ contract MockAlphixLogicTest is Test {
     function test_poolConfig_struct() public pure {
         // Test that we can create PoolConfig structs
         IAlphixLogic.PoolConfig memory config = IAlphixLogic.PoolConfig({
-            initialFee: 500,
-            initialTargetRatio: 5e17,
-            poolType: IAlphixLogic.PoolType.STABLE,
-            isConfigured: true
+            initialFee: 500, initialTargetRatio: 5e17, poolType: IAlphixLogic.PoolType.STABLE, isConfigured: true
         });
 
         assertEq(config.initialFee, 500, "Initial fee should be set correctly");

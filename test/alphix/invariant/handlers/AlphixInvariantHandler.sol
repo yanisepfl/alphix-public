@@ -399,11 +399,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         return pools.length;
     }
 
-    function getGhostVariables()
-        external
-        view
-        returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256)
-    {
+    function getGhostVariables() external view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
         return (
             ghostsumOfFees,
             ghostsumOfTargetRatios,

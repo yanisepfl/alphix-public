@@ -2021,9 +2021,9 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         for (uint256 day = 0; day < daysPerSeason; day += 7) {
             vm.warp(block.timestamp + 7 days);
 
-            uint256 weeklyVolume = (
-                uint256(cycleParams.baseLiquidity) * cycleParams.baseVolumeRatioBps * cycleParams.currentMultiplier
-            ) / (10000 * 100);
+            uint256 weeklyVolume =
+                (uint256(cycleParams.baseLiquidity) * cycleParams.baseVolumeRatioBps * cycleParams.currentMultiplier)
+                / (10000 * 100);
             if (weeklyVolume < MIN_SWAP_AMOUNT) weeklyVolume = MIN_SWAP_AMOUNT;
             if (weeklyVolume > MAX_SWAP_AMOUNT) weeklyVolume = MAX_SWAP_AMOUNT;
 

@@ -934,7 +934,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         SideFactorTestData memory testData,
         uint256 ratioTolerance,
         uint24 /* baseMaxFeeDelta */
-    ) internal {
+    )
+        internal
+    {
         // Create two separate pools with different currencies
         (Currency c01, Currency c11) = deployCurrencyPairWithDecimals(18, 18);
         (Currency c02, Currency c12) = deployCurrencyPairWithDecimals(18, 18);
@@ -1437,8 +1439,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 linearSlope,
         uint24 baseMaxFeeDelta
     ) internal {
-        DynamicFeeLib.PoolTypeParams memory params1 =
-            _createParameterSetWithRatioTolerance(ratioTolerance1, linearSlope, baseMaxFeeDelta);
+        DynamicFeeLib.PoolTypeParams memory params1 = _createParameterSetWithRatioTolerance(
+            ratioTolerance1, linearSlope, baseMaxFeeDelta
+        );
         DynamicFeeLib.PoolTypeParams memory params2 =
             _createParameterSetWithRatioTolerance(ratioTolerance2, linearSlope, baseMaxFeeDelta);
 
@@ -1479,11 +1482,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      * @param linearSlope Linear slope value to use
      * @return params Complete parameter set
      */
-    function _createParameterSetWithBaseMaxFeeDelta(uint256 ratioTolerance, uint24 baseMaxFeeDelta, uint256 linearSlope)
-        internal
-        pure
-        returns (DynamicFeeLib.PoolTypeParams memory)
-    {
+    function _createParameterSetWithBaseMaxFeeDelta(
+        uint256 ratioTolerance,
+        uint24 baseMaxFeeDelta,
+        uint256 linearSlope
+    ) internal pure returns (DynamicFeeLib.PoolTypeParams memory) {
         return DynamicFeeLib.PoolTypeParams({
             minFee: 1,
             maxFee: 8000,

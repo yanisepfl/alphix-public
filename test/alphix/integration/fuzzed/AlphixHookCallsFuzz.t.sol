@@ -382,9 +382,11 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
      * @param decimals1 Decimals for token1 (6-18)
      * @param liquidityAmount Amount of liquidity to add
      */
-    function testFuzz_operations_work_with_different_decimals(uint8 decimals0, uint8 decimals1, uint128 liquidityAmount)
-        public
-    {
+    function testFuzz_operations_work_with_different_decimals(
+        uint8 decimals0,
+        uint8 decimals1,
+        uint128 liquidityAmount
+    ) public {
         // Bound decimals to realistic range (6-18)
         decimals0 = uint8(bound(decimals0, 6, 18));
         decimals1 = uint8(bound(decimals1, 6, 18));

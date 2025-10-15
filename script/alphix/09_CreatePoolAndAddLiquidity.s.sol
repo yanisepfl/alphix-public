@@ -369,8 +369,9 @@ contract CreatePoolAndAddLiquidityScript is Script {
         uint256 amount1Max,
         bytes memory hookData
     ) internal view returns (bytes memory, bytes[] memory) {
-        bytes memory actions =
-            abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP));
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP)
+        );
 
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(poolKey, _tickLower, _tickUpper, liquidity, amount0Max, amount1Max, msg.sender, hookData);

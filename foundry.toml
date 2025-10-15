@@ -16,14 +16,6 @@ runs = 256
 depth = 50
 fail_on_revert = false
 
-[profile.lint]
-exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]
-
-[profile.coverage]
-include = ["src/**/*.sol"]
-exclude = ["lib/**", "test/**", "script/**"]
-report = "lcov"
-
 # Profile for main branch PR merge testing with high fuzz runs
 [profile.main]
 fuzz.runs = 2048
