@@ -86,6 +86,14 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint24 currentFee;
     }
 
+    struct SeasonalCycleParams {
+        uint128 baseLiquidity;
+        uint32 baseVolumeRatioBps;
+        uint256 currentMultiplier;
+        uint24 prevFee;
+        uint256 prevTargetRatio;
+    }
+
     uint256 constant MAX_RATIO = 1e18;
 
     function setUp() public override {
@@ -941,6 +949,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param numSeasons Number of seasonal cycles (2-4)
      * @param poolTypeRaw Pool type
      */
+    /// forge-config: default.fuzz.runs = 64
     function testFuzz_longTerm_seasonalPatterns_feeConvergence(
         uint128 baseLiquidity,
         uint32 baseVolumeRatioBps,
@@ -971,7 +980,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
 
         SeasonalCycleParams memory cycleParams = SeasonalCycleParams({
             baseLiquidity: baseLiquidity,
-            baseVolumeRatioBps: uint16(baseVolumeRatioBps % 65536),
+            baseVolumeRatioBps: baseVolumeRatioBps,
             currentMultiplier: 0,
             prevFee: poolConfig.initialFee,
             prevTargetRatio: poolConfig.initialTargetRatio
@@ -999,6 +1008,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param numWeeks Number of weeks to simulate (6-12)
      * @param poolTypeRaw Pool type
      */
+    /// forge-config: default.fuzz.runs = 128
     function testFuzz_longTerm_emaConvergence_toMinFee(uint128 liquidityAmount, uint8 numWeeks, uint8 poolTypeRaw)
         public
     {
@@ -1060,6 +1070,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param numWeeks Number of weeks to simulate (20-30 for full convergence)
      * @param poolTypeRaw Pool type
      */
+    /// forge-config: default.fuzz.runs = 128
     function testFuzz_longTerm_emaConvergence_toMaxFee(uint128 liquidityAmount, uint8 numWeeks, uint8 poolTypeRaw)
         public
     {
@@ -1124,6 +1135,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param numWeeks Number of weeks to simulate (8-15 for convergence)
      * @param poolTypeRaw Pool type
      */
+    /// forge-config: default.fuzz.runs = 128
     function testFuzz_longTerm_emaConvergence_toMidRange(uint128 liquidityAmount, uint8 numWeeks, uint8 poolTypeRaw)
         public
     {
@@ -1193,6 +1205,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param linearSlopeLow Lower slope (0.5x - 1.5x)
      * @param linearSlopeHigh Higher slope (1.5x - 3.0x)
      */
+    /// forge-config: default.fuzz.runs = 128
     function testFuzz_longTerm_linearSlopeImpact(
         uint128 liquidityAmount,
         uint256 linearSlopeLow,
@@ -1282,6 +1295,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param lowerSideFactorLow Lower factor (1.0x - 1.5x)
      * @param lowerSideFactorHigh Higher factor (1.5x - 2.5x)
      */
+    /// forge-config: default.fuzz.runs = 128
     function testFuzz_longTerm_lowerSideFactorImpact(
         uint128 liquidityAmount,
         uint256 lowerSideFactorLow,
@@ -1437,6 +1451,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param liquidityAmount Pool liquidity
      * @param baseMaxFeeDelta Base max fee delta (affects streak multiplier impact)
      */
+    /// forge-config: default.fuzz.runs = 128
     function testFuzz_longTerm_streakAccumulationImpact(uint128 liquidityAmount, uint256 baseMaxFeeDelta) public {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 100, MAX_LIQUIDITY));
         baseMaxFeeDelta = bound(baseMaxFeeDelta, 600, 1000);
@@ -1528,6 +1543,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param baseVolRatio Base volume as ratio of liquidity (0.1x-10x)
      * @param spikeFreq How often volume spikes occur (every N weeks, 5-20)
      */
+    /// forge-config: default.fuzz.runs = 128
     function testFuzz_longTerm_organicMarketBehavior(
         uint128 liqAmt,
         uint8 numWeeks,
@@ -1664,6 +1680,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @param volumeRatioBps Volume as % of liquidity in bps (1bps-100000000bps = 0.01%-1,000,000%)
      * @param poolTypeRaw Pool type
      */
+    /// forge-config: default.fuzz.runs = 64
     function testFuzz_longTerm_monthlyAdjustments_consistent(
         uint128 liquidityAmount,
         uint8 numMonths,
@@ -1980,14 +1997,6 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         for (uint256 i = 0; i < numSwaps; i++) {
             _performSwapAndVerifyFee(trader, poolKey, pid, swapAmount, totalLiquidity, true);
         }
-    }
-
-    struct SeasonalCycleParams {
-        uint128 baseLiquidity;
-        uint16 baseVolumeRatioBps;
-        uint256 currentMultiplier;
-        uint24 prevFee;
-        uint256 prevTargetRatio;
     }
 
     /**
