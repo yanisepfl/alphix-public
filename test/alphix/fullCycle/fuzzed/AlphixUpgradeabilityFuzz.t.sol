@@ -50,6 +50,9 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
     uint256 constant MIN_RATIO = 0;
     uint256 constant MAX_RATIO = 1e18;
 
+    /// @dev Precomputed topic for FeeUpdated event to avoid recomputation in every test
+    bytes32 constant FEE_UPDATED_TOPIC = keccak256("FeeUpdated(bytes32,uint24,uint24,uint256,uint256,uint8,uint8)");
+
     function setUp() public override {
         super.setUp();
 
@@ -103,12 +106,18 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig(testPoolId);
         uint24 feeBefore;
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
+        address implBefore = _impl(address(logic));
 
         // Upgrade
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+
+        // Verify implementation actually changed
+        address implAfter = _impl(address(logic));
+        assertTrue(implAfter != implBefore, "Implementation address must change");
+        assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         // Verify state preserved
         IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(testPoolId);
@@ -153,10 +162,16 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Upgrade
+        address implBefore = _impl(address(logic));
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+
+        // Verify implementation changed
+        address implAfter = _impl(address(logic));
+        assertTrue(implAfter != implBefore, "Implementation must change");
+        assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         // Test liquidity operations after upgrade
         vm.startPrank(bob);
@@ -235,10 +250,16 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
 
         // Upgrade
+        address implBefore = _impl(address(logic));
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+
+        // Verify implementation changed
+        address implAfter = _impl(address(logic));
+        assertTrue(implAfter != implBefore, "Implementation must change");
+        assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         // Poke after upgrade
         vm.warp(block.timestamp + params.minPeriod + 1);
@@ -310,10 +331,16 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
             vm.stopPrank();
 
             // Upgrade
+            address implBefore = _impl(address(logic));
             vm.startPrank(owner);
             AlphixLogic newImpl = new AlphixLogic();
             UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newImpl), "");
             vm.stopPrank();
+
+            // Verify implementation changed
+            address implAfter = _impl(address(logic));
+            assertTrue(implAfter != implBefore, "Implementation must change in iteration");
+            assertEq(implAfter, address(newImpl), "Implementation must match new logic in iteration");
 
             // Operation after upgrade
             vm.warp(block.timestamp + params.minPeriod + 1);
@@ -401,7 +428,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         uint24 feeBefore;
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
 
-        // Upgrade while active
+        // Upgrade while active (implementation verification omitted due to stack-too-deep)
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
@@ -484,10 +511,16 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory paramsBefore = logic.getPoolTypeParams(poolCfg.poolType);
 
         // Upgrade
+        address implBefore = _impl(address(logic));
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+
+        // Verify implementation changed
+        address implAfter = _impl(address(logic));
+        assertTrue(implAfter != implBefore, "Implementation must change");
+        assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         // Verify parameters preserved
         DynamicFeeLib.PoolTypeParams memory paramsAfter = logic.getPoolTypeParams(poolCfg.poolType);
@@ -507,7 +540,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 10, MAX_LIQUIDITY));
         IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
 
-        // Upgrade first
+        // Upgrade first (implementation verification omitted due to stack-too-deep constraints)
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
@@ -626,11 +659,13 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
             (,,, feesBefore[i]) = poolManager.getSlot0(poolIds[i]);
         }
 
+        // Upgrade (implementation verification omitted due to stack-too-deep constraints)
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
 
+        // Verify each pool after upgrade
         for (uint256 i = 0; i < numPools; i++) {
             uint24 feeAfter;
             (,,, feeAfter) = poolManager.getSlot0(poolIds[i]);
@@ -639,6 +674,25 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
             IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolIds[i]);
             assertTrue(config.isConfigured, "Pool remains configured after upgrade");
         }
+
+        // Verify pools remain operational post-upgrade by executing a sample swap
+        vm.startPrank(bob);
+        MockERC20(Currency.unwrap(pools[0].currency0)).approve(address(swapRouter), MIN_SWAP_AMOUNT);
+        swapRouter.swapExactTokensForTokens({
+            amountIn: MIN_SWAP_AMOUNT,
+            amountOutMin: 0,
+            zeroForOne: true,
+            poolKey: pools[0],
+            hookData: Constants.ZERO_BYTES,
+            receiver: bob,
+            deadline: block.timestamp + 100
+        });
+        vm.stopPrank();
+
+        // Verify swap succeeded and pool still functions
+        uint24 feeAfterSwap;
+        (,,, feeAfterSwap) = poolManager.getSlot0(poolIds[0]);
+        assertTrue(feeAfterSwap > 0, "Pool operational after upgrade");
     }
 
     /**
@@ -675,9 +729,10 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         uint256 upperBound =
             poolConfig.initialTargetRatio + (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
 
+        // Use smaller increments (1e15 instead of 1e16) to avoid premature capping and increase diversity
         for (uint256 i = 0; i < numOOBHits; i++) {
             vm.warp(block.timestamp + params.minPeriod + 1);
-            uint256 oobRatio = upperBound + deviation + (i * 1e16);
+            uint256 oobRatio = upperBound + deviation + (i * 1e15);
             if (oobRatio > params.maxCurrentRatio) oobRatio = params.maxCurrentRatio;
 
             vm.prank(owner);
@@ -687,10 +742,16 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         uint24 feeBefore;
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
 
+        address implBefore = _impl(address(logic));
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+
+        // Verify implementation changed
+        address implAfter = _impl(address(logic));
+        assertTrue(implAfter != implBefore, "Implementation must change");
+        assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         uint24 feeAfter;
         (,,, feeAfter) = poolManager.getSlot0(testPoolId);
@@ -700,9 +761,48 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         assertLe(feeAfter, params.maxFee, "Fee bounded after upgrade");
     }
 
+    /**
+     * @notice Test that non-owner cannot upgrade the logic contract
+     * @dev Validates that _authorizeUpgrade properly restricts upgrades to owner only
+     */
+    function test_unauthorized_upgrade_reverts() public {
+        AlphixLogic newLogicImplementation = new AlphixLogic();
+
+        // Attempt upgrade as non-owner should revert
+        vm.startPrank(alice);
+        vm.expectRevert();
+        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
+        vm.stopPrank();
+
+        // Verify implementation did not change
+        address currentImpl = _impl(address(logic));
+        assertTrue(currentImpl != address(newLogicImplementation), "Implementation should not have changed");
+
+        // Verify owner can still upgrade
+        address implBefore = _impl(address(logic));
+        vm.startPrank(owner);
+        UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
+        vm.stopPrank();
+
+        address implAfter = _impl(address(logic));
+        assertTrue(implAfter != implBefore, "Owner should be able to upgrade");
+        assertEq(implAfter, address(newLogicImplementation), "Implementation should match for owner");
+    }
+
     /* ========================================================================== */
     /*                              HELPER FUNCTIONS                              */
     /* ========================================================================== */
+
+    /**
+     * @notice Reads the implementation address from EIP-1967 proxy storage slot
+     * @dev Uses the standard EIP-1967 implementation slot: keccak256("eip1967.proxy.implementation") - 1
+     * @param proxy The proxy contract address
+     * @return The implementation contract address
+     */
+    function _impl(address proxy) internal view returns (address) {
+        bytes32 slot = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
+        return address(uint160(uint256(vm.load(proxy, slot))));
+    }
 
     /**
      * @notice Creates and initializes a new pool with a specific pool type
@@ -726,13 +826,13 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         token1.mint(bob, INITIAL_TOKEN_AMOUNT);
         vm.stopPrank();
 
-        Currency currency0 = Currency.wrap(address(token0));
-        Currency currency1 = Currency.wrap(address(token1));
+        Currency curr0 = Currency.wrap(address(token0));
+        Currency curr1 = Currency.wrap(address(token1));
 
         // Create pool key
         testKey = PoolKey({
-            currency0: currency0 < currency1 ? currency0 : currency1,
-            currency1: currency0 < currency1 ? currency1 : currency0,
+            currency0: curr0 < curr1 ? curr0 : curr1,
+            currency1: curr0 < curr1 ? curr1 : curr0,
             fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: 60,
             hooks: IHooks(address(hook))

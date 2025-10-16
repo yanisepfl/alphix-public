@@ -49,6 +49,9 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
     uint256 constant MIN_SWAP_AMOUNT = 1e17;
     uint256 constant MAX_SWAP_AMOUNT = 50e18;
 
+    /// @dev Precomputed topic for FeeUpdated event to avoid recomputation in every test
+    bytes32 constant FEE_UPDATED_TOPIC = keccak256("FeeUpdated(bytes32,uint24,uint24,uint256,uint256,uint256)");
+
     // Structs to avoid stack too deep
     struct LpConfig {
         uint128 aliceLiq;
@@ -2045,8 +2048,10 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint128 liquidityPerLp,
         SwapConfig memory swapConfig
     ) internal {
-        // Safe multiplication: liquidityPerLp is bounded in fuzz tests, max value ensures no overflow
-        uint128 totalLiquidity = liquidityPerLp * 4;
+        // Safe cast: verify liquidityPerLp * 4 fits in uint128 before casting
+        uint256 totalLiquidityCalc = uint256(liquidityPerLp) * 4;
+        require(totalLiquidityCalc <= type(uint128).max, "totalLiquidity overflow in uint128 cast");
+        uint128 totalLiquidity = uint128(totalLiquidityCalc);
         (,,, swapConfig.feeRate) = poolManager.getSlot0(testPoolId);
         (uint256 feeGrowth0Start,) = poolManager.getFeeGrowthInside(testPoolId, lowerTick, upperTick);
 
@@ -2197,6 +2202,8 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         for (uint256 day = 0; day < daysPerSeason; day += 7) {
             vm.warp(block.timestamp + 7 days);
 
+            // Calculate weekly volume: (liquidity * ratio_bps * multiplier) / (10000_bps * 100_multiplier_scale)
+            // Denominators: baseVolumeRatioBps in bps (1e4), currentMultiplier scaled by 100 → total 1e6
             uint256 weeklyVolume =
                 (uint256(cycleParams.baseLiquidity) * cycleParams.baseVolumeRatioBps * cycleParams.currentMultiplier)
                 / (10000 * 100);
@@ -2240,14 +2247,22 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
 
     /**
      * @notice Extract oldTargetRatio from FeeUpdated event
-     * @dev Helper to get the actual EMA target ratio from the poke event
+     * @dev Helper to get the actual EMA target ratio from the poke event.
+     *      Includes sanity check to guard against event schema drift.
      * @return oldTargetRatio The EMA target ratio before the poke
      */
     function _extractOldTargetRatio() internal returns (uint256 oldTargetRatio) {
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == keccak256("FeeUpdated(bytes32,uint24,uint24,uint256,uint256,uint256)")) {
+            if (logs[i].topics[0] == FEE_UPDATED_TOPIC) {
                 (,, oldTargetRatio,,) = abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
+
+                // Sanity check: target ratio should be within reasonable bounds (1e15 to MAX_CURRENT_RATIO)
+                require(
+                    oldTargetRatio >= 1e15 && oldTargetRatio <= 1e24,
+                    "Extracted target ratio out of expected bounds - possible event schema drift"
+                );
+
                 return oldTargetRatio;
             }
         }
