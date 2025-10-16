@@ -49,6 +49,12 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
     uint256 constant MIN_SWAP_AMOUNT = 1e17;
     uint256 constant MAX_SWAP_AMOUNT = 50e18;
 
+    // Test helper constants for convergence and simulation parameters
+    uint24 constant CONVERGENCE_TOLERANCE_BPS = 10; // 10 basis points = 0.1% tolerance for fee convergence
+    uint256 constant MIN_WEEKS_FOR_CONVERGENCE = 50; // Minimum weeks to simulate for convergence tests
+    uint256 constant MAX_WEEKS_FOR_CONVERGENCE = 200; // Maximum weeks to cap simulation time
+    uint256 constant MAX_WEEKS_FOR_STREAK_BREAKING = 150; // Max weeks for OOB ratio growth with streak breaking
+
     // Structs to avoid stack too deep
     struct LpConfig {
         uint128 aliceLiq;
@@ -1061,11 +1067,10 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint24 finalFee;
         (,,, finalFee) = poolManager.getSlot0(testPoolId);
 
-        // Allow for near-convergence: fee should be at minFee or very close (within 10 bps)
+        // Allow for near-convergence: fee should be at minFee or very close (within tolerance)
         // Some parameter combinations (low linearSlope or lowerSideFactor) may converge slower
-        uint24 convergenceTolerance = 10; // 10 basis points = 0.1%
         assertTrue(
-            finalFee <= params.minFee + convergenceTolerance,
+            finalFee <= params.minFee + CONVERGENCE_TOLERANCE_BPS,
             "Fee should converge to or near minFee with consistently low ratios"
         );
     }
@@ -1132,11 +1137,10 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint24 finalFee;
         (,,, finalFee) = poolManager.getSlot0(testPoolId);
 
-        // Allow for near-convergence: fee should be at maxFee or very close (within 10 bps)
+        // Allow for near-convergence: fee should be at maxFee or very close (within tolerance)
         // Some parameter combinations (low linearSlope or upperSideFactor) may converge slower
-        uint24 convergenceTolerance = 10; // 10 basis points = 0.1%
         assertTrue(
-            finalFee >= params.maxFee - convergenceTolerance,
+            finalFee >= params.maxFee - CONVERGENCE_TOLERANCE_BPS,
             "Fee should converge to or near maxFee with consistently high ratios"
         );
     }
@@ -2372,9 +2376,9 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         // Baseline slope is 1e18, so scale weeks by (1e18 / linearSlope)
         uint256 weeksNeeded = (feeDistance * 2 * 1e18) / (minPerWeekDelta * linearSlope);
 
-        // Cap between 50 and 200 weeks to keep tests performant
-        if (weeksNeeded < 50) return 50;
-        if (weeksNeeded > 200) return 200;
+        // Cap between min and max weeks to keep tests performant
+        if (weeksNeeded < MIN_WEEKS_FOR_CONVERGENCE) return MIN_WEEKS_FOR_CONVERGENCE;
+        if (weeksNeeded > MAX_WEEKS_FOR_CONVERGENCE) return MAX_WEEKS_FOR_CONVERGENCE;
         return weeksNeeded;
     }
 
@@ -2544,9 +2548,8 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint24 targetFee
     ) internal returns (uint256) {
         uint256 weekCount = 0;
-        uint256 maxWeeks = 150; // Reduced since breaking streak makes convergence much slower
 
-        for (uint256 cycle = 0; cycle < maxWeeks / 2; cycle++) {
+        for (uint256 cycle = 0; cycle < MAX_WEEKS_FOR_STREAK_BREAKING / 2; cycle++) {
             // Week 1: Push OOB (upward)
             {
                 uint256 dailyVolume = (liquidityAmount * ratioOob) / 1e18;
