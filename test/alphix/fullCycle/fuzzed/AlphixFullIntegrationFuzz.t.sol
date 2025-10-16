@@ -55,6 +55,10 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
     uint256 constant MAX_WEEKS_FOR_CONVERGENCE = 200; // Maximum weeks to cap simulation time
     uint256 constant MAX_WEEKS_FOR_STREAK_BREAKING = 150; // Max weeks for OOB ratio growth with streak breaking
 
+    // Event validation bounds for schema drift detection
+    uint256 constant MIN_VALID_TARGET_RATIO = 1e15; // Minimum reasonable target ratio (0.001 in 1e18)
+    uint256 constant MAX_VALID_TARGET_RATIO = 1e24; // Maximum reasonable target ratio (1,000,000 in 1e18)
+
     // Structs to avoid stack too deep
     struct LpConfig {
         uint128 aliceLiq;
@@ -2262,9 +2266,9 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
 
                 (,, oldTargetRatio,,) = abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
 
-                // Sanity check: target ratio should be within reasonable bounds (1e15 to MAX_CURRENT_RATIO)
+                // Sanity check: target ratio should be within reasonable bounds for schema drift detection
                 require(
-                    oldTargetRatio >= 1e15 && oldTargetRatio <= 1e24,
+                    oldTargetRatio >= MIN_VALID_TARGET_RATIO && oldTargetRatio <= MAX_VALID_TARGET_RATIO,
                     "Extracted target ratio out of expected bounds - possible event schema drift"
                 );
 
