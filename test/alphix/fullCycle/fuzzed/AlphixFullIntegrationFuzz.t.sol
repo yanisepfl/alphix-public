@@ -49,9 +49,6 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
     uint256 constant MIN_SWAP_AMOUNT = 1e17;
     uint256 constant MAX_SWAP_AMOUNT = 50e18;
 
-    /// @dev Precomputed topic for FeeUpdated event to avoid recomputation in every test
-    bytes32 constant FEE_UPDATED_TOPIC = keccak256("FeeUpdated(bytes32,uint24,uint24,uint256,uint256,uint256)");
-
     // Structs to avoid stack too deep
     struct LpConfig {
         uint128 aliceLiq;
@@ -77,6 +74,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint256 linearSlope;
         uint256 baseMaxFeeDelta;
         uint256 sideFactor;
+        uint256 maxCurrentRatio;
     }
 
     struct OrganicWeekParams {
@@ -2255,6 +2253,9 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == FEE_UPDATED_TOPIC) {
+                // Validate topic structure before decoding
+                require(logs[i].topics.length >= 2, "FeeUpdated: malformed topics");
+
                 (,, oldTargetRatio,,) = abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
 
                 // Sanity check: target ratio should be within reasonable bounds (1e15 to MAX_CURRENT_RATIO)
@@ -2266,7 +2267,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
                 return oldTargetRatio;
             }
         }
-        return 0;
+        revert("FeeUpdated event not found in recorded logs");
     }
 
     /**
@@ -2406,7 +2407,8 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
                 targetFee,
                 params.linearSlope,
                 params.baseMaxFeeDelta,
-                sideFactor
+                sideFactor,
+                params.maxCurrentRatio
             )
         );
     }
@@ -2433,7 +2435,9 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
 
             vm.warp(block.timestamp + p.minPeriod + 1);
             vm.prank(owner);
-            hook.poke(p.key, p.ratio);
+            // Clamp ratio to maxCurrentRatio to ensure valid input across all param sets
+            uint256 clampedRatio = p.ratio > p.maxCurrentRatio ? p.maxCurrentRatio : p.ratio;
+            hook.poke(p.key, clampedRatio);
 
             uint24 currentFee;
             (,,, currentFee) = poolManager.getSlot0(p.poolId);
@@ -2502,6 +2506,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         // Daily swaps
         uint256 dailyVol = weekVol / 7;
         if (dailyVol < MIN_SWAP_AMOUNT) dailyVol = MIN_SWAP_AMOUNT;
+        if (dailyVol > MAX_SWAP_AMOUNT) dailyVol = MAX_SWAP_AMOUNT;
 
         for (uint256 day = 0; day < 7; day++) {
             vm.warp(block.timestamp + 1 days);

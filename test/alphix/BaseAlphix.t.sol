@@ -81,6 +81,11 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
         (uint256(type(uint24).max) * 1e18) / uint256(LPFeeLibrary.MAX_LP_FEE);
 
+    /// @dev Precomputed topic for FeeUpdated event - centralized to ensure consistency across all tests
+    /// @dev Event signature: FeeUpdated(bytes32 indexed poolId, uint24 oldFee, uint24 newFee, uint256 oldTargetRatio, uint256 currentRatio, uint256 newTargetRatio)
+    bytes32 internal constant FEE_UPDATED_TOPIC =
+        keccak256("FeeUpdated(bytes32,uint24,uint24,uint256,uint256,uint256)");
+
     // Test addresses
     address public owner;
     address public user1;

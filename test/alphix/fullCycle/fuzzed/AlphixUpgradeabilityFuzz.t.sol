@@ -50,8 +50,9 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
     uint256 constant MIN_RATIO = 0;
     uint256 constant MAX_RATIO = 1e18;
 
-    /// @dev Precomputed topic for FeeUpdated event to avoid recomputation in every test
-    bytes32 constant FEE_UPDATED_TOPIC = keccak256("FeeUpdated(bytes32,uint24,uint24,uint256,uint256,uint8,uint8)");
+    /// @dev EIP-1967 implementation slot: keccak256("eip1967.proxy.implementation") - 1
+    bytes32 private constant EIP1967_IMPLEMENTATION_SLOT =
+        bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
 
     function setUp() public override {
         super.setUp();
@@ -428,11 +429,12 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         uint24 feeBefore;
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
 
-        // Upgrade while active (implementation verification omitted due to stack-too-deep)
+        // Upgrade while active
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+        _assertImplChanged(address(logic), address(newLogicImplementation));
 
         // Verify state preserved
         IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(testPoolId);
@@ -540,11 +542,12 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 10, MAX_LIQUIDITY));
         IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
 
-        // Upgrade first (implementation verification omitted due to stack-too-deep constraints)
+        // Upgrade first
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+        _assertImplChanged(address(logic), address(newLogicImplementation));
 
         // Create new pool after upgrade using different fee tier
         MockERC20 token2 = new MockERC20("Token2", "TK2", 18);
@@ -659,11 +662,12 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
             (,,, feesBefore[i]) = poolManager.getSlot0(poolIds[i]);
         }
 
-        // Upgrade (implementation verification omitted due to stack-too-deep constraints)
+        // Upgrade
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
+        _assertImplChanged(address(logic), address(newLogicImplementation));
 
         // Verify each pool after upgrade
         for (uint256 i = 0; i < numPools; i++) {
@@ -768,9 +772,9 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
     function test_unauthorized_upgrade_reverts() public {
         AlphixLogic newLogicImplementation = new AlphixLogic();
 
-        // Attempt upgrade as non-owner should revert
+        // Attempt upgrade as non-owner should revert with OwnableUnauthorizedAccount
         vm.startPrank(alice);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(bytes4(keccak256("OwnableUnauthorizedAccount(address)")), alice));
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
 
@@ -795,13 +799,23 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
 
     /**
      * @notice Reads the implementation address from EIP-1967 proxy storage slot
-     * @dev Uses the standard EIP-1967 implementation slot: keccak256("eip1967.proxy.implementation") - 1
+     * @dev Uses the precomputed EIP-1967 implementation slot constant
      * @param proxy The proxy contract address
      * @return The implementation contract address
      */
     function _impl(address proxy) internal view returns (address) {
-        bytes32 slot = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
-        return address(uint160(uint256(vm.load(proxy, slot))));
+        return address(uint160(uint256(vm.load(proxy, EIP1967_IMPLEMENTATION_SLOT))));
+    }
+
+    /**
+     * @notice Helper to assert implementation change in upgrades
+     * @dev Reduces stack depth by extracting verification logic
+     * @param proxy The proxy contract address
+     * @param expected The expected new implementation address
+     */
+    function _assertImplChanged(address proxy, address expected) internal view {
+        address impl = _impl(proxy);
+        assertEq(impl, expected, "Implementation must match new logic");
     }
 
     /**
