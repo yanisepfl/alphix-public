@@ -83,6 +83,7 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
         vm.assume(!LPFeeLibrary.isDynamicFee(staticFee));
 
         // Create static fee key
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory staticKey = PoolKey(currency0, currency1, staticFee, defaultTickSpacing, IHooks(hook));
 
         // Should revert with NotDynamicFee
@@ -123,6 +124,7 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
 
         // Calculate ticks based on multiplier
         int24 lower = -int24(uint24(tickSpacingMultiplier) * uint24(defaultTickSpacing));
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(uint24(tickSpacingMultiplier) * uint24(defaultTickSpacing));
 
         ModifyLiquidityParams memory params =

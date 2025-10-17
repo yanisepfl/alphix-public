@@ -91,7 +91,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(permit2), amt0 + 1);
         MockERC20(Currency.unwrap(kFresh.currency1)).approve(address(permit2), amt1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Mint a position (this triggers hook.before/afterAddLiquidity)
@@ -137,7 +139,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(permit2), amt0 + 1);
         MockERC20(Currency.unwrap(kFresh.currency1)).approve(address(permit2), amt1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Pause logic proxy -> delegatecalls, toggles the paused state in proxy storage, and emits the event.
@@ -350,6 +354,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      */
     function test_afterInitialize_dynamic_fee_required() public {
         // Static-fee key on the same currencies
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory staticKey = PoolKey(currency0, currency1, 3000, defaultTickSpacing, IHooks(hook));
         vm.prank(address(hook));
         vm.expectRevert(BaseDynamicFee.NotDynamicFee.selector);

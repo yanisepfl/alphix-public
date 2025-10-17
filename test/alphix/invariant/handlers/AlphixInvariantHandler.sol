@@ -252,7 +252,9 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
         // Approve permit2 to spend on behalf of position manager
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(amount0 + buffer), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1 + buffer), expiry);
 
         // Use EasyPosm library for minting

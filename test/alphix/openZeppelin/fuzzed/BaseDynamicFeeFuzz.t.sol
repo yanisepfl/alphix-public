@@ -117,6 +117,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         testHook = TestBaseDynamicFeeFuzz(hookAddress);
 
         // Create dynamic fee pool key
+        // forge-lint: disable-next-line(named-struct-fields)
         dynamicFeeKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(testHook));
     }
 
@@ -166,11 +167,11 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @param sqrtPriceX96 Initial sqrt price
      */
     function testFuzz_afterInitialize_success_withDynamicFee(uint160 sqrtPriceX96) public {
-        // Bound to valid sqrt price range
-        sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE));
+        // Bound to valid sqrt price range (exclusive of MAX to avoid edge case rejection)
+        sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE - 1));
 
-        // Ensure we're actually in valid range (bound can produce edge case issues)
-        vm.assume(sqrtPriceX96 >= TickMath.MIN_SQRT_PRICE && sqrtPriceX96 <= TickMath.MAX_SQRT_PRICE);
+        // Ensure we're actually in valid range
+        vm.assume(sqrtPriceX96 >= TickMath.MIN_SQRT_PRICE && sqrtPriceX96 < TickMath.MAX_SQRT_PRICE);
 
         // Initialize the pool first
         poolManager.initialize(dynamicFeeKey, sqrtPriceX96);
@@ -190,6 +191,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         vm.assume(!LPFeeLibrary.isDynamicFee(staticFee));
 
         // Create a static fee key that doesn't require pool initialization
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory localStaticKey = PoolKey(currency0, currency1, staticFee, 60, IHooks(address(0)));
 
         vm.expectRevert(BaseDynamicFee.NotDynamicFee.selector);

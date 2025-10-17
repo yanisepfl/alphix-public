@@ -156,6 +156,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         // Create a fresh pool key bound to the same hook
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory kFresh = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
         PoolId idFresh = kFresh.toId();
 
@@ -190,6 +191,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory kFresh = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 30, IHooks(hook));
         PoolId idFresh = kFresh.toId();
 
@@ -209,6 +211,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory kFresh = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 30, IHooks(hook));
 
         vm.prank(unauthorized);
@@ -228,11 +231,13 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         // First pool
         (Currency a0, Currency a1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory k1 = PoolKey(a0, a1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 20, IHooks(hook));
         PoolId id1 = k1.toId();
 
         // Second pool
         (Currency b0, Currency b1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory k2 = PoolKey(b0, b1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
         PoolId id2 = k2.toId();
 

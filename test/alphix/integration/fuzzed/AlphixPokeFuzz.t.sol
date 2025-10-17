@@ -252,6 +252,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
+            // forge-lint: disable-next-line(unsafe-typecast)
             int24(int256(uint256(int256(defaultTickSpacing)) + 20)), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
@@ -306,6 +307,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
+            // forge-lint: disable-next-line(unsafe-typecast)
             int24(int256(uint256(int256(defaultTickSpacing)) + 40)), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
@@ -367,6 +369,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
+            // forge-lint: disable-next-line(unsafe-typecast)
             int24(int256(uint256(int256(defaultTickSpacing)) + 60)), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
@@ -425,6 +428,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
+            // forge-lint: disable-next-line(unsafe-typecast)
             int24(int256(uint256(int256(defaultTickSpacing)) + 80)), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
@@ -498,6 +502,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
+            // forge-lint: disable-next-line(unsafe-typecast)
             int24(int256(uint256(int256(defaultTickSpacing)) + 100 + uint256(poolTypeIndex) * 20)), // Unique tick spacing per pool type
             Constants.SQRT_PRICE_1_1,
             hook

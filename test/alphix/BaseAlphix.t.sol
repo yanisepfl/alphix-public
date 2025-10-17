@@ -149,6 +149,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
         // Create default pool key
         defaultTickSpacing = 20;
+        // forge-lint: disable-next-line(named-struct-fields)
         key = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, defaultTickSpacing, IHooks(hook));
         poolId = key.toId();
 
@@ -307,7 +308,9 @@ abstract contract BaseAlphixTest is Test, Deployers {
         MockERC20(Currency.unwrap(currency0)).approve(address(permit2), amount0Expected + 1);
         MockERC20(Currency.unwrap(currency1)).approve(address(permit2), amount1Expected + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(amount0Expected + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1Expected + 1), expiry);
 
         (tokenId,) = positionManager.mint(
@@ -357,6 +360,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         uint256 targetRatio
     ) internal returns (PoolKey memory _key, PoolId _poolId) {
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(decimals0, decimals1);
+        // forge-lint: disable-next-line(named-struct-fields)
         _key = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing, IHooks(_hook));
         _poolId = _key.toId();
 
@@ -386,6 +390,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
             data.lowerTick = TickMath.minUsableTick(data.tickSpacing);
             data.upperTick = TickMath.maxUsableTick(data.tickSpacing);
         } else {
+            // forge-lint: disable-next-line(unsafe-typecast)
             data.priceRange = uint160(uint256(data.currentPrice) * rangePct / UNIT);
             data.lowerPrice = data.currentPrice - data.priceRange;
             data.upperPrice = data.currentPrice + data.priceRange;
@@ -394,23 +399,30 @@ abstract contract BaseAlphixTest is Test, Deployers {
             unchecked {
                 int256 lowerTickRounded = data._lowerTick / int256(data.tickSpacing);
                 int256 upperTickRounded = data._upperTick / int256(data.tickSpacing);
+                // forge-lint: disable-next-line(unsafe-typecast)
                 data.lowerTick = int24(lowerTickRounded * int256(data.tickSpacing));
+                // forge-lint: disable-next-line(unsafe-typecast)
                 data.upperTick = int24(upperTickRounded * int256(data.tickSpacing));
             }
         }
 
         data.liquidityAmount = LiquidityAmounts.getLiquidityForAmounts(
+            // forge-lint: disable-next-line(unsafe-typecast)
             data.currentPrice,
+            // forge-lint: disable-next-line(unsafe-typecast)
             TickMath.getSqrtPriceAtTick(data.lowerTick),
             TickMath.getSqrtPriceAtTick(data.upperTick),
             amount0,
+            // forge-lint: disable-next-line(unsafe-typecast)
             amount1
         );
 
         MockERC20(Currency.unwrap(_key.currency0)).approve(address(permit2), amount0 + 1);
         MockERC20(Currency.unwrap(_key.currency1)).approve(address(permit2), amount1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(_key.currency0), address(positionManager), uint160(amount0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(_key.currency1), address(positionManager), uint160(amount1 + 1), expiry);
 
         (data.newTokenId,) = positionManager.mint(
@@ -434,11 +446,13 @@ abstract contract BaseAlphixTest is Test, Deployers {
      * @dev Encodes v4 hook permissions into the low bits and namespaces the high bits to avoid collisions
      */
     function _computeNextHookAddress() internal returns (address) {
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint160 flags = uint160(
             Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
                 | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
                 | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint160 ns = uint160(hookNamespace++) << 144;
         return address(flags ^ ns);
     }
@@ -478,6 +492,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Assign poker role to poke function on Hook
         bytes4[] memory pokeSelectors = new bytes4[](1);
         pokeSelectors[0] = Alphix(hookAddr).poke.selector;
+        // forge-lint: disable-next-line(named-struct-fields)
         am.setTargetFunctionRole(hookAddr, pokeSelectors, FEE_POKER_ROLE);
     }
 
@@ -494,6 +509,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         returns (PoolKey memory k, PoolId id)
     {
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(d0, d1);
+        // forge-lint: disable-next-line(named-struct-fields)
         k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, spacing, IHooks(_hook));
         id = k.toId();
         poolManager.initialize(k, initialPrice);
