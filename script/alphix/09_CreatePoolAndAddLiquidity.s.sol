@@ -299,12 +299,16 @@ contract CreatePoolAndAddLiquidityScript is Script {
 
         if (!currency0.isAddressZero()) {
             address token0 = Currency.unwrap(currency0);
+            require(amount0 <= type(uint160).max, "Amount0 exceeds uint160 max");
             IERC20(token0).approve(address(PERMIT2), amount0);
+            // forge-lint: disable-next-line(unsafe-typecast)
             PERMIT2.approve(token0, posm, uint160(amount0), expiration);
         }
         if (!currency1.isAddressZero()) {
             address token1 = Currency.unwrap(currency1);
+            require(amount1 <= type(uint160).max, "Amount1 exceeds uint160 max");
             IERC20(token1).approve(address(PERMIT2), amount1);
+            // forge-lint: disable-next-line(unsafe-typecast)
             PERMIT2.approve(token1, posm, uint160(amount1), expiration);
         }
     }

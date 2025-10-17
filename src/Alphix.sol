@@ -52,9 +52,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
      * @notice Enforce logic to be not null.
      */
     modifier validLogic() {
-        if (logic == address(0)) {
-            revert LogicNotSet();
-        }
+        _validLogic();
         _;
     }
 
@@ -425,5 +423,16 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         returns (uint24 fee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut)
     {
         return IAlphixLogic(logic).computeFeeAndTargetRatio(key, currentRatio);
+    }
+
+    /* MODIFIER HELPERS */
+
+    /**
+     * @dev Internal function to validate logic is set (reduces contract size)
+     */
+    function _validLogic() internal view {
+        if (logic == address(0)) {
+            revert LogicNotSet();
+        }
     }
 }

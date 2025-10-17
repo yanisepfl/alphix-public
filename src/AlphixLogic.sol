@@ -98,9 +98,7 @@ contract AlphixLogic is
      * @notice Enforce sender logic to be alphix hook.
      */
     modifier onlyAlphixHook() {
-        if (msg.sender != alphixHook) {
-            revert InvalidCaller();
-        }
+        _onlyAlphixHook();
         _;
     }
 
@@ -108,10 +106,7 @@ contract AlphixLogic is
      * @notice Check if pool is not paused.
      */
     modifier poolActivated(PoolKey calldata key) {
-        PoolId poolId = key.toId();
-        if (!poolActive[poolId]) {
-            revert PoolPaused();
-        }
+        _poolActivated(key);
         _;
     }
 
@@ -119,10 +114,7 @@ contract AlphixLogic is
      * @notice Check if pool has not already been configured.
      */
     modifier poolUnconfigured(PoolKey calldata key) {
-        PoolId poolId = key.toId();
-        if (poolConfig[poolId].isConfigured) {
-            revert PoolAlreadyConfigured();
-        }
+        _poolUnconfigured(key);
         _;
     }
 
@@ -130,10 +122,7 @@ contract AlphixLogic is
      * @notice Check if pool has already been configured.
      */
     modifier poolConfigured(PoolKey calldata key) {
-        PoolId poolId = key.toId();
-        if (!poolConfig[poolId].isConfigured) {
-            revert PoolNotConfigured();
-        }
+        _poolConfigured(key);
         _;
     }
 
@@ -610,6 +599,47 @@ contract AlphixLogic is
     function _isValidRatioForPoolType(PoolType poolType, uint256 ratio) internal view returns (bool) {
         DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
         return ratio > 0 && ratio <= params.maxCurrentRatio;
+    }
+
+    /* MODIFIER FUNCTIONS */
+
+    /**
+     * @dev Internal function to validate caller is Alphix hook (reduces contract size)
+     */
+    function _onlyAlphixHook() internal view {
+        if (msg.sender != alphixHook) {
+            revert InvalidCaller();
+        }
+    }
+
+    /**
+     * @dev Internal function to validate pool is active (reduces contract size)
+     */
+    function _poolActivated(PoolKey calldata key) internal view {
+        PoolId poolId = key.toId();
+        if (!poolActive[poolId]) {
+            revert PoolPaused();
+        }
+    }
+
+    /**
+     * @dev Internal function to validate pool is unconfigured (reduces contract size)
+     */
+    function _poolUnconfigured(PoolKey calldata key) internal view {
+        PoolId poolId = key.toId();
+        if (poolConfig[poolId].isConfigured) {
+            revert PoolAlreadyConfigured();
+        }
+    }
+
+    /**
+     * @dev Internal function to validate pool is configured (reduces contract size)
+     */
+    function _poolConfigured(PoolKey calldata key) internal view {
+        PoolId poolId = key.toId();
+        if (!poolConfig[poolId].isConfigured) {
+            revert PoolNotConfigured();
+        }
     }
 
     /* UUPS AUTHORIZATION */
