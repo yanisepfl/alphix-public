@@ -498,7 +498,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
-            _safeAddToTickSpacing(defaultTickSpacing, int24(100 + uint24(poolTypeIndex) * 20)), // Unique tick spacing per pool type
+            _safeAddToTickSpacing(defaultTickSpacing, int24(100) + int24(uint24(poolTypeIndex)) * int24(20)), // Unique tick spacing per pool type
             Constants.SQRT_PRICE_1_1,
             hook
         );
