@@ -252,8 +252,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            int24(int256(uint256(int256(defaultTickSpacing)) + 20)), // Unique tick spacing
+            _safeAddToTickSpacing(defaultTickSpacing, 20), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
         );
@@ -307,8 +306,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            int24(int256(uint256(int256(defaultTickSpacing)) + 40)), // Unique tick spacing
+            _safeAddToTickSpacing(defaultTickSpacing, 40), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
         );
@@ -369,8 +367,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            int24(int256(uint256(int256(defaultTickSpacing)) + 60)), // Unique tick spacing
+            _safeAddToTickSpacing(defaultTickSpacing, 60), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
         );
@@ -428,8 +425,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            int24(int256(uint256(int256(defaultTickSpacing)) + 80)), // Unique tick spacing
+            _safeAddToTickSpacing(defaultTickSpacing, 80), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
             hook
         );
@@ -502,8 +498,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             INITIAL_TARGET_RATIO,
             18,
             18,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            int24(int256(uint256(int256(defaultTickSpacing)) + 100 + uint256(poolTypeIndex) * 20)), // Unique tick spacing per pool type
+            _safeAddToTickSpacing(defaultTickSpacing, int24(100 + uint24(poolTypeIndex) * 20)), // Unique tick spacing per pool type
             Constants.SQRT_PRICE_1_1,
             hook
         );
@@ -555,5 +550,24 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         (,,, uint24 feeAfterSecond) = poolManager.getSlot0(poolId);
         assertTrue(feeAfterSecond >= params.minFee && feeAfterSecond <= params.maxFee, "Second poke should also work");
+    }
+
+    /* ========================================================================== */
+    /*                              HELPER FUNCTIONS                            */
+    /* ========================================================================== */
+
+    /**
+     * @notice Safely adds an offset to a tick spacing value
+     * @dev Performs overflow checks before casting back to int24
+     * @param base The base tick spacing value
+     * @param offset The offset to add (must be positive)
+     * @return The new tick spacing value
+     */
+    function _safeAddToTickSpacing(int24 base, int24 offset) private pure returns (int24) {
+        int256 result = int256(base) + int256(offset);
+        require(result >= type(int24).min && result <= type(int24).max, "tick spacing overflow");
+        // Casting to int24 is safe because we checked the range above
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return int24(result);
     }
 }
