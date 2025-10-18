@@ -430,7 +430,7 @@ contract AlphixMultiPoolFuzzTest is BaseAlphixTest {
      * @param newMinFee New min fee for pool type
      * @param newMaxFee New max fee for pool type
      */
-    function testFuzz_multiPool_parameterChange_isolatedEffect(uint8 numPools, uint24 newMinFee, uint24 newMaxFee)
+    function testFuzz_multiPool_parameterChange_globalEffect(uint8 numPools, uint24 newMinFee, uint24 newMaxFee)
         public
     {
         numPools = uint8(bound(numPools, 2, 4));

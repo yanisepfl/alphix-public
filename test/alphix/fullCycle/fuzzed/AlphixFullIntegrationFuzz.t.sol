@@ -998,7 +998,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         });
 
         for (uint256 season = 0; season < numSeasons; season++) {
-            cycleParams.currentMultiplier = (season % 2 == 0) ? seasonalMultiplier : (10000 / (seasonalMultiplier + 1));
+            cycleParams.currentMultiplier = (season % 2 == 0) ? seasonalMultiplier : (10000 / seasonalMultiplier);
             uint24 newFee;
             uint256 newRatio;
             (newFee, newRatio) = _executeSeasonalCycle(testKey, testPoolId, cycleParams, params);
