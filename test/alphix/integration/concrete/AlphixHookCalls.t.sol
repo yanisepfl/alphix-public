@@ -209,9 +209,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         // Reduce some liquidity (active path)
         uint256 liqToRemove = 1e18;
         positionManager.decreaseLiquidity(
+            posId,
             // Casting to uint128 is safe because 1e18 fits in uint128
             // forge-lint: disable-next-line(unsafe-typecast)
-            posId,
             uint128(liqToRemove),
             0,
             0,
@@ -327,10 +327,17 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        // Casting to int256 is safe because amountIn is 1e18 which fits in int256
-        // forge-lint: disable-next-line(unsafe-typecast)
         logic.beforeSwap(
-            owner, kFresh, SwapParams({zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0}), ""
+            owner,
+            kFresh,
+            SwapParams({
+                zeroForOne: true,
+                // Casting to int256 is safe because amountIn is 1e18 which fits in int256
+                // forge-lint: disable-next-line(unsafe-typecast)
+                amountSpecified: int256(amountIn),
+                sqrtPriceLimitX96: 0
+            }),
+            ""
         );
 
         vm.startPrank(owner);
@@ -356,10 +363,17 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
         vm.prank(address(hook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-        // Casting to int256 is safe because amountIn is 1e18 which fits in int256
-        // forge-lint: disable-next-line(unsafe-typecast)
         logic.beforeSwap(
-            owner, kFresh, SwapParams({zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0}), ""
+            owner,
+            kFresh,
+            SwapParams({
+                zeroForOne: true,
+                // Casting to int256 is safe because amountIn is 1e18 which fits in int256
+                // forge-lint: disable-next-line(unsafe-typecast)
+                amountSpecified: int256(amountIn),
+                sqrtPriceLimitX96: 0
+            }),
+            ""
         );
     }
 

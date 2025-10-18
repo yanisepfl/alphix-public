@@ -514,10 +514,12 @@ contract DynamicFeeFuzzTest is Test {
 
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        // Casting to uint24 is safe because initialStreak is bounded to 0-10
-        // forge-lint: disable-next-line(unsafe-typecast)
-        DynamicFeeLib.OobState memory initialState =
-            DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: uint24(initialStreak)});
+        DynamicFeeLib.OobState memory initialState = DynamicFeeLib.OobState({
+            lastOobWasUpper: true,
+            // Casting to uint24 is safe because initialStreak is bounded to 0-10
+            // forge-lint: disable-next-line(unsafe-typecast)
+            consecutiveOobHits: uint24(initialStreak)
+        });
 
         (, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
@@ -569,10 +571,12 @@ contract DynamicFeeFuzzTest is Test {
 
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        // Casting to uint24 is safe because initialStreak is bounded to 1-10
-        // forge-lint: disable-next-line(unsafe-typecast)
-        DynamicFeeLib.OobState memory initialState =
-            DynamicFeeLib.OobState({lastOobWasUpper: wasUpper, consecutiveOobHits: uint24(initialStreak)});
+        DynamicFeeLib.OobState memory initialState = DynamicFeeLib.OobState({
+            lastOobWasUpper: wasUpper,
+            // Casting to uint24 is safe because initialStreak is bounded to 1-10
+            // forge-lint: disable-next-line(unsafe-typecast)
+            consecutiveOobHits: uint24(initialStreak)
+        });
 
         (, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState

@@ -194,9 +194,9 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
 
         // Remove liquidity
         positionManager.decreaseLiquidity(
+            posId,
             // Casting to uint128 is safe because liqToRemove is a percentage of uint128 initialLiquidity
             // forge-lint: disable-next-line(unsafe-typecast)
-            posId,
             uint128(liqToRemove),
             0,
             0,
