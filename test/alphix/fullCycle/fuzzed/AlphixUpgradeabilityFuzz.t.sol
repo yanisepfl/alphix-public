@@ -703,16 +703,16 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
      * @notice Fuzz: Upgrade with extreme OOB state
      * @dev Tests upgrade preserves OOB streak state with truly extreme streaks (20-100 consecutive hits)
      * @param liquidityAmount Pool liquidity
-     * @param numOOBHits Number of consecutive OOB hits before upgrade (20-100)
+     * @param numOobHits Number of consecutive OOB hits before upgrade (20-100)
      * @param deviation OOB deviation magnitude
      */
     function testFuzz_upgradeStress_extremeOOBState_preserved(
         uint128 liquidityAmount,
-        uint8 numOOBHits,
+        uint8 numOobHits,
         uint256 deviation
     ) public {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
-        numOOBHits = uint8(bound(numOOBHits, 20, 100)); // Extreme number of consecutive OOB hits
+        numOobHits = uint8(bound(numOobHits, 20, 100)); // Extreme number of consecutive OOB hits
         deviation = bound(deviation, 1e17, 4e17);
 
         (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
@@ -734,7 +734,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
             poolConfig.initialTargetRatio + (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
 
         // Use smaller increments (1e15 instead of 1e16) to avoid premature capping and increase diversity
-        for (uint256 i = 0; i < numOOBHits; i++) {
+        for (uint256 i = 0; i < numOobHits; i++) {
             vm.warp(block.timestamp + params.minPeriod + 1);
             uint256 oobRatio = upperBound + deviation + (i * 1e15);
             if (oobRatio > params.maxCurrentRatio) oobRatio = params.maxCurrentRatio;

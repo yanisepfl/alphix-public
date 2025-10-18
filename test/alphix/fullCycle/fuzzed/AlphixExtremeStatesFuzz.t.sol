@@ -155,7 +155,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
 
         assertGe(feeAfterRecovery, params.minFee, "Fee bounded after recovery");
         assertLe(feeAfterRecovery, params.maxFee, "Fee bounded after recovery");
-        assertTrue(poolConfig.isConfigured, "Pool remains configured");
+        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig(testPoolId);
+        assertTrue(poolConfigAfter.isConfigured, "Pool remains configured");
     }
 
     /**
@@ -190,8 +191,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
         vm.warp(block.timestamp + params.minPeriod + 1);
 
-        uint24 feeBeforeInjection;
-        (,,, feeBeforeInjection) = poolManager.getSlot0(testPoolId);
+        // Intentionally not asserting pre/post fee direction; fees are bounded and adaptive
 
         vm.startPrank(bob);
         _addLiquidityForUser(bob, testKey, minTick, maxTick, massiveAddition);
@@ -326,8 +326,9 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         for (uint256 i = 0; i < numConsecutiveHits; i++) {
             vm.warp(block.timestamp + params.minPeriod + 1);
 
-            uint256 lowerBound =
-                poolConfig.initialTargetRatio - (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
+            // Guard against underflow if ratioTolerance > 1e18
+            uint256 tol = (poolConfig.initialTargetRatio * params.ratioTolerance) / 1e18;
+            uint256 lowerBound = poolConfig.initialTargetRatio > tol ? (poolConfig.initialTargetRatio - tol) : 1e15;
             uint256 oobRatio = lowerBound > baseDeviation ? lowerBound - baseDeviation : 1e15;
             if (oobRatio < 1e15) oobRatio = 1e15;
 
@@ -379,8 +380,9 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
 
         uint256 upperBound =
             poolConfig.initialTargetRatio + (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
-        uint256 lowerBound =
-            poolConfig.initialTargetRatio - (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
+        // Guard against underflow if ratioTolerance > 1e18
+        uint256 tol = (poolConfig.initialTargetRatio * params.ratioTolerance) / 1e18;
+        uint256 lowerBound = poolConfig.initialTargetRatio > tol ? (poolConfig.initialTargetRatio - tol) : 1e15;
 
         bool previousWasUpper = true; // Track previous OOB direction
 
@@ -498,7 +500,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         assertGe(feeCrisis, params.minFee, "Crisis fee bounded");
         assertGe(feeRecovered, params.minFee, "Recovered fee bounded");
         assertLe(feeRecovered, params.maxFee, "Recovered fee bounded");
-        assertTrue(poolConfig.isConfigured, "Pool operational after black swan");
+        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig(testPoolId);
+        assertTrue(poolConfigAfter.isConfigured, "Pool operational after black swan");
     }
 
     /* ========================================================================== */

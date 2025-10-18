@@ -1482,6 +1482,8 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
             maxFee: 10000,
             ratioTolerance: 2e17,
             linearSlope: 1e18,
+            // Casting to uint24 is safe because baseMaxFeeDelta is bounded to 600-1000
+            // forge-lint: disable-next-line(unsafe-typecast)
             baseMaxFeeDelta: uint24(baseMaxFeeDelta),
             lookbackPeriod: 7,
             minPeriod: 1 hours,
@@ -2057,6 +2059,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         // Safe cast: verify liquidityPerLp * 4 fits in uint128 before casting
         uint256 totalLiquidityCalc = uint256(liquidityPerLp) * 4;
         require(totalLiquidityCalc <= type(uint128).max, "totalLiquidity overflow in uint128 cast");
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint128 totalLiquidity = uint128(totalLiquidityCalc);
         (,,, swapConfig.feeRate) = poolManager.getSlot0(testPoolId);
         (uint256 feeGrowth0Start,) = poolManager.getFeeGrowthInside(testPoolId, lowerTick, upperTick);
@@ -2405,19 +2408,19 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint256 sideFactor = targetFee > startFee ? params.upperSideFactor : params.lowerSideFactor;
 
         return _driveToFeeBound(
-            DriveParams(
-                poolKey,
-                pid,
-                liquidityAmount,
-                ratio,
-                params.minPeriod,
-                startFee,
-                targetFee,
-                params.linearSlope,
-                params.baseMaxFeeDelta,
-                sideFactor,
-                params.maxCurrentRatio
-            )
+            DriveParams({
+                key: poolKey,
+                poolId: pid,
+                liquidityAmount: liquidityAmount,
+                ratio: ratio,
+                minPeriod: params.minPeriod,
+                startFee: startFee,
+                targetFee: targetFee,
+                linearSlope: params.linearSlope,
+                baseMaxFeeDelta: params.baseMaxFeeDelta,
+                sideFactor: sideFactor,
+                maxCurrentRatio: params.maxCurrentRatio
+            })
         );
     }
 

@@ -190,6 +190,9 @@ contract AlphixMultiPoolFuzzTest is BaseAlphixTest {
 
         for (uint256 i = 0; i < numPools; i++) {
             uint256 ratio = (i % 2 == 0) ? ratio1 : ratio2;
+            // Clamp ratio to protocol bounds to avoid reverts
+            if (ratio > params.maxCurrentRatio) ratio = params.maxCurrentRatio;
+            if (ratio < 1e15) ratio = 1e15;
             vm.prank(owner);
             hook.poke(pools[i], ratio);
         }
@@ -258,14 +261,16 @@ contract AlphixMultiPoolFuzzTest is BaseAlphixTest {
         vm.prank(owner);
         hook.poke(pool2Key, ratio2);
 
-        uint256 arbBalanceBefore = MockERC20(Currency.unwrap(pool1Key.currency0)).balanceOf(arbitrageur);
+        uint256 arbBalance0Before = MockERC20(Currency.unwrap(pool1Key.currency0)).balanceOf(arbitrageur);
+        uint256 arbBalance1Before = MockERC20(Currency.unwrap(pool1Key.currency1)).balanceOf(arbitrageur);
 
         vm.startPrank(arbitrageur);
         _performSwap(arbitrageur, pool1Key, arbSwapSize, true);
         _performSwap(arbitrageur, pool2Key, arbSwapSize / 2, false);
         vm.stopPrank();
 
-        uint256 arbBalanceAfter = MockERC20(Currency.unwrap(pool1Key.currency0)).balanceOf(arbitrageur);
+        uint256 arbBalance0After = MockERC20(Currency.unwrap(pool1Key.currency0)).balanceOf(arbitrageur);
+        uint256 arbBalance1After = MockERC20(Currency.unwrap(pool1Key.currency1)).balanceOf(arbitrageur);
 
         uint24 fee1After;
         uint24 fee2After;
@@ -277,7 +282,11 @@ contract AlphixMultiPoolFuzzTest is BaseAlphixTest {
         assertGe(fee2After, params.minFee, "Pool2 fee bounded after arbitrage");
         assertLe(fee2After, params.maxFee, "Pool2 fee bounded after arbitrage");
 
-        assertTrue(arbBalanceAfter >= arbBalanceBefore || arbBalanceBefore > 0, "Arbitrage executed");
+        // Verify arbitrage didn't lose funds (at least one token balance should not decrease)
+        assertTrue(
+            arbBalance0After >= arbBalance0Before || arbBalance1After >= arbBalance1Before,
+            "Arbitrage should not lose funds in both tokens"
+        );
     }
 
     /**
@@ -400,6 +409,9 @@ contract AlphixMultiPoolFuzzTest is BaseAlphixTest {
 
             vm.warp(block.timestamp + params.minPeriod + 1);
             uint256 ratio = 4e17 + (i * 1e17);
+            // Clamp ratio to protocol bounds to avoid reverts
+            if (ratio > params.maxCurrentRatio) ratio = params.maxCurrentRatio;
+            if (ratio < 1e15) ratio = 1e15;
 
             vm.prank(owner);
             hook.poke(pools[i], ratio);
@@ -412,21 +424,16 @@ contract AlphixMultiPoolFuzzTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Fuzz: Pool parameter changes affect only target pool
-     * @dev Tests parameter isolation across pools
+     * @notice Fuzz: Pool type parameter changes affect all pools of that type
+     * @dev Tests that global pool-type parameter updates apply uniformly to all pools of the same type
      * @param numPools Number of pools (2-4)
-     * @param targetPoolIndex Index of pool to modify (0-numPools-1)
-     * @param newMinFee New min fee for target pool
-     * @param newMaxFee New max fee for target pool
+     * @param newMinFee New min fee for pool type
+     * @param newMaxFee New max fee for pool type
      */
-    function testFuzz_multiPool_parameterChange_isolatedEffect(
-        uint8 numPools,
-        uint8 targetPoolIndex,
-        uint24 newMinFee,
-        uint24 newMaxFee
-    ) public {
+    function testFuzz_multiPool_parameterChange_isolatedEffect(uint8 numPools, uint24 newMinFee, uint24 newMaxFee)
+        public
+    {
         numPools = uint8(bound(numPools, 2, 4));
-        targetPoolIndex = uint8(bound(targetPoolIndex, 0, numPools - 1));
         newMinFee = uint24(bound(newMinFee, 100, 1000));
         newMaxFee = uint24(bound(newMaxFee, newMinFee + 100, 10000));
 
