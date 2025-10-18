@@ -461,8 +461,14 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
 
         // Case 1: All pokes failed
         if (pokeSuccessCount == 0) {
-            // Legitimate only if paused or no pools configured
-            if (!isPaused && poolCount > 0) {
+            uint256 pauseCount = handler.callCountpause();
+            uint256 unpauseCount = handler.callCountunpause();
+
+            // Legitimate scenarios for all pokes failing:
+            // 1. Contract is currently paused
+            // 2. No pools configured
+            // 3. Pause/unpause activity occurred during run (pokes may have been attempted while paused)
+            if (!isPaused && poolCount > 0 && pauseCount == 0 && unpauseCount == 0) {
                 assertFalse(true, "All pokes failing with active pools suggests issue");
             }
             return;
