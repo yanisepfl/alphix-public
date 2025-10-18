@@ -377,8 +377,12 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
     /**
      * @notice Add a pool to the handler's tracking
      * @dev Called during setup and registers pool with test contract for invariant tracking
+     *      Validates that the pool uses the correct Alphix hook to prevent tracking invalid pools
      */
     function addPool(PoolKey memory poolKey) external {
+        // Validate that the pool uses the Alphix hook - reject fuzzed pools with wrong hooks
+        if (address(poolKey.hooks) != address(hook)) return;
+
         PoolId poolId = poolKey.toId();
         if (!poolExists[poolId]) {
             pools.push(poolKey);
