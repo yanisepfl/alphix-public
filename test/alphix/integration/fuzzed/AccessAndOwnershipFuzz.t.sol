@@ -217,9 +217,11 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
      * @param initialFee Initial fee for pool
      * @param targetRatio Target ratio for pool
      */
-    function testFuzz_pool_registration_with_various_params(uint8 poolTypeIndex, uint24 initialFee, uint256 targetRatio)
-        public
-    {
+    function testFuzz_pool_registration_with_various_params(
+        uint8 poolTypeIndex,
+        uint24 initialFee,
+        uint256 targetRatio
+    ) public {
         // Bound parameters
         poolTypeIndex = uint8(bound(poolTypeIndex, 0, 2));
         initialFee = uint24(bound(initialFee, 100, 10000));
@@ -237,7 +239,9 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
 
         // Create pool key
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory freshKey = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 30, IHooks(hook));
+        PoolKey memory freshKey = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 30, hooks: IHooks(hook)
+        });
 
         // Register pool
         vm.prank(owner);

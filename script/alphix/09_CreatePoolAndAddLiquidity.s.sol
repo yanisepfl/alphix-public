@@ -300,11 +300,13 @@ contract CreatePoolAndAddLiquidityScript is Script {
         if (!currency0.isAddressZero()) {
             address token0 = Currency.unwrap(currency0);
             IERC20(token0).approve(address(PERMIT2), amount0);
+            // forge-lint: disable-next-line(unsafe-typecast)
             PERMIT2.approve(token0, posm, uint160(amount0), expiration);
         }
         if (!currency1.isAddressZero()) {
             address token1 = Currency.unwrap(currency1);
             IERC20(token1).approve(address(PERMIT2), amount1);
+            // forge-lint: disable-next-line(unsafe-typecast)
             PERMIT2.approve(token1, posm, uint160(amount1), expiration);
         }
     }
@@ -369,8 +371,9 @@ contract CreatePoolAndAddLiquidityScript is Script {
         uint256 amount1Max,
         bytes memory hookData
     ) internal view returns (bytes memory, bytes[] memory) {
-        bytes memory actions =
-            abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP));
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP)
+        );
 
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(poolKey, _tickLower, _tickUpper, liquidity, amount0Max, amount1Max, msg.sender, hookData);

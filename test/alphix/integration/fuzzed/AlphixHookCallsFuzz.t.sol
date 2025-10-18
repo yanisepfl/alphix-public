@@ -145,7 +145,9 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(permit2), amt0 + 1);
         MockERC20(Currency.unwrap(kFresh.currency1)).approve(address(permit2), amt1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Mint position
@@ -192,7 +194,15 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
 
         // Remove liquidity
         positionManager.decreaseLiquidity(
-            posId, uint128(liqToRemove), 0, 0, owner, block.timestamp, Constants.ZERO_BYTES
+            posId,
+            // Casting to uint128 is safe because liqToRemove is a percentage of uint128 initialLiquidity
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint128(liqToRemove),
+            0,
+            0,
+            owner,
+            block.timestamp,
+            Constants.ZERO_BYTES
         );
 
         vm.stopPrank();
@@ -249,9 +259,11 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
 
         // Verify swap executed
         if (zeroForOne) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             assertEq(int256(swapDelta.amount0()), -int256(swapAmount), "amount0 spent mismatch");
             assertTrue(int256(swapDelta.amount1()) > 0, "amount1 received should be positive");
         } else {
+            // forge-lint: disable-next-line(unsafe-typecast)
             assertEq(int256(swapDelta.amount1()), -int256(swapAmount), "amount1 spent mismatch");
             assertTrue(int256(swapDelta.amount0()) > 0, "amount0 received should be positive");
         }
@@ -343,7 +355,9 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(permit2), amt0 + 1);
         MockERC20(Currency.unwrap(kFresh.currency1)).approve(address(permit2), amt1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Expect revert when trying to add liquidity
@@ -363,6 +377,7 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         vm.assume(!LPFeeLibrary.isDynamicFee(staticFee));
 
         // Create static fee key
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory staticKey = PoolKey(currency0, currency1, staticFee, defaultTickSpacing, IHooks(hook));
 
         // Expect revert
@@ -382,9 +397,11 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
      * @param decimals1 Decimals for token1 (6-18)
      * @param liquidityAmount Amount of liquidity to add
      */
-    function testFuzz_operations_work_with_different_decimals(uint8 decimals0, uint8 decimals1, uint128 liquidityAmount)
-        public
-    {
+    function testFuzz_operations_work_with_different_decimals(
+        uint8 decimals0,
+        uint8 decimals1,
+        uint128 liquidityAmount
+    ) public {
         // Bound decimals to realistic range (6-18)
         decimals0 = uint8(bound(decimals0, 6, 18));
         decimals1 = uint8(bound(decimals1, 6, 18));
@@ -417,7 +434,9 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(permit2), amt0 + 1);
         MockERC20(Currency.unwrap(kFresh.currency1)).approve(address(permit2), amt1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Mint position - should work regardless of decimals
@@ -490,9 +509,11 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
 
         // Verify swap executed correctly
         if (zeroForOne) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             assertEq(int256(swapDelta.amount0()), -int256(swapAmount), "amount0 spent mismatch");
             assertTrue(int256(swapDelta.amount1()) > 0, "amount1 received should be positive");
         } else {
+            // forge-lint: disable-next-line(unsafe-typecast)
             assertEq(int256(swapDelta.amount1()), -int256(swapAmount), "amount1 spent mismatch");
             assertTrue(int256(swapDelta.amount0()) > 0, "amount0 received should be positive");
         }

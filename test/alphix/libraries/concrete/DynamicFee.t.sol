@@ -436,6 +436,8 @@ contract DynamicFeeTest is Test {
 
         if (fee <= type(uint24).max) {
             if (fee >= minFee && fee <= maxFee) {
+                // Casting to uint24 is safe because we verified fee <= type(uint24).max
+                // forge-lint: disable-next-line(unsafe-typecast)
                 assertEq(result, uint24(fee), "Should return original fee if within bounds");
             }
         }

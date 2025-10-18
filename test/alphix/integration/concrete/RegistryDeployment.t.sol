@@ -156,7 +156,9 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         // Create a fresh pool key bound to the same hook
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory kFresh = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        PoolKey memory kFresh = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(hook)
+        });
         PoolId idFresh = kFresh.toId();
 
         // Register the pool (avoid event brittleness; assert via storage)
@@ -190,7 +192,9 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         am2.grantRole(REGISTRAR_ROLE, owner, 0);
 
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory kFresh = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 30, IHooks(hook));
+        PoolKey memory kFresh = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 30, hooks: IHooks(hook)
+        });
         PoolId idFresh = kFresh.toId();
 
         vm.prank(owner);
@@ -209,7 +213,9 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         Registry reg2 = new Registry(address(am2));
 
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory kFresh = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 30, IHooks(hook));
+        PoolKey memory kFresh = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 30, hooks: IHooks(hook)
+        });
 
         vm.prank(unauthorized);
         vm.expectRevert();
@@ -228,12 +234,16 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         // First pool
         (Currency a0, Currency a1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory k1 = PoolKey(a0, a1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 20, IHooks(hook));
+        PoolKey memory k1 = PoolKey({
+            currency0: a0, currency1: a1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 20, hooks: IHooks(hook)
+        });
         PoolId id1 = k1.toId();
 
         // Second pool
         (Currency b0, Currency b1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory k2 = PoolKey(b0, b1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        PoolKey memory k2 = PoolKey({
+            currency0: b0, currency1: b1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(hook)
+        });
         PoolId id2 = k2.toId();
 
         vm.prank(owner);

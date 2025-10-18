@@ -91,7 +91,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(permit2), amt0 + 1);
         MockERC20(Currency.unwrap(kFresh.currency1)).approve(address(permit2), amt1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Mint a position (this triggers hook.before/afterAddLiquidity)
@@ -137,7 +139,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(permit2), amt0 + 1);
         MockERC20(Currency.unwrap(kFresh.currency1)).approve(address(permit2), amt1 + 1);
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Pause logic proxy -> delegatecalls, toggles the paused state in proxy storage, and emits the event.
@@ -205,7 +209,15 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         // Reduce some liquidity (active path)
         uint256 liqToRemove = 1e18;
         positionManager.decreaseLiquidity(
-            posId, uint128(liqToRemove), 0, 0, owner, block.timestamp, Constants.ZERO_BYTES
+            posId,
+            // Casting to uint128 is safe because 1e18 fits in uint128
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint128(liqToRemove),
+            0,
+            0,
+            owner,
+            block.timestamp,
+            Constants.ZERO_BYTES
         );
 
         // Pause logic at the proxy (all hook calls should revert)
@@ -288,6 +300,8 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         });
 
         // Validate spent token0 (negative delta for token0)
+        // Casting to int256 is safe because amountIn is bounded to 1e18 which fits in int256
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(int256(swapDelta.amount0()), -int256(amountIn), "amount0 spent mismatch");
         assertTrue(int256(swapDelta.amount1()) > 0, "amount1 received mismatch");
 
@@ -314,7 +328,16 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
         logic.beforeSwap(
-            owner, kFresh, SwapParams({zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0}), ""
+            owner,
+            kFresh,
+            SwapParams({
+                zeroForOne: true,
+                // Casting to int256 is safe because amountIn is 1e18 which fits in int256
+                // forge-lint: disable-next-line(unsafe-typecast)
+                amountSpecified: int256(amountIn),
+                sqrtPriceLimitX96: 0
+            }),
+            ""
         );
 
         vm.startPrank(owner);
@@ -341,7 +364,16 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.prank(address(hook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         logic.beforeSwap(
-            owner, kFresh, SwapParams({zeroForOne: true, amountSpecified: int256(amountIn), sqrtPriceLimitX96: 0}), ""
+            owner,
+            kFresh,
+            SwapParams({
+                zeroForOne: true,
+                // Casting to int256 is safe because amountIn is 1e18 which fits in int256
+                // forge-lint: disable-next-line(unsafe-typecast)
+                amountSpecified: int256(amountIn),
+                sqrtPriceLimitX96: 0
+            }),
+            ""
         );
     }
 
@@ -350,6 +382,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      */
     function test_afterInitialize_dynamic_fee_required() public {
         // Static-fee key on the same currencies
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory staticKey = PoolKey(currency0, currency1, 3000, defaultTickSpacing, IHooks(hook));
         vm.prank(address(hook));
         vm.expectRevert(BaseDynamicFee.NotDynamicFee.selector);

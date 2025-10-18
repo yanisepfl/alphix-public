@@ -197,7 +197,9 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             hookData: Constants.ZERO_BYTES,
             receiver: actor,
             deadline: block.timestamp + 100
-        }) returns (BalanceDelta) {
+        }) returns (
+            BalanceDelta
+        ) {
             callCountswap++;
             ghosttotalSwapVolume += swapAmount;
             // Note: Delta can legitimately be zero in edge cases (extreme slippage)
@@ -252,7 +254,9 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
         // Approve permit2 to spend on behalf of position manager
         uint48 expiry = uint48(block.timestamp + 100);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(amount0 + buffer), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1 + buffer), expiry);
 
         // Use EasyPosm library for minting
@@ -399,11 +403,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         return pools.length;
     }
 
-    function getGhostVariables()
-        external
-        view
-        returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256)
-    {
+    function getGhostVariables() external view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
         return (
             ghostsumOfFees,
             ghostsumOfTargetRatios,

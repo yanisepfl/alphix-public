@@ -247,14 +247,14 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
 
         // Test liquidity operations
         vm.startPrank(user1);
-        int24 tickLower = TickMath.minUsableTick(key.tickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(key.tickSpacing);
+        int24 minTick = TickMath.minUsableTick(key.tickSpacing);
+        int24 maxTick = TickMath.maxUsableTick(key.tickSpacing);
         uint128 liquidityAmount = 50e18;
 
         (uint256 amt0, uint256 amt1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
-            TickMath.getSqrtPriceAtTick(tickLower),
-            TickMath.getSqrtPriceAtTick(tickUpper),
+            TickMath.getSqrtPriceAtTick(minTick),
+            TickMath.getSqrtPriceAtTick(maxTick),
             liquidityAmount
         );
 
@@ -262,13 +262,16 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).approve(address(permit2), amt1 + 1);
 
         uint48 expiry = uint48(block.timestamp + 100);
+        // Casting to uint160 is safe because amt0/amt1 are bounded token amounts that fit within uint160
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         (uint256 newTokenId,) = positionManager.mint(
             key,
-            tickLower,
-            tickUpper,
+            minTick,
+            maxTick,
             liquidityAmount,
             amt0 + 1,
             amt1 + 1,
@@ -372,7 +375,9 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
 
         // Create and initialize new pool
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory newKey = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        PoolKey memory newKey = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(hook)
+        });
         PoolId newPoolId = newKey.toId();
 
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
@@ -423,14 +428,14 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
     function test_upgrade_with_active_pool_state() public {
         // Add significant liquidity
         vm.startPrank(user1);
-        int24 tickLower = TickMath.minUsableTick(key.tickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(key.tickSpacing);
+        int24 minTick = TickMath.minUsableTick(key.tickSpacing);
+        int24 maxTick = TickMath.maxUsableTick(key.tickSpacing);
         uint128 liquidityAmount = 200e18;
 
         (uint256 amt0, uint256 amt1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
-            TickMath.getSqrtPriceAtTick(tickLower),
-            TickMath.getSqrtPriceAtTick(tickUpper),
+            TickMath.getSqrtPriceAtTick(minTick),
+            TickMath.getSqrtPriceAtTick(maxTick),
             liquidityAmount
         );
 
@@ -438,13 +443,16 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).approve(address(permit2), amt1 + 1);
 
         uint48 expiry = uint48(block.timestamp + 100);
+        // Casting to uint160 is safe because amt0/amt1 are bounded token amounts that fit within uint160
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         positionManager.mint(
             key,
-            tickLower,
-            tickUpper,
+            minTick,
+            maxTick,
             liquidityAmount,
             amt0 + 1,
             amt1 + 1,
@@ -565,14 +573,14 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
     function _testPoolOperationsAfterUpgrade(PoolKey memory testKey) internal {
         // Test liquidity operations
         vm.startPrank(user1);
-        int24 tickLower = TickMath.minUsableTick(testKey.tickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(testKey.tickSpacing);
+        int24 minTick = TickMath.minUsableTick(testKey.tickSpacing);
+        int24 maxTick = TickMath.maxUsableTick(testKey.tickSpacing);
         uint128 liquidityAmount = 50e18;
 
         (uint256 amt0, uint256 amt1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
-            TickMath.getSqrtPriceAtTick(tickLower),
-            TickMath.getSqrtPriceAtTick(tickUpper),
+            TickMath.getSqrtPriceAtTick(minTick),
+            TickMath.getSqrtPriceAtTick(maxTick),
             liquidityAmount
         );
 
@@ -580,13 +588,16 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(testKey.currency1)).approve(address(permit2), amt1 + 1);
 
         uint48 expiry = uint48(block.timestamp + 100);
+        // Casting to uint160 is safe because amt0/amt1 are bounded token amounts that fit within uint160
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(testKey.currency0), address(positionManager), uint160(amt0 + 1), expiry);
+        // forge-lint: disable-next-line(unsafe-typecast)
         permit2.approve(Currency.unwrap(testKey.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         (uint256 newTokenId,) = positionManager.mint(
             testKey,
-            tickLower,
-            tickUpper,
+            minTick,
+            maxTick,
             liquidityAmount,
             amt0 + 1,
             amt1 + 1,

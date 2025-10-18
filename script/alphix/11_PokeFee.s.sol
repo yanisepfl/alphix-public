@@ -130,6 +130,8 @@ contract PokeFeeScript is Script {
         console.log("  - Token0:", Currency.unwrap(currency0));
         console.log("  - Token1:", Currency.unwrap(currency1));
         console.log("  - Fee: DYNAMIC (0x%x)", fee);
+        // Casting tickSpacing to uint256 via uint24 is safe for display purposes
+        // forge-lint: disable-next-line(unsafe-typecast)
         console.log("  - Tick Spacing:", uint256(uint24(tickSpacing)));
         console.log("  - Hook:", address(hooks));
         console.log("");

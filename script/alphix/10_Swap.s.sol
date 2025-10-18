@@ -178,9 +178,11 @@ contract SwapScript is Script {
 
         // Amount is already in base units (wei)
         uint256 swapAmountWei = config.swapAmount;
+        require(swapAmountWei <= uint256(type(int256).max), "Swap amount exceeds int256 max");
 
         // Prepare amount with sign
         // Exact input: negative (selling), Exact output: positive (buying)
+        // forge-lint: disable-next-line(unsafe-typecast)
         int256 amountSpecified = config.isExactInput ? -int256(swapAmountWei) : int256(swapAmountWei);
         console.log("Amount Specified: %d", amountSpecified);
         console.log("");

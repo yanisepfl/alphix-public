@@ -180,6 +180,8 @@ library DynamicFeeLib {
     function clampFee(uint256 fee, uint24 minFee, uint24 maxFee) internal pure returns (uint24) {
         if (fee < minFee) return minFee;
         if (fee > maxFee) return maxFee;
+        // Casting to uint24 is safe because fee is clamped between minFee and maxFee (both uint24)
+        // forge-lint: disable-next-line(unsafe-typecast)
         return uint24(fee);
     }
 

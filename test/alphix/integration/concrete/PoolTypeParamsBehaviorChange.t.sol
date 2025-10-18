@@ -590,10 +590,22 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      */
     function test_lookbackPeriod_affectsConvergenceRate() public {
         // Create second pool key for comparison (different tick spacing to ensure unique pool)
-        PoolKey memory shortLookbackKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        PoolKey memory shortLookbackKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 60,
+            hooks: IHooks(hook)
+        });
         PoolId shortLookbackPoolId = PoolIdLibrary.toId(shortLookbackKey);
 
-        PoolKey memory longLookbackKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 200, IHooks(hook));
+        PoolKey memory longLookbackKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 200,
+            hooks: IHooks(hook)
+        });
         PoolId longLookbackPoolId = PoolIdLibrary.toId(longLookbackKey);
 
         // Initialize both pools

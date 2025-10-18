@@ -133,6 +133,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         vm.stopPrank();
 
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 20, IHooks(testHook));
 
         // Reverts because the logic has not been set and of the validLogic modifier during initialize
@@ -513,6 +514,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
 
         // Create a pool bound to the otherHook (not the default hook)
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, defaultTickSpacing, IHooks(otherHook));
         poolManager.initialize(k, Constants.SQRT_PRICE_1_1);
 
@@ -580,6 +582,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
 
         // Create a Uniswap pool bound to testHook
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 20, IHooks(testHook));
 
         // initialize reverts due to validLogic in beforeInitialize

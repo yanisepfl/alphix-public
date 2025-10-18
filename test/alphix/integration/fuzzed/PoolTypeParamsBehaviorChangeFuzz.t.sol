@@ -352,7 +352,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         (Currency c0Perm, Currency c1Perm) = deployCurrencyPairWithDecimals(18, 18);
         (Currency c0Rest, Currency c1Rest) = deployCurrencyPairWithDecimals(18, 18);
 
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory permissiveKey = PoolKey(c0Perm, c1Perm, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory restrictiveKey = PoolKey(c0Rest, c1Rest, LPFeeLibrary.DYNAMIC_FEE_FLAG, 80, IHooks(hook));
 
         // Initialize both pools
@@ -612,7 +614,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         ratioDeviation = bound(ratioDeviation, MIN_RATIO_DEVIATION_FUZZ, 1e17);
 
         // Create two different pools for comparison
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory shortKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory longKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 200, IHooks(hook));
 
         // Initialize both pools
@@ -660,9 +664,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Create pool key with unique tick spacing
         uint256 tickSpacingBounded = bound(uint256(decimals0 + decimals1), 20, 200);
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 uniqueTickSpacing = int24(int256(tickSpacingBounded));
         PoolKey memory fuzzKey =
-            PoolKey(fuzzCurrency0, fuzzCurrency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, uniqueTickSpacing, IHooks(hook));
+        // forge-lint: disable-next-line(named-struct-fields)
+        PoolKey(fuzzCurrency0, fuzzCurrency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, uniqueTickSpacing, IHooks(hook));
         PoolId fuzzPoolId = PoolIdLibrary.toId(fuzzKey);
 
         // Initialize the pool
@@ -934,7 +940,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         SideFactorTestData memory testData,
         uint256 ratioTolerance,
         uint24 /* baseMaxFeeDelta */
-    ) internal {
+    )
+        internal
+    {
         // Create two separate pools with different currencies
         (Currency c01, Currency c11) = deployCurrencyPairWithDecimals(18, 18);
         (Currency c02, Currency c12) = deployCurrencyPairWithDecimals(18, 18);
@@ -1413,7 +1421,10 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             params1 = _createParameterSetWithLinearSlope(ratioTolerance, baseMaxFeeDelta, param1Value);
             params2 = _createParameterSetWithLinearSlope(ratioTolerance, baseMaxFeeDelta, param2Value);
         } else if (keccak256(bytes(parameterName)) == keccak256("baseMaxFeeDelta")) {
+            // Casting to uint24 is safe because param1Value and param2Value come from uint24 baseMaxFeeDelta parameters
+            // forge-lint: disable-next-line(unsafe-typecast)
             params1 = _createParameterSetWithBaseMaxFeeDelta(ratioTolerance, uint24(param1Value), 2e18);
+            // forge-lint: disable-next-line(unsafe-typecast)
             params2 = _createParameterSetWithBaseMaxFeeDelta(ratioTolerance, uint24(param2Value), 2e18);
         }
 
@@ -1437,8 +1448,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 linearSlope,
         uint24 baseMaxFeeDelta
     ) internal {
-        DynamicFeeLib.PoolTypeParams memory params1 =
-            _createParameterSetWithRatioTolerance(ratioTolerance1, linearSlope, baseMaxFeeDelta);
+        DynamicFeeLib.PoolTypeParams memory params1 = _createParameterSetWithRatioTolerance(
+            ratioTolerance1, linearSlope, baseMaxFeeDelta
+        );
         DynamicFeeLib.PoolTypeParams memory params2 =
             _createParameterSetWithRatioTolerance(ratioTolerance2, linearSlope, baseMaxFeeDelta);
 
@@ -1479,11 +1491,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      * @param linearSlope Linear slope value to use
      * @return params Complete parameter set
      */
-    function _createParameterSetWithBaseMaxFeeDelta(uint256 ratioTolerance, uint24 baseMaxFeeDelta, uint256 linearSlope)
-        internal
-        pure
-        returns (DynamicFeeLib.PoolTypeParams memory)
-    {
+    function _createParameterSetWithBaseMaxFeeDelta(
+        uint256 ratioTolerance,
+        uint24 baseMaxFeeDelta,
+        uint256 linearSlope
+    ) internal pure returns (DynamicFeeLib.PoolTypeParams memory) {
         return DynamicFeeLib.PoolTypeParams({
             minFee: 1,
             maxFee: 8000,

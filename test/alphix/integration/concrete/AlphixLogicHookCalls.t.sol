@@ -68,6 +68,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
 
     function test_afterInitialize_revertsOnStaticFee() public {
         // Create a PoolKey with a static fee (e.g., 3000)
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory staticKey = PoolKey(currency0, currency1, 3000, defaultTickSpacing, IHooks(hook));
 
         vm.prank(address(hook));
@@ -106,6 +107,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
@@ -132,6 +134,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         logic.deactivatePool(kFresh);
 
         int24 lower = -int24(3 * defaultTickSpacing);
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
@@ -155,6 +158,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
@@ -178,6 +182,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
@@ -204,6 +209,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
@@ -331,6 +337,7 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(3 * defaultTickSpacing);
         ModifyLiquidityParams memory lpParams =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});

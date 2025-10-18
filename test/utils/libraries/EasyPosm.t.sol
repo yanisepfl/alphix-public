@@ -39,8 +39,16 @@ contract EasyPosmTest is Test, Deployers {
         (currency0, currency1) = deployCurrencyPair();
 
         // Create the pool
-        key = PoolKey(currency0, currency1, 3000, 60, IHooks(address(0)));
-        nativeKey = PoolKey(Currency.wrap(address(0)), currency1, 3000, 60, IHooks(address(0)));
+        key = PoolKey({
+            currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 60, hooks: IHooks(address(0))
+        });
+        nativeKey = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: currency1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(0))
+        });
 
         poolManager.initialize(key, Constants.SQRT_PRICE_1_1);
         poolManager.initialize(nativeKey, Constants.SQRT_PRICE_1_1);
@@ -51,14 +59,14 @@ contract EasyPosmTest is Test, Deployers {
     }
 
     function test_mintLiquidity() public {
-        uint256 liquidityToMint = 100e18;
+        uint128 liquidityToMint = 100e18;
         address recipient = address(this);
 
         (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
             TickMath.getSqrtPriceAtTick(tickLower),
             TickMath.getSqrtPriceAtTick(tickUpper),
-            uint128(liquidityToMint)
+            liquidityToMint
         );
 
         (, BalanceDelta delta) = positionManager.mint(
@@ -72,19 +80,21 @@ contract EasyPosmTest is Test, Deployers {
             block.timestamp + 1,
             Constants.ZERO_BYTES
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount0(), -int128(uint128(amount0 + 1 wei)));
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount1(), -int128(uint128(amount1 + 1 wei)));
     }
 
     function test_mintLiquidityNative() public {
-        uint256 liquidityToMint = 100e18;
+        uint128 liquidityToMint = 100e18;
         address recipient = address(this);
 
         (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
             TickMath.getSqrtPriceAtTick(tickLower),
             TickMath.getSqrtPriceAtTick(tickUpper),
-            uint128(liquidityToMint)
+            liquidityToMint
         );
 
         vm.deal(address(this), amount0 + 1);
@@ -99,7 +109,9 @@ contract EasyPosmTest is Test, Deployers {
             block.timestamp + 1,
             Constants.ZERO_BYTES
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount0(), -int128(uint128(amount0 + 1 wei)));
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount1(), -int128(uint128(amount1 + 1 wei)));
     }
 
@@ -116,31 +128,33 @@ contract EasyPosmTest is Test, Deployers {
             Constants.ZERO_BYTES
         );
 
-        uint256 liquidityToAdd = 1e18;
+        uint128 liquidityToAdd = 1e18;
 
         (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
             TickMath.getSqrtPriceAtTick(tickLower),
             TickMath.getSqrtPriceAtTick(tickUpper),
-            uint128(liquidityToAdd)
+            liquidityToAdd
         );
 
         BalanceDelta delta = positionManager.increaseLiquidity(
             tokenId, liquidityToAdd, type(uint256).max, type(uint256).max, block.timestamp + 1, Constants.ZERO_BYTES
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount0(), -int128(uint128(amount0 + 1 wei)));
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount1(), -int128(uint128(amount1 + 1 wei)));
     }
 
     function test_increaseLiquidityNative() public {
-        uint256 liquidityToMint = 100e18;
+        uint128 liquidityToMint = 100e18;
         address recipient = address(this);
 
         (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
             TickMath.getSqrtPriceAtTick(tickLower),
             TickMath.getSqrtPriceAtTick(tickUpper),
-            uint128(liquidityToMint)
+            liquidityToMint
         );
 
         vm.deal(address(this), amount0 + 1);
@@ -156,20 +170,22 @@ contract EasyPosmTest is Test, Deployers {
             Constants.ZERO_BYTES
         );
 
-        uint256 liquidityToIncrease = 1e18;
+        uint128 liquidityToIncrease = 1e18;
 
         (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
             TickMath.getSqrtPriceAtTick(tickLower),
             TickMath.getSqrtPriceAtTick(tickUpper),
-            uint128(liquidityToIncrease)
+            liquidityToIncrease
         );
 
         vm.deal(address(this), amount0 + 1);
         delta = positionManager.increaseLiquidity(
             tokenId, liquidityToIncrease, amount0 + 1, amount1 + 1, block.timestamp + 1, Constants.ZERO_BYTES
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount0(), -int128(uint128(amount0 + 1 wei)));
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount1(), -int128(uint128(amount1 + 1 wei)));
     }
 
@@ -186,19 +202,21 @@ contract EasyPosmTest is Test, Deployers {
             Constants.ZERO_BYTES
         );
 
-        uint256 liquidityToRemove = 1e18;
+        uint128 liquidityToRemove = 1e18;
 
         (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
             TickMath.getSqrtPriceAtTick(tickLower),
             TickMath.getSqrtPriceAtTick(tickUpper),
-            uint128(liquidityToRemove)
+            liquidityToRemove
         );
 
         BalanceDelta delta = positionManager.decreaseLiquidity(
             tokenId, liquidityToRemove, 0, 0, address(this), block.timestamp + 1, Constants.ZERO_BYTES
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount0(), int128(uint128(amount0)));
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(delta.amount1(), int128(uint128(amount1)));
     }
 

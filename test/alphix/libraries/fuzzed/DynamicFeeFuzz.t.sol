@@ -85,6 +85,8 @@ contract DynamicFeeFuzzTest is Test {
 
         // If fee is within bounds and fits in uint24, it should be returned as-is
         if (fee <= type(uint24).max && fee >= minFee && fee <= maxFee) {
+            // Casting to uint24 is safe because we verified fee <= type(uint24).max
+            // forge-lint: disable-next-line(unsafe-typecast)
             assertEq(result, uint24(fee), "Should return original fee if within bounds");
         }
     }
@@ -333,10 +335,7 @@ contract DynamicFeeFuzzTest is Test {
      * @param current2 Second current value (higher)
      * @param lookback Lookback period
      */
-    function testFuzz_ema_monotonic(uint256 previous, uint256 current1, uint256 current2, uint24 lookback)
-        public
-        pure
-    {
+    function testFuzz_ema_monotonic(uint256 previous, uint256 current1, uint256 current2, uint24 lookback) public pure {
         previous = bound(previous, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
         current1 = bound(current1, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ - 1);
         current2 = bound(current2, current1 + 1, MAX_RATIO_FUZZ);
@@ -515,8 +514,12 @@ contract DynamicFeeFuzzTest is Test {
 
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OobState memory initialState =
-            DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: uint24(initialStreak)});
+        DynamicFeeLib.OobState memory initialState = DynamicFeeLib.OobState({
+            lastOobWasUpper: true,
+            // Casting to uint24 is safe because initialStreak is bounded to 0-10
+            // forge-lint: disable-next-line(unsafe-typecast)
+            consecutiveOobHits: uint24(initialStreak)
+        });
 
         (, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState
@@ -568,8 +571,12 @@ contract DynamicFeeFuzzTest is Test {
 
         uint256 globalMaxAdjRate = ONE_WAD;
 
-        DynamicFeeLib.OobState memory initialState =
-            DynamicFeeLib.OobState({lastOobWasUpper: wasUpper, consecutiveOobHits: uint24(initialStreak)});
+        DynamicFeeLib.OobState memory initialState = DynamicFeeLib.OobState({
+            lastOobWasUpper: wasUpper,
+            // Casting to uint24 is safe because initialStreak is bounded to 1-10
+            // forge-lint: disable-next-line(unsafe-typecast)
+            consecutiveOobHits: uint24(initialStreak)
+        });
 
         (, DynamicFeeLib.OobState memory newState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, targetRatio, globalMaxAdjRate, testParams, initialState

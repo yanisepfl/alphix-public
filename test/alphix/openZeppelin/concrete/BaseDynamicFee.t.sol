@@ -99,7 +99,9 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         testHook = TestBaseDynamicFee(hookAddress);
 
         // Create pool keys
+        // forge-lint: disable-next-line(named-struct-fields)
         dynamicFeeKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(testHook));
+        // forge-lint: disable-next-line(named-struct-fields)
         staticFeeKey = PoolKey(currency0, currency1, 3000, 60, IHooks(testHook));
     }
 
@@ -141,6 +143,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
 
     function test_afterInitialize_reverts_withStaticFee() public {
         // Create a static fee key that doesn't require pool initialization
+        // forge-lint: disable-next-line(named-struct-fields)
         PoolKey memory localStaticKey = PoolKey(currency0, currency1, 3000, 60, IHooks(address(0)));
 
         vm.expectRevert(BaseDynamicFee.NotDynamicFee.selector);
@@ -173,8 +176,13 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
     }
 
     function test_poke_reverts_invalidPool() public {
-        PoolKey memory invalidKey =
-            PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(address(0x1234)));
+        PoolKey memory invalidKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 60,
+            hooks: IHooks(address(0x1234))
+        });
 
         vm.expectRevert(); // Should revert with onlyValidPools modifier
         testHook.poke(invalidKey, 5e17);

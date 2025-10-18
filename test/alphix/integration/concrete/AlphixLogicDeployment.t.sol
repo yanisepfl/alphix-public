@@ -197,9 +197,8 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         // Upgrade to mock and set mockFee via reinitializer
         MockAlphixLogic mockImpl = new MockAlphixLogic();
         vm.prank(owner);
-        AlphixLogic(address(logicProxy)).upgradeToAndCall(
-            address(mockImpl), abi.encodeCall(MockAlphixLogic.initializeV2, (uint24(2000)))
-        );
+        AlphixLogic(address(logicProxy))
+            .upgradeToAndCall(address(mockImpl), abi.encodeCall(MockAlphixLogic.initializeV2, (uint24(2000))));
 
         // Advance time past cooldown period (1 day + buffer)
         vm.warp(block.timestamp + 1 days + 1);
