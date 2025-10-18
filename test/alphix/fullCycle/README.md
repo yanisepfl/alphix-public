@@ -1,14 +1,16 @@
 # Alphix Full Cycle Testing
 
-This directory contains comprehensive end-to-end integration tests that simulate complete lifecycle scenarios for the Alphix protocol, including multi-day operations, upgrades, and realistic user interactions.
+This directory contains comprehensive end-to-end integration tests that simulate complete lifecycle scenarios for the Alphix protocol, including multi-day operations, upgrades, extreme market conditions, multi-pool interactions, and realistic user behavior.
 
 ## Overview
 
 Full cycle tests validate the protocol's behavior across extended time periods and complex interaction sequences, ensuring:
-1. **Long-term stability** - Protocol functions correctly over days/weeks
+1. **Long-term stability** - Protocol functions correctly over days/weeks/months
 2. **Upgrade compatibility** - UUPS upgrades preserve state and functionality
 3. **Realistic scenarios** - Multi-user interactions with swaps, liquidity, and fee adjustments
 4. **Economic correctness** - Fee distributions and LP earnings work as expected
+5. **Extreme resilience** - System handles black swan events, liquidity drains, and OOB streaks
+6. **Multi-pool coordination** - Independent pool operation and cross-pool arbitrage safety
 
 ## Test Files
 
@@ -33,11 +35,8 @@ Full cycle tests validate the protocol's behavior across extended time periods a
 
 - **Extended Scenarios**:
   - `test_periodic_fee_adjustments_over_month()` - 30-day fee evolution (all pool types)
-  - `test_comprehensive_30day_full_cycle_all_interactions()` - Complete 30-day simulation
   - `test_high_volatility_scenario_with_dynamic_fees()` - Extreme market conditions
   - `test_realistic_ratio_calculation_from_volumes()` - Volume-based ratio accuracy
-
-**Gas Benchmarks**: ~800k - 6.2M gas per test (realistic full scenarios)
 
 #### `AlphixUpgradeability.t.sol`
 **Purpose**: Validates UUPS upgrade safety and state preservation
@@ -64,20 +63,36 @@ Full cycle tests validate the protocol's behavior across extended time periods a
   - `test_fee_poke_works_after_upgrade()` - Fee updates functional
   - `test_multiple_sequential_upgrades()` - Repeated upgrades safe
 
-**Gas Benchmarks**: ~650k - 13.9M gas per test (upgrade operations)
-
 ### Fuzzed Tests (`fuzzed/`)
 
 #### `AlphixFullIntegrationFuzz.t.sol`
 **Purpose**: Fuzz testing of full cycle scenarios with randomized parameters
 
 **Key Fuzzing Areas**:
-- Multi-user swap and liquidity scenarios with random amounts
-- Time-based operations with fuzzed delays
-- Fee adjustments with randomized ratios
-- Pool type variations
+- **Multi-User Scenarios**: Swap activity, liquidity provision, gradual buildup, directional pressure
+- **Economic Validation**: Dynamic fee accuracy, ratio calculations, LP fee distribution
+- **Pool Lifecycle**: Complete lifecycle with fee adjustments, volatility scenarios
+- **Long-Term Convergence**: EMA convergence to min/max/mid-range fees over weeks/months
+- **Parameter Sensitivity**: Linear slope impact, side factor asymmetry, streak accumulation
+- **Organic Behavior**: Seasonal patterns, monthly adjustments, stable operation without pokes
+- **Extreme Values**: System stability under extreme parameter combinations
 
-**Runs**: 512 iterations per test with bounded inputs
+#### `AlphixExtremeStatesFuzz.t.sol`
+**Purpose**: Validates system resilience under extreme market conditions and edge cases
+
+**Key Fuzzing Areas**:
+- **Liquidity Extremes**: Drain-then-flood cycles, zero liquidity recovery, massive injections
+- **OOB Streak Behavior**: Consecutive upper/lower hits, alternating streaks, reset verification
+- **Black Swan Events**: Full lifecycle crisis → recovery simulation with system stability checks
+
+#### `AlphixMultiPoolFuzz.t.sol`
+**Purpose**: Tests multi-pool coordination and cross-pool interactions
+
+**Key Fuzzing Areas**:
+- **Pool Independence**: Different pool types operating simultaneously without interference
+- **Cross-Pool Operations**: Arbitrage safety, liquidity migration, simultaneous swaps
+- **Global Parameters**: Parameter changes affecting all pools, many-pool system resilience
+- **Isolation Verification**: Pokes and state changes isolated per pool
 
 #### `AlphixUpgradeabilityFuzz.t.sol`
 **Purpose**: Fuzz testing of upgrade scenarios
@@ -86,8 +101,7 @@ Full cycle tests validate the protocol's behavior across extended time periods a
 - Upgrade with random active pool states
 - State preservation with fuzzed configurations
 - Post-upgrade operations with random parameters
-
-**Runs**: 512 iterations per test
+- OOB streak preservation across upgrades
 
 ## Running Full Cycle Tests
 
