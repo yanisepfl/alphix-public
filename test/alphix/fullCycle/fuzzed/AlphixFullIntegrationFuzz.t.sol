@@ -1112,9 +1112,6 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         uint256 highRatio = poolConfig.initialTargetRatio * 10;
         if (highRatio > params.maxCurrentRatio) highRatio = params.maxCurrentRatio;
 
-        uint24 firstFee;
-        (,,, firstFee) = poolManager.getSlot0(testPoolId);
-
         for (uint256 week = 0; week < numWeeks; week++) {
             uint256 dailyVolume = (uint256(liquidityAmount) * highRatio) / 1e18;
             if (dailyVolume < MIN_SWAP_AMOUNT) dailyVolume = MIN_SWAP_AMOUNT;
@@ -2263,7 +2260,8 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
     function _extractOldTargetRatio() internal returns (uint256 oldTargetRatio) {
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == FEE_UPDATED_TOPIC) {
+            // Verify both topic and emitter to avoid decoding unrelated FeeUpdated events
+            if (logs[i].topics[0] == FEE_UPDATED_TOPIC && logs[i].emitter == address(hook)) {
                 // Validate topic structure before decoding
                 require(logs[i].topics.length >= 2, "FeeUpdated: malformed topics");
 
