@@ -50,7 +50,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
     uint256 constant MAX_SWAP_AMOUNT = 50e18;
 
     // Test helper constants for convergence and simulation parameters
-    uint24 constant CONVERGENCE_TOLERANCE_BPS = 10; // 10 basis points = 0.1% tolerance for fee convergence
+    uint24 constant CONVERGENCE_TOLERANCE_PPM = 1000; // 1000 ppm = 0.1% tolerance for fee convergence (in fee units: hundredth of a bip)
     uint256 constant MIN_WEEKS_FOR_CONVERGENCE = 50; // Minimum weeks to simulate for convergence tests
     uint256 constant MAX_WEEKS_FOR_CONVERGENCE = 200; // Maximum weeks to cap simulation time
     uint256 constant MAX_WEEKS_FOR_STREAK_BREAKING = 150; // Max weeks for OOB ratio growth with streak breaking
@@ -1074,7 +1074,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         // Allow for near-convergence: fee should be at minFee or very close (within tolerance)
         // Some parameter combinations (low linearSlope or lowerSideFactor) may converge slower
         assertTrue(
-            finalFee <= params.minFee + CONVERGENCE_TOLERANCE_BPS,
+            finalFee <= params.minFee + CONVERGENCE_TOLERANCE_PPM,
             "Fee should converge to or near minFee with consistently low ratios"
         );
     }
@@ -1141,7 +1141,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         // Allow for near-convergence: fee should be at maxFee or very close (within tolerance)
         // Some parameter combinations (low linearSlope or upperSideFactor) may converge slower
         assertTrue(
-            finalFee >= params.maxFee - CONVERGENCE_TOLERANCE_BPS,
+            finalFee >= params.maxFee - CONVERGENCE_TOLERANCE_PPM,
             "Fee should converge to or near maxFee with consistently high ratios"
         );
     }

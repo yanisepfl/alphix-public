@@ -658,7 +658,9 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         uint128 liquidityPerStep = params.initialLiquidity / params.drainSteps;
         if (liquidityPerStep == 0) liquidityPerStep = 1;
 
-        for (uint256 i = 0; i < params.drainSteps - 1; i++) {
+        // Defensive bound to avoid future underflow if drainSteps is 0
+        uint8 stepsMinusOne = params.drainSteps > 0 ? params.drainSteps - 1 : 0;
+        for (uint256 i = 0; i < stepsMinusOne; i++) {
             vm.warp(block.timestamp + 1 days);
 
             vm.startPrank(alice);
