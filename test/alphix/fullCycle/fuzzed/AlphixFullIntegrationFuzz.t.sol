@@ -2215,7 +2215,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
             // Denominators: baseVolumeRatioBps in bps (1e4), currentMultiplier scaled by 100 → total 1e6
             uint256 weeklyVolume =
                 (uint256(cycleParams.baseLiquidity) * cycleParams.baseVolumeRatioBps * cycleParams.currentMultiplier)
-                / (10000 * 100);
+                    / (10000 * 100);
             if (weeklyVolume < MIN_SWAP_AMOUNT) weeklyVolume = MIN_SWAP_AMOUNT;
             if (weeklyVolume > MAX_SWAP_AMOUNT) weeklyVolume = MAX_SWAP_AMOUNT;
 

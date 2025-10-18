@@ -197,7 +197,9 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             hookData: Constants.ZERO_BYTES,
             receiver: actor,
             deadline: block.timestamp + 100
-        }) returns (BalanceDelta) {
+        }) returns (
+            BalanceDelta
+        ) {
             callCountswap++;
             ghosttotalSwapVolume += swapAmount;
             // Note: Delta can legitimately be zero in edge cases (extreme slippage)
