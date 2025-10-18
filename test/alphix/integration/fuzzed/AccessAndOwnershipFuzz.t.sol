@@ -239,7 +239,9 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
 
         // Create pool key
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
-        PoolKey memory freshKey = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 30, IHooks(hook));
+        PoolKey memory freshKey = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 30, hooks: IHooks(hook)
+        });
 
         // Register pool
         vm.prank(owner);

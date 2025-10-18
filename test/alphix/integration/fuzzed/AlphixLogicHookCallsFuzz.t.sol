@@ -123,6 +123,8 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
         );
 
         // Calculate ticks based on multiplier
+        // Casting to uint24 is safe because defaultTickSpacing is int24 and tickSpacingMultiplier is bounded to 1-10
+        // forge-lint: disable-next-line(unsafe-typecast)
         int24 lower = -int24(uint24(tickSpacingMultiplier) * uint24(defaultTickSpacing));
         // forge-lint: disable-next-line(unsafe-typecast)
         int24 upper = int24(uint24(tickSpacingMultiplier) * uint24(defaultTickSpacing));
@@ -193,10 +195,14 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
     function testFuzz_beforeSwap_works_with_any_direction(bool zeroForOne, int256 amountSpecified) public {
         // Bound amount (avoid zero and handle type(int256).min edge case)
         if (amountSpecified >= 0) {
+            // Casting to uint256 is safe because amountSpecified >= 0
+            // forge-lint: disable-next-line(unsafe-typecast)
             amountSpecified = int256(bound(uint256(amountSpecified), 1, 1e24));
         } else {
             // Avoid type(int256).min which cannot be negated
             vm.assume(amountSpecified != type(int256).min);
+            // Casting to uint256 is safe because we verified amountSpecified != type(int256).min
+            // forge-lint: disable-next-line(unsafe-typecast)
             uint256 absAmount = uint256(-amountSpecified);
             amountSpecified = -int256(bound(absAmount, 1, 1e24));
         }

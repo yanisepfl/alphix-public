@@ -85,6 +85,8 @@ contract DynamicFeeFuzzTest is Test {
 
         // If fee is within bounds and fits in uint24, it should be returned as-is
         if (fee <= type(uint24).max && fee >= minFee && fee <= maxFee) {
+            // Casting to uint24 is safe because we verified fee <= type(uint24).max
+            // forge-lint: disable-next-line(unsafe-typecast)
             assertEq(result, uint24(fee), "Should return original fee if within bounds");
         }
     }
@@ -512,6 +514,8 @@ contract DynamicFeeFuzzTest is Test {
 
         uint256 globalMaxAdjRate = ONE_WAD;
 
+        // Casting to uint24 is safe because initialStreak is bounded to 0-10
+        // forge-lint: disable-next-line(unsafe-typecast)
         DynamicFeeLib.OobState memory initialState =
             DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: uint24(initialStreak)});
 
@@ -565,6 +569,8 @@ contract DynamicFeeFuzzTest is Test {
 
         uint256 globalMaxAdjRate = ONE_WAD;
 
+        // Casting to uint24 is safe because initialStreak is bounded to 1-10
+        // forge-lint: disable-next-line(unsafe-typecast)
         DynamicFeeLib.OobState memory initialState =
             DynamicFeeLib.OobState({lastOobWasUpper: wasUpper, consecutiveOobHits: uint24(initialStreak)});
 

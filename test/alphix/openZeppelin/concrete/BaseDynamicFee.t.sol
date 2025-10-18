@@ -176,9 +176,13 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
     }
 
     function test_poke_reverts_invalidPool() public {
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey memory invalidKey =
-            PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(address(0x1234)));
+        PoolKey memory invalidKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 60,
+            hooks: IHooks(address(0x1234))
+        });
 
         vm.expectRevert(); // Should revert with onlyValidPools modifier
         testHook.poke(invalidKey, 5e17);

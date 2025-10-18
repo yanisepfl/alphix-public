@@ -1421,7 +1421,10 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             params1 = _createParameterSetWithLinearSlope(ratioTolerance, baseMaxFeeDelta, param1Value);
             params2 = _createParameterSetWithLinearSlope(ratioTolerance, baseMaxFeeDelta, param2Value);
         } else if (keccak256(bytes(parameterName)) == keccak256("baseMaxFeeDelta")) {
+            // Casting to uint24 is safe because param1Value and param2Value come from uint24 baseMaxFeeDelta parameters
+            // forge-lint: disable-next-line(unsafe-typecast)
             params1 = _createParameterSetWithBaseMaxFeeDelta(ratioTolerance, uint24(param1Value), 2e18);
+            // forge-lint: disable-next-line(unsafe-typecast)
             params2 = _createParameterSetWithBaseMaxFeeDelta(ratioTolerance, uint24(param2Value), 2e18);
         }
 
