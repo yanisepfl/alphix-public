@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
-import {VmSafe} from "forge-std/Vm.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -1724,10 +1724,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
         DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolType);
-
-        uint256 prevRatio = poolConfig.initialTargetRatio;
 
         for (uint256 month = 0; month < numMonths; month++) {
             uint256 monthlyVolumeMultiplier = 50 + ((month * 37) % 150);
@@ -1767,8 +1764,6 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
             // Extract actual target ratio from event and validate fee direction
             uint256 actualTarget = _extractOldTargetRatio();
             _assertDirectionalFeeChange(monthlyRatio, actualTarget, feeBeforePoke, monthlyFee, params);
-
-            prevRatio = monthlyRatio;
         }
 
         uint24 finalFee;
@@ -2258,7 +2253,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
      * @return oldTargetRatio The EMA target ratio before the poke
      */
     function _extractOldTargetRatio() internal returns (uint256 oldTargetRatio) {
-        VmSafe.Log[] memory logs = vm.getRecordedLogs();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             // Verify both topic and emitter to avoid decoding unrelated FeeUpdated events
             if (logs[i].topics[0] == FEE_UPDATED_TOPIC && logs[i].emitter == address(hook)) {
@@ -2456,28 +2451,6 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
             }
         }
         return 0;
-    }
-
-    /**
-     * @notice Execute 6 fee boundary transitions: min→max→min→max→min→max
-     * @dev Tests fee can swing back and forth across full range by alternating low/high ratios
-     * @return result Array of weeks taken for each of the 6 phase transitions
-     */
-    function _executeAllPhases(
-        PoolKey memory poolKey,
-        PoolId pid,
-        uint128 liq,
-        DynamicFeeLib.PoolTypeParams memory params
-    ) internal returns (uint256[6] memory result) {
-        uint256 low = 1e15;
-        uint256 high = 1e20;
-
-        result[0] = _executePhase(poolKey, pid, liq, low, params, params.minFee);
-        result[1] = _executePhase(poolKey, pid, liq, high, params, params.maxFee);
-        result[2] = _executePhase(poolKey, pid, liq, low, params, params.minFee);
-        result[3] = _executePhase(poolKey, pid, liq, high, params, params.maxFee);
-        result[4] = _executePhase(poolKey, pid, liq, low, params, params.minFee);
-        result[5] = _executePhase(poolKey, pid, liq, high, params, params.maxFee);
     }
 
     /**
