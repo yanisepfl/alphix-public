@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
-import {Alphix} from "../../src/Alphix.sol";
 
 /**
  * @title Remove AccessManager Roles (Optional)
@@ -16,7 +15,6 @@ import {Alphix} from "../../src/Alphix.sol";
  * Environment Variables (ALL OPTIONAL):
  * - DEPLOYMENT_NETWORK: Network identifier
  * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
- * - ALPHIX_HOOK_{NETWORK}: Alphix Hook contract address (for fee poker role removal)
  * - FEE_POKER_{NETWORK}: Address to revoke fee poker role from (optional)
  * - REGISTRAR_{NETWORK}: Address to revoke registrar role from (optional)
  *
@@ -38,15 +36,6 @@ contract RemoveRolesScript is Script {
         string memory accessManagerEnvVar = string.concat("ACCESS_MANAGER_", network);
         address accessManagerAddr = vm.envAddress(accessManagerEnvVar);
         require(accessManagerAddr != address(0), string.concat(accessManagerEnvVar, " not set"));
-
-        // Get Alphix Hook address (only needed if removing fee poker role)
-        address alphixHookAddr;
-        string memory hookEnvVar = string.concat("ALPHIX_HOOK_", network);
-        try vm.envAddress(hookEnvVar) returns (address addr) {
-            alphixHookAddr = addr;
-        } catch {
-            // Hook address not needed if only removing registrar role
-        }
 
         // Get role addresses to revoke (optional)
         address feePoker;
@@ -101,14 +90,7 @@ contract RemoveRolesScript is Script {
 
         // Optional: Remove Fee Poker Role
         if (feePoker != address(0)) {
-            require(alphixHookAddr != address(0), "ALPHIX_HOOK must be set to remove FEE_POKER role");
-
             console.log("Removing Fee Poker Role...");
-
-            Alphix alphix = Alphix(alphixHookAddr);
-
-            // Get the function selector for poke(PoolKey,uint256)
-            bytes4 pokeSelector = alphix.poke.selector;
 
             // Revoke FEE_POKER_ROLE from the fee poker address
             accessManager.revokeRole(FEE_POKER_ROLE, feePoker);
