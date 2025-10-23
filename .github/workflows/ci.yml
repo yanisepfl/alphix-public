@@ -109,7 +109,7 @@ jobs:
           slither-args: --filter-paths "lib/|test/" --exclude naming-convention,solc-version
 
       - name: Upload SARIF file
-        uses: github/codebase-security-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: results.sarif
