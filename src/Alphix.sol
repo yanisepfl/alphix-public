@@ -263,11 +263,11 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         if (newRegistry == address(0)) {
             revert InvalidAddress();
         }
-        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.Alphix, address(this));
-        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
         address oldRegistry = registry;
         registry = newRegistry;
         emit RegistryUpdated(oldRegistry, newRegistry);
+        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.Alphix, address(this));
+        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
     }
 
     /**
