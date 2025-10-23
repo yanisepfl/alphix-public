@@ -9,6 +9,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   format-build-test:
     name: Format, Build & Test
@@ -83,3 +87,29 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
           fail_ci_if_error: false
+
+  security-analysis:
+    name: Slither Static Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        id: slither
+        with:
+          fail-on: none
+          sarif: results.sarif
+          slither-args: --filter-paths "lib/|test/" --exclude naming-convention,solc-version
+
+      - name: Upload SARIF file
+        uses: github/codebase-security-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
