@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 import {Alphix} from "../../src/Alphix.sol";
+import {Roles} from "./libraries/Roles.sol";
 
 /**
  * @title Configure Additional AccessManager Roles (Optional)
@@ -16,22 +17,26 @@ import {Alphix} from "../../src/Alphix.sol";
  * NOTE: The Alphix Hook already has REGISTRAR role (granted in script 04).
  * This script is only for granting ADDITIONAL roles to OTHER addresses.
  *
- * Environment Variables (ALL OPTIONAL):
- * - DEPLOYMENT_NETWORK: Network identifier
+ * Environment Variables:
+ * Required:
+ * - DEPLOYMENT_NETWORK: Network identifier (e.g., BASE_SEPOLIA)
  * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
- * - ALPHIX_HOOK_{NETWORK}: Alphix Hook contract address (for fee poker role)
- * - FEE_POKER_{NETWORK}: Address allowed to poke fees (optional)
- * - REGISTRAR_{NETWORK}: Additional address for registrar role (optional)
+ * - ACCOUNT_PRIVATE_KEY: Private key of the broadcaster account
+ *
+ * Optional (at least one required for script to execute):
+ * - ALPHIX_HOOK_{NETWORK}: Alphix Hook contract address (required if configuring FEE_POKER)
+ * - FEE_POKER_{NETWORK}: Address to grant fee poker role to
+ * - REGISTRAR_{NETWORK}: Additional address to grant registrar role to
  *
  * Optional Roles:
  * 1. FEE_POKER (optional) - Can call Alphix.poke() to manually update dynamic fees
  * 2. REGISTRAR (additional, optional) - Additional address for pool/contract registration
+ *
+ * Prerequisites:
+ * - Broadcaster must have ADMIN_ROLE (role ID 0) in AccessManager
+ * - Script will check permissions before broadcasting and revert if insufficient
  */
 contract ConfigureRolesScript is Script {
-    // Role IDs (arbitrary unique identifiers)
-    uint64 constant FEE_POKER_ROLE = 1;
-    uint64 constant REGISTRAR_ROLE = 2;
-
     function run() public {
         // Load environment variables
         string memory network = vm.envString("DEPLOYMENT_NETWORK");
@@ -100,7 +105,49 @@ contract ConfigureRolesScript is Script {
 
         AccessManager accessManager = AccessManager(accessManagerAddr);
 
-        vm.startBroadcast();
+        // Check broadcaster permissions
+        console.log("BROADCASTER PERMISSION CHECK");
+        console.log("-------------------------------------------");
+
+        // Get the broadcaster address
+        uint256 deployerPrivateKey = vm.envUint("ACCOUNT_PRIVATE_KEY");
+        address broadcaster = vm.addr(deployerPrivateKey);
+
+        console.log("Broadcaster Address:", broadcaster);
+
+        // Check if broadcaster has ADMIN_ROLE
+        (bool hasAdminRole, uint32 executionDelay) = accessManager.hasRole(Roles.ADMIN_ROLE, broadcaster);
+
+        console.log("Has ADMIN_ROLE (ID):", Roles.ADMIN_ROLE);
+        console.log("Has ADMIN_ROLE:", hasAdminRole ? "YES" : "NO");
+
+        if (executionDelay > 0) {
+            console.log("Execution Delay (seconds):", executionDelay);
+            console.log("");
+            console.log("WARNING: Role operations will have a time delay!");
+            console.log("The role grants will be scheduled, not immediate.");
+        }
+
+        if (!hasAdminRole) {
+            console.log("");
+            console.log("===========================================");
+            console.log("ERROR: INSUFFICIENT PERMISSIONS");
+            console.log("===========================================");
+            console.log("The broadcaster does not have ADMIN_ROLE.");
+            console.log("Role configuration requires admin permissions.");
+            console.log("");
+            console.log("Solutions:");
+            console.log("1. Use an address with ADMIN_ROLE");
+            console.log("2. Grant ADMIN_ROLE to this broadcaster:");
+            console.log("   Address:", broadcaster);
+            console.log("===========================================");
+            revert("Broadcaster lacks ADMIN_ROLE - cannot configure roles");
+        }
+
+        console.log("Permission check: PASSED");
+        console.log("");
+
+        vm.startBroadcast(deployerPrivateKey);
 
         // Optional: Configure Fee Poker Role (can call poke() on Alphix Hook)
         if (feePoker != address(0)) {
@@ -116,10 +163,10 @@ contract ConfigureRolesScript is Script {
             // Set function as restricted to FEE_POKER_ROLE
             bytes4[] memory pokeSelectors = new bytes4[](1);
             pokeSelectors[0] = pokeSelector;
-            accessManager.setTargetFunctionRole(alphixHookAddr, pokeSelectors, FEE_POKER_ROLE);
+            accessManager.setTargetFunctionRole(alphixHookAddr, pokeSelectors, Roles.FEE_POKER_ROLE);
 
             // Grant FEE_POKER_ROLE to the fee poker address
-            accessManager.grantRole(FEE_POKER_ROLE, feePoker, 0); // 0 = immediate effect
+            accessManager.grantRole(Roles.FEE_POKER_ROLE, feePoker, 0); // 0 = immediate effect
 
             console.log("  - Fee Poker role granted to:", feePoker);
             console.log("  - Can now call poke() on Alphix Hook");
@@ -131,7 +178,7 @@ contract ConfigureRolesScript is Script {
             console.log("Configuring additional Registrar role (optional)...");
 
             // Grant REGISTRAR_ROLE to additional registrar address
-            accessManager.grantRole(REGISTRAR_ROLE, registrar, 0); // 0 = immediate effect
+            accessManager.grantRole(Roles.REGISTRAR_ROLE, registrar, 0); // 0 = immediate effect
 
             console.log("  - REGISTRAR role granted to:", registrar);
             console.log("  - Can call registerContract() and registerPool() on Registry");
@@ -146,10 +193,12 @@ contract ConfigureRolesScript is Script {
         console.log("");
         console.log("Configured Roles:");
         if (feePoker != address(0)) {
-            console.log("  - FEE_POKER (ID %s): %s", FEE_POKER_ROLE, feePoker);
+            console.log("  - FEE_POKER (ID):", Roles.FEE_POKER_ROLE);
+            console.log("  - FEE_POKER:", feePoker);
         }
         if (registrar != address(0)) {
-            console.log("  - REGISTRAR (ID %s): %s", REGISTRAR_ROLE, registrar);
+            console.log("  - REGISTRAR (ID):", Roles.REGISTRAR_ROLE);
+            console.log("  - REGISTRAR:", registrar);
         }
         console.log("");
         console.log("NEXT STEPS:");
