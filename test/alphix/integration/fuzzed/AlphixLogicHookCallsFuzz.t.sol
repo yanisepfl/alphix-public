@@ -102,10 +102,9 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
      * @param tickSpacingMultiplier Multiplier for tick spacing (1-10)
      * @param liquidityDelta Liquidity delta amount
      */
-    function testFuzz_beforeAddLiquidity_succeeds_with_various_ticks(
-        uint8 tickSpacingMultiplier,
-        int256 liquidityDelta
-    ) public {
+    function testFuzz_beforeAddLiquidity_succeeds_with_various_ticks(uint8 tickSpacingMultiplier, int256 liquidityDelta)
+        public
+    {
         // Bound parameters
         tickSpacingMultiplier = uint8(bound(tickSpacingMultiplier, 1, 10));
         liquidityDelta = int256(bound(liquidityDelta, 1, 1e24));

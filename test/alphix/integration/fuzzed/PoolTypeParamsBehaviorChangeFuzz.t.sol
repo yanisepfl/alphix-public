@@ -1491,11 +1491,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      * @param linearSlope Linear slope value to use
      * @return params Complete parameter set
      */
-    function _createParameterSetWithBaseMaxFeeDelta(
-        uint256 ratioTolerance,
-        uint24 baseMaxFeeDelta,
-        uint256 linearSlope
-    ) internal pure returns (DynamicFeeLib.PoolTypeParams memory) {
+    function _createParameterSetWithBaseMaxFeeDelta(uint256 ratioTolerance, uint24 baseMaxFeeDelta, uint256 linearSlope)
+        internal
+        pure
+        returns (DynamicFeeLib.PoolTypeParams memory)
+    {
         return DynamicFeeLib.PoolTypeParams({
             minFee: 1,
             maxFee: 8000,

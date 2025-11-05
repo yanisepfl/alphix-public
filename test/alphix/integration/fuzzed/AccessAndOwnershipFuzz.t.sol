@@ -217,11 +217,9 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
      * @param initialFee Initial fee for pool
      * @param targetRatio Target ratio for pool
      */
-    function testFuzz_pool_registration_with_various_params(
-        uint8 poolTypeIndex,
-        uint24 initialFee,
-        uint256 targetRatio
-    ) public {
+    function testFuzz_pool_registration_with_various_params(uint8 poolTypeIndex, uint24 initialFee, uint256 targetRatio)
+        public
+    {
         // Bound parameters
         poolTypeIndex = uint8(bound(poolTypeIndex, 0, 2));
         initialFee = uint24(bound(initialFee, 100, 10000));

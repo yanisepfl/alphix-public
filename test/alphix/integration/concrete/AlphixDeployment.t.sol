@@ -16,12 +16,14 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {Alphix} from "../../../../src/Alphix.sol";
 import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
+import {IRegistry} from "../../../../src/interfaces/IRegistry.sol";
 import {Registry} from "../../../../src/Registry.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {MockERC165} from "../../../utils/mocks/MockERC165.sol";
@@ -377,6 +379,58 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
+     * @notice setRegistry should revert when setting to an EOA (non-contract).
+     * @dev Addresses Olympix finding: call_to_non_contract_registry
+     * Note: Calling supportsInterface() on an EOA reverts with empty data (no code to execute)
+     */
+    function test_setRegistry_revertsOnEOA() public {
+        address eoaRegistry = makeAddr("eoaRegistry");
+        assertEq(eoaRegistry.code.length, 0, "Should be EOA with no code");
+
+        vm.prank(owner);
+        vm.expectRevert(); // Generic revert - supportsInterface call on EOA fails
+        hook.setRegistry(eoaRegistry);
+
+        // Verify registry was not changed
+        assertEq(hook.getRegistry(), address(registry), "Registry should not have changed");
+    }
+
+    /**
+     * @notice setRegistry should revert when setting to a contract without IRegistry interface.
+     * @dev Addresses Olympix finding: call_to_non_contract_registry
+     */
+    function test_setRegistry_revertsOnNonRegistryContract() public {
+        // Deploy a contract that doesn't implement IRegistry
+        MockERC20 notARegistry = new MockERC20("Not Registry", "NR", 18);
+        assertTrue(address(notARegistry).code.length > 0, "Should be a contract");
+
+        vm.prank(owner);
+        // Expect revert when checking interface support
+        vm.expectRevert();
+        hook.setRegistry(address(notARegistry));
+
+        // Verify registry was not changed
+        assertEq(hook.getRegistry(), address(registry), "Registry should not have changed");
+    }
+
+    /**
+     * @notice setRegistry should revert when setting to a contract that implements ERC165 but not IRegistry.
+     * @dev Addresses Olympix finding: call_to_non_contract_registry
+     */
+    function test_setRegistry_revertsOnInvalidInterface() public {
+        // Deploy a contract with ERC165 but wrong interface
+        MockERC165 wrongInterface = new MockERC165();
+        assertTrue(address(wrongInterface).code.length > 0, "Should be a contract");
+
+        vm.prank(owner);
+        vm.expectRevert(IAlphix.InvalidAddress.selector);
+        hook.setRegistry(address(wrongInterface));
+
+        // Verify registry was not changed
+        assertEq(hook.getRegistry(), address(registry), "Registry should not have changed");
+    }
+
+    /**
      * @notice Pause and unpause should work when called by owner.
      */
     function test_pauseAndUnpause_owner() public {
@@ -502,5 +556,57 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         uint256 cap = logic.getGlobalMaxAdjRate();
         assertTrue(cap > 0, "global cap should be set");
         assertTrue(cap <= GLOBAL_MAX_ADJ_RATE_SAFE, "global cap should be <= safe bound");
+    }
+
+    /**
+     * @notice Fuzz test: setRegistry should always revert on EOA addresses.
+     * @dev Addresses Olympix finding: call_to_non_contract_registry
+     * Note: Calling supportsInterface() on an EOA reverts with empty data (no code to execute)
+     */
+    function testFuzz_setRegistry_revertsOnAnyEOA(address eoaAddress) public {
+        // Filter out addresses with code
+        vm.assume(eoaAddress.code.length == 0);
+        // Filter out zero address (already tested separately)
+        vm.assume(eoaAddress != address(0));
+
+        vm.prank(owner);
+        vm.expectRevert(); // Generic revert - supportsInterface call on EOA fails
+        hook.setRegistry(eoaAddress);
+
+        // Verify registry was not changed
+        assertEq(hook.getRegistry(), address(registry), "Registry should not have changed");
+    }
+
+    /**
+     * @notice Fuzz test: setRegistry should work with valid Registry contracts.
+     * @dev Creates new Registry instances and verifies they can be set successfully.
+     */
+    function testFuzz_setRegistry_worksWithValidRegistry(uint8 iterations) public {
+        iterations = uint8(bound(iterations, 1, 10)); // Limit to reasonable number
+
+        vm.startPrank(owner);
+        for (uint256 i = 0; i < iterations; i++) {
+            // Deploy a new valid Registry
+            Registry newReg = new Registry(address(accessManager));
+
+            // Setup roles for the new registry
+            _setupAccessManagerRoles(address(hook), accessManager, newReg);
+
+            // Set the new registry
+            address oldReg = hook.getRegistry();
+            hook.setRegistry(address(newReg));
+
+            // Verify it was set correctly
+            assertEq(hook.getRegistry(), address(newReg), "Registry should be updated");
+            assertTrue(address(newReg) != oldReg, "New registry should be different from old");
+            assertTrue(address(newReg).code.length > 0, "New registry should be a contract");
+
+            // Verify Registry supports IRegistry interface
+            assertTrue(
+                IERC165(address(newReg)).supportsInterface(type(IRegistry).interfaceId),
+                "New registry should support IRegistry interface"
+            );
+        }
+        vm.stopPrank();
     }
 }
