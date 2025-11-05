@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 /* OZ IMPORTS */
 import {AccessManaged} from "@openzeppelin/contracts/access/manager/AccessManaged.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -18,7 +19,7 @@ import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
  * @notice Registry for Alphix ecosystem contracts and pools.
  * @dev Uses AccessManaged for centralized access control.
  */
-contract Registry is AccessManaged, IRegistry {
+contract Registry is AccessManaged, ERC165, IRegistry {
     /* STORAGE */
 
     /**
@@ -110,5 +111,12 @@ contract Registry is AccessManaged, IRegistry {
      */
     function listPools() external view override returns (PoolId[] memory) {
         return allPools;
+    }
+
+    /**
+     * @dev See {IERC165-supportsInterface}.
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165) returns (bool) {
+        return interfaceId == type(IRegistry).interfaceId || super.supportsInterface(interfaceId);
     }
 }

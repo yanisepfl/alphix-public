@@ -263,6 +263,12 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         if (newRegistry == address(0)) {
             revert InvalidAddress();
         }
+
+        // Verify newRegistry supports IRegistry interface
+        if (!IERC165(newRegistry).supportsInterface(type(IRegistry).interfaceId)) {
+            revert InvalidAddress();
+        }
+
         address oldRegistry = registry;
         registry = newRegistry;
         emit RegistryUpdated(oldRegistry, newRegistry);
