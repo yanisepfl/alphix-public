@@ -244,6 +244,30 @@ contract MockAlphixLogic is
         return (this.afterSwap.selector, 0);
     }
 
+    function beforeDonate(address, PoolKey calldata key, uint256, uint256, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
+        returns (bytes4)
+    {
+        return this.beforeDonate.selector;
+    }
+
+    function afterDonate(address, PoolKey calldata key, uint256, uint256, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
+        returns (bytes4)
+    {
+        return this.afterDonate.selector;
+    }
+
     /* FEE COMPUTE/FINALIZE (ratio-aware, view + write) */
 
     /**

@@ -296,6 +296,36 @@ contract AlphixLogic is
     }
 
     /**
+     * @dev See {IAlphixLogic-beforeDonate}.
+     */
+    function beforeDonate(address, PoolKey calldata key, uint256, uint256, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
+        returns (bytes4)
+    {
+        return BaseHook.beforeDonate.selector;
+    }
+
+    /**
+     * @dev See {IAlphixLogic-afterDonate}.
+     */
+    function afterDonate(address, PoolKey calldata key, uint256, uint256, bytes calldata)
+        external
+        view
+        override
+        onlyAlphixHook
+        poolActivated(key)
+        whenNotPaused
+        returns (bytes4)
+    {
+        return BaseHook.afterDonate.selector;
+    }
+
+    /**
      * @dev See {IAlphixLogic-computeFeeAndTargetRatio}.
      */
     function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)

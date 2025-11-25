@@ -638,14 +638,12 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
         assertTrue(perms.afterRemoveLiquidity, "afterRemoveLiquidity should be true");
         assertTrue(perms.beforeSwap, "beforeSwap should be true");
         assertTrue(perms.afterSwap, "afterSwap should be true");
-
-        // Verify all disabled permissions remain disabled
-        assertFalse(perms.beforeDonate, "beforeDonate should be false");
-        assertFalse(perms.afterDonate, "afterDonate should be false");
-        assertFalse(perms.beforeSwapReturnDelta, "beforeSwapReturnDelta should be false");
-        assertFalse(perms.afterSwapReturnDelta, "afterSwapReturnDelta should be false");
-        assertFalse(perms.afterAddLiquidityReturnDelta, "afterAddLiquidityReturnDelta should be false");
-        assertFalse(perms.afterRemoveLiquidityReturnDelta, "afterRemoveLiquidityReturnDelta should be false");
+        assertTrue(perms.beforeDonate, "beforeDonate should be true");
+        assertTrue(perms.afterDonate, "afterDonate should be true");
+        assertTrue(perms.beforeSwapReturnDelta, "beforeSwapReturnDelta should be true");
+        assertTrue(perms.afterSwapReturnDelta, "afterSwapReturnDelta should be true");
+        assertTrue(perms.afterAddLiquidityReturnDelta, "afterAddLiquidityReturnDelta should be true");
+        assertTrue(perms.afterRemoveLiquidityReturnDelta, "afterRemoveLiquidityReturnDelta should be true");
     }
 
     /* ========================================================================== */
