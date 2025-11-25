@@ -222,26 +222,26 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
     /**
      * @dev See {BaseHook-_beforeDonate}.
      */
-    function _beforeDonate(address sender, PoolKey calldata key, uint256 amount0, uint256 amount1, bytes calldata hookData)
-        internal
-        override
-        validLogic
-        whenNotPaused
-        returns (bytes4)
-    {
+    function _beforeDonate(
+        address sender,
+        PoolKey calldata key,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4) {
         return IAlphixLogic(logic).beforeDonate(sender, key, amount0, amount1, hookData);
     }
 
     /**
      * @dev See {BaseHook-_afterDonate}.
      */
-    function _afterDonate(address sender, PoolKey calldata key, uint256 amount0, uint256 amount1, bytes calldata hookData)
-        internal
-        override
-        validLogic
-        whenNotPaused
-        returns (bytes4)
-    {
+    function _afterDonate(
+        address sender,
+        PoolKey calldata key,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4) {
         return IAlphixLogic(logic).afterDonate(sender, key, amount0, amount1, hookData);
     }
 
