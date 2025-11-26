@@ -134,6 +134,7 @@ contract AlphixDonateHooksTest is BaseAlphixTest {
 
     /**
      * @notice Test donation when contract is paused
+     * @dev Note: Error is wrapped by PoolManager, so we can't check for specific error
      */
     function test_donate_fails_when_paused() public {
         // Pause the hook
@@ -145,7 +146,7 @@ contract AlphixDonateHooksTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(key.currency0)).approve(address(donateRouter), 1e18);
         MockERC20(Currency.unwrap(key.currency1)).approve(address(donateRouter), 1e18);
 
-        vm.expectRevert(); // Will revert with Paused error
+        vm.expectRevert(); // PoolManager wraps the PoolPaused error
         donateRouter.donate(key, 1e18, 1e18, "");
         vm.stopPrank();
     }

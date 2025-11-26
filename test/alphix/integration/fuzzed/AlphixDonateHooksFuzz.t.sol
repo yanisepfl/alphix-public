@@ -184,8 +184,12 @@ contract AlphixDonateHooksFuzzTest is BaseAlphixTest {
 
     /**
      * @notice Fuzz: Zero amount donations (edge case)
+     * @dev Tests donations with zero amounts on one or both tokens
      */
     function testFuzz_zero_amount_donations(bool zeroToken0, bool zeroToken1) public {
+        // Skip the non zero case
+        vm.assume(zeroToken0 == true || zeroToken1 == true);
+
         uint256 amount0 = zeroToken0 ? 0 : 10e18;
         uint256 amount1 = zeroToken1 ? 0 : 10e18;
 
