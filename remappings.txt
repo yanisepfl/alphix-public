@@ -6,7 +6,7 @@ v4-core/=lib/uniswap-hooks/lib/v4-core/
 v4-periphery/=lib/uniswap-hooks/lib/v4-periphery/
 
 @openzeppelin/uniswap-hooks/=lib/uniswap-hooks/
-@openzeppelin/contracts/=lib/uniswap-hooks/lib/v4-core/lib/openzeppelin-contracts/contracts/
+@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 
 hookmate/=lib/hookmate/src/

@@ -28,10 +28,12 @@ interface IAlphixLogic {
     /* STRUCTS */
 
     struct PoolConfig {
+        // slot 0
         uint24 initialFee;
-        uint256 initialTargetRatio;
         PoolType poolType;
         bool isConfigured;
+        // slot 1
+        uint256 initialTargetRatio;
     }
 
     /* EVENTS */

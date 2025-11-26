@@ -6,7 +6,9 @@ import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {
+    ReentrancyGuardTransientUpgradeable
+} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardTransientUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {
     ERC165Upgradeable,
@@ -38,7 +40,7 @@ contract AlphixLogic is
     Initializable,
     Ownable2StepUpgradeable,
     UUPSUpgradeable,
-    ReentrancyGuardUpgradeable,
+    ReentrancyGuardTransientUpgradeable,
     PausableUpgradeable,
     ERC165Upgradeable,
     IAlphixLogic
@@ -61,32 +63,32 @@ contract AlphixLogic is
     /**
      * @dev Store per-pool active status.
      */
-    mapping(PoolId => bool) private poolActive;
+    mapping(PoolId poolId => bool isActive) private poolActive;
 
     /**
      * @dev Store per-pool config.
      */
-    mapping(PoolId => PoolConfig) private poolConfig;
+    mapping(PoolId poolId => PoolConfig config) private poolConfig;
 
     /**
      * @dev Store per-pool Out-Of-Bound state.
      */
-    mapping(PoolId => DynamicFeeLib.OobState) private oobState;
+    mapping(PoolId poolId => DynamicFeeLib.OobState state) private oobState;
 
     /**
      * @dev Store per-pool current target ratio.
      */
-    mapping(PoolId => uint256) private targetRatio;
+    mapping(PoolId poolId => uint256 ratio) private targetRatio;
 
     /**
      * @dev Store per-pool last fee update.
      */
-    mapping(PoolId => uint256) private lastFeeUpdate;
+    mapping(PoolId poolId => uint256 timestamp) private lastFeeUpdate;
 
     /**
      * @dev Store per-pool-type parameters.
      */
-    mapping(PoolType => DynamicFeeLib.PoolTypeParams) private poolTypeParams;
+    mapping(PoolType poolType => DynamicFeeLib.PoolTypeParams params) private poolTypeParams;
 
     /* STORAGE GAP */
 
@@ -146,7 +148,7 @@ contract AlphixLogic is
     ) public initializer {
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
+        __ReentrancyGuardTransient_init();
         __Pausable_init();
         __ERC165_init();
 
@@ -338,12 +340,12 @@ contract AlphixLogic is
         returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut)
     {
         PoolId poolId = key.toId();
-        PoolConfig memory cfg = poolConfig[poolId];
-        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+        PoolType poolTypeCache = poolConfig[poolId].poolType;
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[poolTypeCache];
 
         // Check currentRatio is valid for the pool type
-        if (!_isValidRatioForPoolType(cfg.poolType, currentRatio)) {
-            revert InvalidRatioForPoolType(cfg.poolType, currentRatio);
+        if (!_isValidRatioForPoolType(poolTypeCache, currentRatio)) {
+            revert InvalidRatioForPoolType(poolTypeCache, currentRatio);
         }
 
         (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
@@ -379,19 +381,22 @@ contract AlphixLogic is
         returns (uint256 targetRatioAfterUpdate)
     {
         PoolId poolId = key.toId();
-        PoolConfig memory cfg = poolConfig[poolId];
-        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
+        PoolType poolTypeCache = poolConfig[poolId].poolType;
+
+        // Cache only needed fields from poolTypeParams
+        uint256 minPeriodCache = poolTypeParams[poolTypeCache].minPeriod;
+        uint256 maxCurrentRatioCache = poolTypeParams[poolTypeCache].maxCurrentRatio;
 
         // Revert if cooldown not elapsed
-        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
+        uint256 nextTs = lastFeeUpdate[poolId] + minPeriodCache;
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, minPeriodCache);
 
         // Update targetRatio (validate and clamp to current pool-type cap)
         if (newTargetRatio == 0) {
-            revert InvalidRatioForPoolType(cfg.poolType, newTargetRatio);
+            revert InvalidRatioForPoolType(poolTypeCache, newTargetRatio);
         }
-        if (newTargetRatio > pp.maxCurrentRatio) {
-            newTargetRatio = pp.maxCurrentRatio;
+        if (newTargetRatio > maxCurrentRatioCache) {
+            newTargetRatio = maxCurrentRatioCache;
         }
         targetRatio[poolId] = newTargetRatio;
         targetRatioAfterUpdate = newTargetRatio;
@@ -602,9 +607,8 @@ contract AlphixLogic is
         if (_globalMaxAdjRate == 0 || _globalMaxAdjRate > AlphixGlobalConstants.MAX_ADJUSTMENT_RATE) {
             revert InvalidParameter();
         }
-        uint256 oldGlobalMaxAdjRate = globalMaxAdjRate;
+        emit GlobalMaxAdjRateUpdated(globalMaxAdjRate, _globalMaxAdjRate);
         globalMaxAdjRate = _globalMaxAdjRate;
-        emit GlobalMaxAdjRateUpdated(oldGlobalMaxAdjRate, globalMaxAdjRate);
     }
 
     /**
@@ -615,8 +619,9 @@ contract AlphixLogic is
      * @return isValid True if fee is within bounds.
      */
     function _isValidFeeForPoolType(PoolType poolType, uint24 fee) internal view returns (bool) {
-        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
-        return fee >= params.minFee && fee <= params.maxFee;
+        uint24 minFeeCache = poolTypeParams[poolType].minFee;
+        uint24 maxFeeCache = poolTypeParams[poolType].maxFee;
+        return fee >= minFeeCache && fee <= maxFeeCache;
     }
 
     /**
@@ -627,8 +632,8 @@ contract AlphixLogic is
      * @return isValid True if ratio is within bounds.
      */
     function _isValidRatioForPoolType(PoolType poolType, uint256 ratio) internal view returns (bool) {
-        DynamicFeeLib.PoolTypeParams memory params = poolTypeParams[poolType];
-        return ratio > 0 && ratio <= params.maxCurrentRatio;
+        uint256 maxCurrentRatioCache = poolTypeParams[poolType].maxCurrentRatio;
+        return ratio > 0 && ratio <= maxCurrentRatioCache;
     }
 
     /* MODIFIER FUNCTIONS */
