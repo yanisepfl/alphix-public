@@ -386,34 +386,28 @@ contract AlphixDonateHooksFuzzTest is BaseAlphixTest {
         deal(Currency.unwrap(key.currency1), address(this), 1000e18);
         uint256 positionTokenId2 = seedLiquidity(key, lp2, true, 0, 25e18, 25e18);
 
-        // Record balances before collection
-        uint256 lp1Balance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp1);
-        uint256 lp1Balance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp1);
-        uint256 lp2Balance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp2);
-        uint256 lp2Balance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp2);
-
         // Make donation
         _makeDonation(donateAmount0, donateAmount1);
 
-        // Collect fees
+        // Collect fees and calculate in one step to reduce stack depth
+        uint256 lp1Balance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp1);
+        uint256 lp1Balance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp1);
         _collectFees(positionTokenId1, lp1);
-        _collectFees(positionTokenId2, lp2);
-
-        // Calculate fees received for each token
         uint256 lp1Fees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp1) - lp1Balance0Before;
         uint256 lp1Fees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp1) - lp1Balance1Before;
+
+        uint256 lp2Balance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp2);
+        uint256 lp2Balance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp2);
+        _collectFees(positionTokenId2, lp2);
         uint256 lp2Fees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp2) - lp2Balance0Before;
         uint256 lp2Fees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp2) - lp2Balance1Before;
 
         // Both LPs should receive fees
-        assertTrue(lp1Fees0 > 0, "LP1 should receive token0 fees");
-        assertTrue(lp1Fees1 > 0, "LP1 should receive token1 fees");
-        assertTrue(lp2Fees0 > 0, "LP2 should receive token0 fees");
-        assertTrue(lp2Fees1 > 0, "LP2 should receive token1 fees");
+        assertTrue(lp1Fees0 > 0 && lp1Fees1 > 0, "LP1 should receive fees from both tokens");
+        assertTrue(lp2Fees0 > 0 && lp2Fees1 > 0, "LP2 should receive fees from both tokens");
 
         // LP1 provided 2x liquidity, should receive more fees
-        assertTrue(lp1Fees0 > lp2Fees0, "LP1 should receive more token0 fees than LP2");
-        assertTrue(lp1Fees1 > lp2Fees1, "LP1 should receive more token1 fees than LP2");
+        assertTrue(lp1Fees0 > lp2Fees0 && lp1Fees1 > lp2Fees1, "LP1 should receive more fees for both tokens");
 
         // Fee ratio should be approximately 2:1 for each token
         assertApproxEqRel(lp1Fees0, lp2Fees0 * 2, 1e17, "Token0 fee ratio should be approximately 2:1");
@@ -498,34 +492,30 @@ contract AlphixDonateHooksFuzzTest is BaseAlphixTest {
         deal(Currency.unwrap(key.currency1), address(this), 1000e18);
         uint256 positionTokenIdConcentrated = seedLiquidity(key, lpConcentrated, false, 0.5e18, 50e18, 50e18);
 
-        // Record balances before
-        uint256 wideBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpWide);
-        uint256 wideBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpWide);
-        uint256 concBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpConcentrated);
-        uint256 concBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpConcentrated);
-
         // Make donation
         _makeDonation(donationAmount0, donationAmount1);
 
-        // Collect fees
+        // Collect fees and calculate in one step to reduce stack depth
+        uint256 wideBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpWide);
+        uint256 wideBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpWide);
         _collectFees(positionTokenIdWide, lpWide);
-        _collectFees(positionTokenIdConcentrated, lpConcentrated);
-
-        // Calculate fees received for each token separately
         uint256 wideFees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpWide) - wideBalance0Before;
         uint256 wideFees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpWide) - wideBalance1Before;
+
+        uint256 concBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpConcentrated);
+        uint256 concBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpConcentrated);
+        _collectFees(positionTokenIdConcentrated, lpConcentrated);
         uint256 concFees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpConcentrated) - concBalance0Before;
         uint256 concFees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpConcentrated) - concBalance1Before;
 
         // Both LPs should receive fees from both tokens
-        assertTrue(wideFees0 > 0, "Wide LP should receive token0 fees");
-        assertTrue(wideFees1 > 0, "Wide LP should receive token1 fees");
-        assertTrue(concFees0 > 0, "Concentrated LP should receive token0 fees");
-        assertTrue(concFees1 > 0, "Concentrated LP should receive token1 fees");
+        assertTrue(wideFees0 > 0 && wideFees1 > 0, "Wide LP should receive fees from both tokens");
+        assertTrue(concFees0 > 0 && concFees1 > 0, "Concentrated LP should receive fees from both tokens");
 
         // Concentrated LP should receive MORE fees for EACH token (more liquidity in active range)
-        assertTrue(concFees0 > wideFees0, "Concentrated LP should receive more token0 fees than wide LP");
-        assertTrue(concFees1 > wideFees1, "Concentrated LP should receive more token1 fees than wide LP");
+        assertTrue(
+            concFees0 > wideFees0 && concFees1 > wideFees1, "Concentrated LP should receive more fees for both tokens"
+        );
     }
 
     /**
@@ -550,34 +540,30 @@ contract AlphixDonateHooksFuzzTest is BaseAlphixTest {
         deal(Currency.unwrap(key.currency1), address(this), 1000e18);
         uint256 positionTokenIdLarge = seedLiquidity(key, lpLarge, true, 0, 50e18, 50e18);
 
-        // Record balances before
-        uint256 smallBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpSmall);
-        uint256 smallBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpSmall);
-        uint256 largeBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpLarge);
-        uint256 largeBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpLarge);
-
         // Make donation
         _makeDonation(donationAmount0, donationAmount1);
 
-        // Collect fees
+        // Collect fees and calculate in one step to reduce stack depth
+        uint256 smallBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpSmall);
+        uint256 smallBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpSmall);
         _collectFees(positionTokenIdSmall, lpSmall);
-        _collectFees(positionTokenIdLarge, lpLarge);
-
-        // Calculate fees received for each token separately
         uint256 smallFees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpSmall) - smallBalance0Before;
         uint256 smallFees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpSmall) - smallBalance1Before;
+
+        uint256 largeBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpLarge);
+        uint256 largeBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpLarge);
+        _collectFees(positionTokenIdLarge, lpLarge);
         uint256 largeFees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lpLarge) - largeBalance0Before;
         uint256 largeFees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lpLarge) - largeBalance1Before;
 
         // Both LPs should receive fees from both tokens
-        assertTrue(smallFees0 > 0, "Small LP should receive token0 fees");
-        assertTrue(smallFees1 > 0, "Small LP should receive token1 fees");
-        assertTrue(largeFees0 > 0, "Large LP should receive token0 fees");
-        assertTrue(largeFees1 > 0, "Large LP should receive token1 fees");
+        assertTrue(smallFees0 > 0 && smallFees1 > 0, "Small LP should receive fees from both tokens");
+        assertTrue(largeFees0 > 0 && largeFees1 > 0, "Large LP should receive fees from both tokens");
 
         // Large LP should receive MORE fees for EACH token (provided 2x liquidity)
-        assertTrue(largeFees0 > smallFees0, "Large LP should receive more token0 fees than small LP");
-        assertTrue(largeFees1 > smallFees1, "Large LP should receive more token1 fees than small LP");
+        assertTrue(
+            largeFees0 > smallFees0 && largeFees1 > smallFees1, "Large LP should receive more fees for both tokens"
+        );
 
         // Fee ratio should be approximately 2:1 for EACH token (with tolerance for rounding and existing liquidity)
         // Large LP provided 2x liquidity, so should get roughly 2x fees (allow 30% tolerance due to base pool liquidity)
@@ -607,6 +593,15 @@ contract AlphixDonateHooksFuzzTest is BaseAlphixTest {
         vm.stopPrank();
     }
 
+    /**
+     * @dev Collects fees and returns true if LP received any fees from either token.
+     * @notice This function has side effects - it collects fees from the position.
+     *         Calling this twice on the same position will return false on the second call
+     *         since fees are already collected.
+     * @param positionTokenId The NFT token ID representing the LP position
+     * @param lp The address of the liquidity provider
+     * @return bool True if the LP received fees from either token0 or token1
+     */
     function _lpReceivedFees(uint256 positionTokenId, address lp) internal returns (bool) {
         uint256 balance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp);
         uint256 balance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp);

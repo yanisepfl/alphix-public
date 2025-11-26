@@ -47,11 +47,16 @@ contract AlphixDonateHooksTest is BaseAlphixTest {
     /* ========================================================================== */
 
     /**
-     * @notice Test that beforeDonate / afterDonate hooks are called and do not revert
+     * @notice Test that beforeDonate / afterDonate hooks are called and donation succeeds
+     * @dev Verifies hooks don't revert and donation transfers tokens correctly
      */
     function test_beforeAndAfterDonate_called_on_donation() public {
         uint256 amount0 = 10e18;
         uint256 amount1 = 10e18;
+
+        // Record donor balances before
+        uint256 donorBalance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(donor);
+        uint256 donorBalance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(donor);
 
         // Approve tokens
         vm.startPrank(donor);
@@ -61,6 +66,18 @@ contract AlphixDonateHooksTest is BaseAlphixTest {
         // Donate and verify it succeeds (beforeDonate / afterDonate are called internally)
         donateRouter.donate(key, amount0, amount1, "");
         vm.stopPrank();
+
+        // Verify tokens were transferred from donor
+        assertEq(
+            MockERC20(Currency.unwrap(key.currency0)).balanceOf(donor),
+            donorBalance0Before - amount0,
+            "Token0 should be transferred from donor"
+        );
+        assertEq(
+            MockERC20(Currency.unwrap(key.currency1)).balanceOf(donor),
+            donorBalance1Before - amount1,
+            "Token1 should be transferred from donor"
+        );
     }
 
     /**
