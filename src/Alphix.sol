@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 /* OZ IMPORTS */
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {AccessManaged} from "@openzeppelin/contracts/access/manager/AccessManaged.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -31,7 +31,15 @@ import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
  * @notice Uniswap v4 Dynamic Fee Hook delegating logic to AlphixLogic.
  * @dev Uses OpenZeppelin 5 security patterns.
  */
-contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard, Pausable, Initializable, IAlphix {
+contract Alphix is
+    BaseDynamicFee,
+    Ownable2Step,
+    AccessManaged,
+    ReentrancyGuardTransient,
+    Pausable,
+    Initializable,
+    IAlphix
+{
     using StateLibrary for IPoolManager;
 
     /* STORAGE */
@@ -71,7 +79,7 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
             revert InvalidAddress();
         }
         registry = _registry;
-        IRegistry(registry).registerContract(IRegistry.ContractKey.Alphix, address(this));
+        IRegistry(_registry).registerContract(IRegistry.ContractKey.Alphix, address(this));
         _pause(); // Use internal function to bypass onlyOwner check in constructor
     }
 
@@ -295,9 +303,8 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
             revert InvalidAddress();
         }
 
-        address oldRegistry = registry;
+        emit RegistryUpdated(registry, newRegistry);
         registry = newRegistry;
-        emit RegistryUpdated(oldRegistry, newRegistry);
         IRegistry(newRegistry).registerContract(IRegistry.ContractKey.Alphix, address(this));
         IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
     }
@@ -426,9 +433,8 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         if (!IERC165(newLogic).supportsInterface(type(IAlphixLogic).interfaceId)) {
             revert IAlphixLogic.InvalidLogicContract();
         }
-        address oldLogic = logic;
+        emit LogicUpdated(logic, newLogic);
         logic = newLogic;
-        emit LogicUpdated(oldLogic, newLogic);
     }
 
     /**
