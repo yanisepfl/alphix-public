@@ -107,8 +107,8 @@ contract AlphixDonateHooksTest is BaseAlphixTest {
 
         // Try to donate - should revert because pool is deactivated
         vm.startPrank(donor);
-        MockERC20(Currency.unwrap(inactiveKey.currency0)).approve(address(poolManager), 1e18);
-        MockERC20(Currency.unwrap(inactiveKey.currency1)).approve(address(poolManager), 1e18);
+        MockERC20(Currency.unwrap(inactiveKey.currency0)).approve(address(donateRouter), 1e18);
+        MockERC20(Currency.unwrap(inactiveKey.currency1)).approve(address(donateRouter), 1e18);
 
         vm.expectRevert(); // Will revert with PoolNotActivated or similar
         donateRouter.donate(inactiveKey, 1e18, 1e18, "");

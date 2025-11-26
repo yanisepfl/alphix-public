@@ -365,19 +365,19 @@ contract AlphixDonateHooksFuzzTest is BaseAlphixTest {
 
     /**
      * @notice Fuzz: Verify LPs receive donations proportional to their liquidity
-     * @dev Tests that donation fees are distributed based on liquidity amount
+     * @dev Tests that donation fees are distributed based on liquidity amount (2:1 ratio)
      */
     function testFuzz_lp_receives_donations_proportional_to_liquidity(uint128 donateAmount0, uint128 donateAmount1)
         public
     {
-        donateAmount0 = uint128(bound(donateAmount0, 1e18, 50e18));
-        donateAmount1 = uint128(bound(donateAmount1, 1e18, 50e18));
+        donateAmount0 = uint128(bound(donateAmount0, 2e18, 50e18));
+        donateAmount1 = uint128(bound(donateAmount1, 2e18, 50e18));
 
         // Create two LPs with known different liquidity amounts
         address lp1 = makeAddr("lp1");
         address lp2 = makeAddr("lp2");
 
-        // Add more liquidity for LP1 (50e18) than LP2 (25e18)
+        // Add more liquidity for LP1 (50e18) than LP2 (25e18) - 2:1 ratio
         deal(Currency.unwrap(key.currency0), address(this), 1000e18);
         deal(Currency.unwrap(key.currency1), address(this), 1000e18);
         uint256 positionTokenId1 = seedLiquidity(key, lp1, true, 0, 50e18, 50e18);
@@ -386,19 +386,45 @@ contract AlphixDonateHooksFuzzTest is BaseAlphixTest {
         deal(Currency.unwrap(key.currency1), address(this), 1000e18);
         uint256 positionTokenId2 = seedLiquidity(key, lp2, true, 0, 25e18, 25e18);
 
+        // Record balances before collection
+        uint256 lp1Balance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp1);
+        uint256 lp1Balance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp1);
+        uint256 lp2Balance0Before = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp2);
+        uint256 lp2Balance1Before = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp2);
+
         // Make donation
         _makeDonation(donateAmount0, donateAmount1);
 
-        // Collect and verify fees
-        assertTrue(_lpReceivedFees(positionTokenId1, lp1), "LP1 should receive fees");
-        assertTrue(_lpReceivedFees(positionTokenId2, lp2), "LP2 should receive fees");
+        // Collect fees
+        _collectFees(positionTokenId1, lp1);
+        _collectFees(positionTokenId2, lp2);
+
+        // Calculate fees received for each token
+        uint256 lp1Fees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp1) - lp1Balance0Before;
+        uint256 lp1Fees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp1) - lp1Balance1Before;
+        uint256 lp2Fees0 = MockERC20(Currency.unwrap(key.currency0)).balanceOf(lp2) - lp2Balance0Before;
+        uint256 lp2Fees1 = MockERC20(Currency.unwrap(key.currency1)).balanceOf(lp2) - lp2Balance1Before;
+
+        // Both LPs should receive fees
+        assertTrue(lp1Fees0 > 0, "LP1 should receive token0 fees");
+        assertTrue(lp1Fees1 > 0, "LP1 should receive token1 fees");
+        assertTrue(lp2Fees0 > 0, "LP2 should receive token0 fees");
+        assertTrue(lp2Fees1 > 0, "LP2 should receive token1 fees");
+
+        // LP1 provided 2x liquidity, should receive more fees
+        assertTrue(lp1Fees0 > lp2Fees0, "LP1 should receive more token0 fees than LP2");
+        assertTrue(lp1Fees1 > lp2Fees1, "LP1 should receive more token1 fees than LP2");
+
+        // Fee ratio should be approximately 2:1 for each token
+        assertApproxEqRel(lp1Fees0, lp2Fees0 * 2, 1e17, "Token0 fee ratio should be approximately 2:1");
+        assertApproxEqRel(lp1Fees1, lp2Fees1 * 2, 1e17, "Token1 fee ratio should be approximately 2:1");
     }
 
     /**
-     * @notice Fuzz: Verify donations are distributed based on LP range overlap
-     * @dev Tests that LPs with overlapping ranges receive fees
+     * @notice Fuzz: Verify LPs in range receive donations
+     * @dev Tests that LPs with ranges overlapping the current price receive fees
      */
-    function testFuzz_lp_receives_donations_based_on_range(uint128 donateAmount0, uint128 donateAmount1) public {
+    function testFuzz_lp_in_range_receives_donations(uint128 donateAmount0, uint128 donateAmount1) public {
         donateAmount0 = uint128(bound(donateAmount0, 1e18, 50e18));
         donateAmount1 = uint128(bound(donateAmount1, 1e18, 50e18));
 
