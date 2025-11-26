@@ -254,6 +254,40 @@ interface IAlphixLogic {
     ) external returns (bytes4, int128);
 
     /**
+     * @notice The hook called before a donation.
+     * @param sender The initial msg.sender for the donate call.
+     * @param key The key for the pool.
+     * @param amount0 The amount of token0 being donated.
+     * @param amount1 The amount of token1 being donated.
+     * @param hookData Arbitrary data handed into the PoolManager by the donator to be passed on to the hook.
+     * @return bytes4 The function selector for the hook.
+     */
+    function beforeDonate(
+        address sender,
+        PoolKey calldata key,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata hookData
+    ) external returns (bytes4);
+
+    /**
+     * @notice The hook called after a donation.
+     * @param sender The initial msg.sender for the donate call.
+     * @param key The key for the pool.
+     * @param amount0 The amount of token0 being donated.
+     * @param amount1 The amount of token1 being donated.
+     * @param hookData Arbitrary data handed into the PoolManager by the donator to be passed on to the hook.
+     * @return bytes4 The function selector for the hook.
+     */
+    function afterDonate(
+        address sender,
+        PoolKey calldata key,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata hookData
+    ) external returns (bytes4);
+
+    /**
      * @notice Activate pool and configure it with initial parameters.
      * @param key The key of the pool to activate and configure.
      * @param _initialFee The initial fee of the pool to configure.

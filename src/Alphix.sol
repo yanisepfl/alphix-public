@@ -104,12 +104,12 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
             afterRemoveLiquidity: true,
             beforeSwap: true,
             afterSwap: true,
-            beforeDonate: false,
-            afterDonate: false,
-            beforeSwapReturnDelta: false,
-            afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
+            beforeDonate: true,
+            afterDonate: true,
+            beforeSwapReturnDelta: true,
+            afterSwapReturnDelta: true,
+            afterAddLiquidityReturnDelta: true,
+            afterRemoveLiquidityReturnDelta: true
         });
     }
 
@@ -217,6 +217,32 @@ contract Alphix is BaseDynamicFee, Ownable2Step, AccessManaged, ReentrancyGuard,
         bytes calldata hookData
     ) internal override validLogic whenNotPaused returns (bytes4, int128) {
         return IAlphixLogic(logic).afterSwap(sender, key, params, delta, hookData);
+    }
+
+    /**
+     * @dev See {BaseHook-_beforeDonate}.
+     */
+    function _beforeDonate(
+        address sender,
+        PoolKey calldata key,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4) {
+        return IAlphixLogic(logic).beforeDonate(sender, key, amount0, amount1, hookData);
+    }
+
+    /**
+     * @dev See {BaseHook-_afterDonate}.
+     */
+    function _afterDonate(
+        address sender,
+        PoolKey calldata key,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata hookData
+    ) internal override validLogic whenNotPaused returns (bytes4) {
+        return IAlphixLogic(logic).afterDonate(sender, key, amount0, amount1, hookData);
     }
 
     /* ADMIN FUNCTIONS */
