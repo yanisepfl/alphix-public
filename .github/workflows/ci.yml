@@ -139,7 +139,7 @@ jobs:
       - name: Run Olympix Integrated Security
         uses: olympix/integrated-security@main
         env:
-          OLYMPIX_API_TOKEN: ${{ secrets.OLYMPIX_API_TOKEN }}
+          OLYMPIX_API_TOKEN: ${{ secrets.OLYMPIX_API_KEY }}
 
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
@@ -148,7 +148,6 @@ jobs:
           category: olympix-security
 
       - name: Upload Olympix SARIF as artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: olympix-sarif
