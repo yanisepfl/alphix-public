@@ -1,0 +1,161 @@
+# Olympix Security Analysis Configuration
+# Documentation: https://olympix.github.io/ConfigOptions/
+
+[project]
+# Project identification
+name = "Alphix"
+description = "Uniswap V4 Dynamic Fee Hook with upgradeable logic"
+version = "1.0.0"
+
+[toolchain]
+# Solidity compiler version (must match foundry.toml)
+solc_version = "0.8.30"
+evm_version = "cancun"
+
+# Foundry/Forge configuration
+forge_build_command = "forge build"
+forge_test_command = "forge test"
+
+[analysis]
+# Analysis scope - main source files only
+src_paths = [
+    "src/Alphix.sol",
+    "src/AlphixLogic.sol",
+    "src/BaseDynamicFee.sol",
+    "src/Registry.sol",
+    "src/libraries/DynamicFee.sol",
+    "src/libraries/AlphixGlobalConstants.sol",
+    "src/interfaces/IAlphixLogic.sol",
+    "src/interfaces/IAlphix.sol",
+    "src/interfaces/IRegistry.sol"
+]
+
+# Exclude test files, scripts, and external dependencies from analysis
+exclude_paths = [
+    "test/**",
+    "script/**",
+    "lib/**",
+    "out/**",
+    "cache/**",
+    "broadcast/**"
+]
+
+# Analysis depth and timeout
+max_depth = 10
+timeout_seconds = 1800  # 30 minutes for thorough analysis
+
+[security]
+# Security check levels
+# Options: "low", "medium", "high", "critical"
+min_severity = "low"
+
+# Enable all security checks
+enable_reentrancy_check = true
+enable_overflow_check = true
+enable_access_control_check = true
+enable_gas_optimization_check = true
+enable_code_quality_check = true
+enable_upgradeability_check = true  # Important for UUPS proxy pattern
+
+[detection]
+# Vulnerability detection settings
+detect_vulnerabilities = true
+detect_code_smells = true
+detect_gas_issues = true
+detect_best_practices = true
+
+# Specific patterns to focus on
+focus_on = [
+    "reentrancy",
+    "access-control",
+    "upgradeability",
+    "arithmetic",
+    "gas-optimization",
+    "unchecked-returns",
+    "delegatecall",
+    "selfdestruct",
+    "tx-origin",
+    "timestamp-dependence"
+]
+
+[reports]
+# Report generation settings
+output_format = "json"  # Options: "json", "markdown", "html", "sarif"
+output_directory = "olympix-reports"
+include_recommendations = true
+include_code_snippets = true
+severity_breakdown = true
+
+# SARIF format for GitHub integration
+generate_sarif = true
+sarif_output = "olympix-reports/olympix.sarif"
+
+[github]
+# GitHub integration settings
+enable_pr_comments = true
+fail_on_high_severity = true
+fail_on_critical_severity = true
+comment_on_new_findings_only = true
+
+# Severity thresholds for blocking PRs
+block_on_critical = true
+block_on_high = false  # Set to true for stricter enforcement
+block_on_medium = false
+block_on_low = false
+
+[optimization]
+# Gas optimization analysis
+analyze_gas_usage = true
+suggest_optimizations = true
+benchmark_against_best_practices = true
+
+# Gas limits and thresholds
+max_gas_per_function = 1000000
+warn_on_expensive_operations = true
+
+[custom]
+# Custom rules and patterns specific to Alphix
+
+# Known safe patterns (won't be flagged)
+safe_patterns = [
+    # UUPS proxy pattern is intentional
+    "UUPSUpgradeable",
+    # Ownable2Step transfer is safe
+    "Ownable2Step",
+    # ReentrancyGuardTransient is safe
+    "ReentrancyGuardTransient"
+]
+
+# Expected external calls (won't flag as unsafe)
+trusted_contracts = [
+    "IPoolManager",
+    "PoolManager",
+    "IHooks",
+    "AccessManager"
+]
+
+# Architecture-specific settings
+[custom.uniswap_v4]
+# Uniswap V4 hook-specific configurations
+validate_hook_permissions = true
+check_dynamic_fees = true
+validate_hook_returns = true
+
+[custom.upgradeability]
+# UUPS upgradeability checks
+proxy_pattern = "uups"
+validate_storage_layout = true
+check_initialization = true
+require_authorization = true
+
+[custom.access_control]
+# Access control validation
+require_two_step_ownership = true
+validate_role_assignments = true
+check_pausability = true
+
+[custom.reentrancy]
+# Reentrancy protection validation
+require_reentrancy_guard = true
+check_state_changes_before_calls = true
+validate_checks_effects_interactions = true
