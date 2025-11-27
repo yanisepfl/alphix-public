@@ -131,156 +131,30 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: stable
 
       - name: Build contracts
         run: forge build --force
 
-      - name: Setup Olympix
-        uses: olympix-ai/olympix-action@v1
+      - name: Run Olympix Integrated Security
+        uses: olympix/integrated-security@main
+        env:
+          OLYMPIX_API_TOKEN: ${{ secrets.OLYMPIX_API_TOKEN }}
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          olympix-api-key: ${{ secrets.OLYMPIX_API_KEY }}
-          config-file: olympix.toml
-          ignore-file: .olympixignore
+          sarif_file: olympix.sarif
+          category: olympix-security
 
-      - name: Create report directory
-        run: mkdir -p olympix-reports
-
-      - name: Run Olympix Security Analysis
-        id: olympix
-        continue-on-error: true
-        run: |
-          olympix analyze \
-            --config olympix.toml \
-            --ignore .olympixignore \
-            --output-dir olympix-reports \
-            --format json \
-            --format sarif \
-            --format markdown \
-            --verbose
-
-      - name: Upload Olympix Reports
+      - name: Upload Olympix SARIF as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: olympix-reports
-          path: olympix-reports/
+          name: olympix-sarif
+          path: olympix.sarif
           retention-days: 30
 
-      - name: Upload SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: olympix-reports/olympix.sarif
-          category: olympix-security
-
-      - name: Parse Olympix Results
-        if: always()
-        id: parse-results
-        run: |
-          if [ -f "olympix-reports/olympix.json" ]; then
-            # Extract severity counts
-            CRITICAL=$(jq '[.findings[] | select(.severity == "critical")] | length' olympix-reports/olympix.json)
-            HIGH=$(jq '[.findings[] | select(.severity == "high")] | length' olympix-reports/olympix.json)
-            MEDIUM=$(jq '[.findings[] | select(.severity == "medium")] | length' olympix-reports/olympix.json)
-            LOW=$(jq '[.findings[] | select(.severity == "low")] | length' olympix-reports/olympix.json)
-            INFO=$(jq '[.findings[] | select(.severity == "info")] | length' olympix-reports/olympix.json)
-            TOTAL=$(jq '.findings | length' olympix-reports/olympix.json)
-
-            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-            echo "high=$HIGH" >> $GITHUB_OUTPUT
-            echo "medium=$MEDIUM" >> $GITHUB_OUTPUT
-            echo "low=$LOW" >> $GITHUB_OUTPUT
-            echo "info=$INFO" >> $GITHUB_OUTPUT
-            echo "total=$TOTAL" >> $GITHUB_OUTPUT
-
-            echo "### Olympix Security Analysis Results" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
-            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| 🔴 Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
-            echo "| 🟠 High | $HIGH |" >> $GITHUB_STEP_SUMMARY
-            echo "| 🟡 Medium | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
-            echo "| 🟢 Low | $LOW |" >> $GITHUB_STEP_SUMMARY
-            echo "| ℹ️ Info | $INFO |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Total** | **$TOTAL** |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "No Olympix results found"
-            echo "critical=0" >> $GITHUB_OUTPUT
-            echo "high=0" >> $GITHUB_OUTPUT
-            echo "medium=0" >> $GITHUB_OUTPUT
-            echo "low=0" >> $GITHUB_OUTPUT
-            echo "info=0" >> $GITHUB_OUTPUT
-            echo "total=0" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Comment on PR
-        if: github.event_name == 'pull_request' && always()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const critical = ${{ steps.parse-results.outputs.critical }};
-            const high = ${{ steps.parse-results.outputs.high }};
-            const medium = ${{ steps.parse-results.outputs.medium }};
-            const low = ${{ steps.parse-results.outputs.low }};
-            const info = ${{ steps.parse-results.outputs.info }};
-            const total = ${{ steps.parse-results.outputs.total }};
-
-            let status = '✅ **PASSED**';
-            if (critical > 0 || high > 0) {
-              status = '❌ **FAILED**';
-            } else if (medium > 0) {
-              status = '⚠️ **WARNING**';
-            }
-
-            const comment = `## ${status} Olympix Security Analysis
-
-            ### Summary
-            | Severity | Count |
-            |----------|-------|
-            | 🔴 Critical | ${critical} |
-            | 🟠 High | ${high} |
-            | 🟡 Medium | ${medium} |
-            | 🟢 Low | ${low} |
-            | ℹ️ Info | ${info} |
-            | **Total** | **${total}** |
-
-            ### Details
-            ${critical > 0 ? '⛔ **Critical severity findings detected - PR should not be merged**' : ''}
-            ${high > 0 ? '⚠️ **High severity findings detected - review required**' : ''}
-            ${medium > 0 ? '📋 Medium severity findings detected - consider addressing' : ''}
-
-            📊 Full report available in the [workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            🔍 SARIF results uploaded to GitHub Security tab
-            `;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      - name: Check severity threshold
-        if: always()
-        run: |
-          CRITICAL=${{ steps.parse-results.outputs.critical }}
-          HIGH=${{ steps.parse-results.outputs.high }}
-
-          echo "Checking for Critical and High severity findings..."
-
-          # Fail if Critical or High severity findings are detected
-          if [ $((CRITICAL + HIGH)) -gt 0 ]; then
-            echo "❌ Critical or High severity findings detected!"
-            echo "Critical: $CRITICAL"
-            echo "High: $HIGH"
-            exit 1
-          else
-            echo "✅ No Critical or High severity findings"
-          fi
   security-badge:
     name: Update Security Badge
     runs-on: ubuntu-latest
@@ -290,22 +164,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Olympix reports
+      - name: Download Olympix SARIF
         uses: actions/download-artifact@v4
         with:
-          name: olympix-reports
-          path: olympix-reports/
+          name: olympix-sarif
 
-      - name: Generate security badge
+      - name: Parse SARIF and generate badge
+        id: parse-sarif
         run: |
-          if [ -f "olympix-reports/olympix.json" ]; then
-            CRITICAL=$(jq '[.findings[] | select(.severity == "critical")] | length' olympix-reports/olympix.json)
-            HIGH=$(jq '[.findings[] | select(.severity == "high")] | length' olympix-reports/olympix.json)
+          if [ -f "olympix.sarif" ]; then
+            # Count findings by severity level from SARIF
+            CRITICAL=$(jq '[.runs[].results[] | select(.level == "error" and (.properties.severity // "" | test("critical|CRITICAL")))] | length' olympix.sarif || echo "0")
+            HIGH=$(jq '[.runs[].results[] | select(.level == "error" and (.properties.severity // "" | test("high|HIGH")))] | length' olympix.sarif || echo "0")
 
-            if [ $CRITICAL -gt 0 ]; then
+            # Determine badge color and message
+            if [ "$CRITICAL" -gt 0 ]; then
               BADGE_COLOR="red"
               BADGE_MESSAGE="critical"
-            elif [ $HIGH -gt 0 ]; then
+            elif [ "$HIGH" -gt 0 ]; then
               BADGE_COLOR="orange"
               BADGE_MESSAGE="high"
             else
@@ -315,12 +191,17 @@ jobs:
 
             echo "BADGE_COLOR=$BADGE_COLOR" >> $GITHUB_ENV
             echo "BADGE_MESSAGE=$BADGE_MESSAGE" >> $GITHUB_ENV
+
+            echo "Critical: $CRITICAL, High: $HIGH"
+            echo "Badge: $BADGE_MESSAGE ($BADGE_COLOR)"
           else
             echo "BADGE_COLOR=lightgrey" >> $GITHUB_ENV
             echo "BADGE_MESSAGE=unknown" >> $GITHUB_ENV
+            echo "No SARIF file found"
           fi
 
       - name: Update security badge
+        if: env.BADGE_MESSAGE != 'unknown'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
