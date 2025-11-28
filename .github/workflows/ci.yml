@@ -88,7 +88,7 @@ jobs:
           files: lcov.info
           fail_ci_if_error: false
 
-  security-analysis:
+  slither-analysis:
     name: Slither Static Analysis
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -113,3 +113,99 @@ jobs:
         if: always()
         with:
           sarif_file: results.sarif
+
+  olympix-analysis:
+    name: Olympix Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build contracts
+        run: forge build --force
+
+      - name: Run Olympix Integrated Security
+        uses: olympix/integrated-security@main
+        env:
+          OLYMPIX_API_TOKEN: ${{ secrets.OLYMPIX_API_KEY }}
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: olympix.sarif
+          category: olympix-security
+
+      - name: Upload Olympix SARIF as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: olympix-sarif
+          path: olympix.sarif
+          retention-days: 30
+
+  security-badge:
+    name: Update Security Badge
+    runs-on: ubuntu-latest
+    needs: olympix-analysis
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Olympix SARIF
+        uses: actions/download-artifact@v4
+        with:
+          name: olympix-sarif
+
+      - name: Parse SARIF and generate badge
+        id: parse-sarif
+        run: |
+          if [ -f "olympix.sarif" ]; then
+            # Count findings by severity level from SARIF
+            CRITICAL=$(jq '[.runs[].results[] | select(.level == "error" and (.properties.severity // "" | test("critical|CRITICAL")))] | length' olympix.sarif || echo "0")
+            HIGH=$(jq '[.runs[].results[] | select(.level == "error" and (.properties.severity // "" | test("high|HIGH")))] | length' olympix.sarif || echo "0")
+
+            # Determine badge color and message
+            if [ "$CRITICAL" -gt 0 ]; then
+              BADGE_COLOR="red"
+              BADGE_MESSAGE="critical"
+            elif [ "$HIGH" -gt 0 ]; then
+              BADGE_COLOR="orange"
+              BADGE_MESSAGE="high"
+            else
+              BADGE_COLOR="green"
+              BADGE_MESSAGE="passing"
+            fi
+
+            echo "BADGE_COLOR=$BADGE_COLOR" >> $GITHUB_ENV
+            echo "BADGE_MESSAGE=$BADGE_MESSAGE" >> $GITHUB_ENV
+
+            echo "Critical: $CRITICAL, High: $HIGH"
+            echo "Badge: $BADGE_MESSAGE ($BADGE_COLOR)"
+          else
+            echo "BADGE_COLOR=lightgrey" >> $GITHUB_ENV
+            echo "BADGE_MESSAGE=unknown" >> $GITHUB_ENV
+            echo "No SARIF file found"
+          fi
+
+      - name: Update security badge
+        if: env.BADGE_MESSAGE != 'unknown'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: olympix-security-badge.json
+          label: Olympix Security
+          message: ${{ env.BADGE_MESSAGE }}
+          color: ${{ env.BADGE_COLOR }}

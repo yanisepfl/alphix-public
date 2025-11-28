@@ -65,6 +65,11 @@ interface IRegistry {
     error InvalidAddress();
 
     /**
+     * @dev Thrown when access manager address is zero in constructor.
+     */
+    error InvalidAccessManager();
+
+    /**
      * @dev Thrown when registering an already registered pool.
      */
     error PoolAlreadyRegistered(PoolId poolId);

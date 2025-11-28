@@ -1,0 +1,102 @@
+# Olympix Ignore File
+# Documentation: https://olympix.github.io/IgnoreOptions/
+#
+# This file specifies files, directories, and specific findings to ignore
+# during Olympix security analysis.
+
+# =============================================================================
+# DIRECTORIES TO IGNORE
+# =============================================================================
+
+# Test files - already covered by test suite
+test/
+*.t.sol
+
+# Script files - deployment scripts, not core logic
+script/
+
+# External dependencies
+lib/
+node_modules/
+
+# Build artifacts
+out/
+cache/
+artifacts/
+broadcast/
+
+# Coverage reports
+coverage/
+lcov.info
+
+# Documentation
+docs/
+*.md
+!AUDIT_SCOPE.md  # Keep audit scope for reference
+
+# Git and IDE files
+.git/
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =============================================================================
+# FILE PATTERNS TO IGNORE
+# =============================================================================
+
+# Mock contracts used in testing
+**/mocks/**
+**/mock/**
+**/*Mock.sol
+**/*Test.sol
+**/*Helper.sol
+
+# Example/tutorial contracts (not part of core system)
+src/Counter.sol
+
+# Interfaces from external dependencies (not our code)
+lib/**/*.sol
+
+# =============================================================================
+# THIRD-PARTY CONTRACTS (Already Audited)
+# =============================================================================
+
+# OpenZeppelin v5.4.0 contracts
+lib/openzeppelin-contracts-upgradeable/**:*
+
+# Uniswap V4 Core
+lib/uniswap-hooks/lib/v4-core/**:*
+
+# Uniswap V4 Periphery
+lib/uniswap-hooks/lib/v4-periphery/**:*
+
+# Solmate
+lib/uniswap-hooks/lib/v4-core/lib/solmate/**:*
+
+# Forge Standard Library
+lib/forge-std/**:*
+
+# Hookmate
+lib/hookmate/**:*
+
+# Permit2
+lib/uniswap-hooks/lib/v4-periphery/lib/permit2/**:*
+
+# =============================================================================
+# NOTES
+# =============================================================================
+#
+# This ignore file is configured for the Alphix project.
+# It focuses Olympix analysis on our custom code while excluding:
+# - External audited dependencies
+# - Test files
+# - Known and accepted patterns
+#
+# Review and update this file when:
+# - Adding new dependencies
+# - Implementing new security patterns
+# - Receiving new audit feedback
+#
+# Last updated: 2025-11-27
