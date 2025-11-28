@@ -1,4 +1,4 @@
-# Alphix Core Repository  [![codecov](https://codecov.io/github/yanisepfl/alphix-public/graph/badge.svg?token=JX37PW6PZA)](https://codecov.io/github/yanisepfl/alphix-public) [![Olympix Security](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/yanisepfl/924b52d1b46ddf65b8b1606edea89322/raw/olympix-security-badge.json)](https://github.com/yanisepfl/alphix-public/actions/workflows/ci.yml)
+# Alphix Core Repository  [![codecov](https://codecov.io/github/yanisepfl/alphix-public/graph/badge.svg?token=JX37PW6PZA)](https://codecov.io/github/yanisepfl/alphix-public) [![Olympix Security](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/yanisepfl/924b52d1b46ddf65b8b1606edea89322/raw)](https://github.com/yanisepfl/alphix-public/actions/workflows/ci.yml)
 
 ![Alphix Logo](./branding-materials/logos/type/LogoTypeWhite.png)
 
