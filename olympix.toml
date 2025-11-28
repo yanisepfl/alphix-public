@@ -17,17 +17,11 @@ forge_build_command = "forge build"
 forge_test_command = "forge test"
 
 [analysis]
-# Analysis scope - main source files only
+# Analysis scope - use pattern-based matching for all source files
+# Pattern-based approach ensures new files are automatically included
+# Test files are still excluded via exclude_paths below
 src_paths = [
-    "src/Alphix.sol",
-    "src/AlphixLogic.sol",
-    "src/BaseDynamicFee.sol",
-    "src/Registry.sol",
-    "src/libraries/DynamicFee.sol",
-    "src/libraries/AlphixGlobalConstants.sol",
-    "src/interfaces/IAlphixLogic.sol",
-    "src/interfaces/IAlphix.sol",
-    "src/interfaces/IRegistry.sol"
+    "src/**/*.sol"
 ]
 
 # Exclude test files, scripts, and external dependencies from analysis
@@ -127,11 +121,12 @@ safe_patterns = [
 ]
 
 # Expected external calls (won't flag as unsafe)
+# These contracts are from audited, production-ready libraries
 trusted_contracts = [
-    "IPoolManager",
-    "PoolManager",
-    "IHooks",
-    "AccessManager"
+    "IPoolManager",      # Uniswap V4 Core - pool manager interface (audited)
+    "PoolManager",       # Uniswap V4 Core - main pool manager implementation (audited)
+    "IHooks",            # Uniswap V4 Core - hook interface specification
+    "AccessManager"      # OpenZeppelin v5 - access control manager (audited)
 ]
 
 # Architecture-specific settings
