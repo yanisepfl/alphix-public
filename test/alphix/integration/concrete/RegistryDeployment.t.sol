@@ -38,6 +38,14 @@ contract RegistryDeploymentTest is BaseAlphixTest {
     }
 
     /**
+     * @notice constructor reverts when access manager is zero address
+     */
+    function test_constructor_revertsOnZeroAccessManager() public {
+        vm.expectRevert(IRegistry.InvalidAccessManager.selector);
+        new Registry(address(0));
+    }
+
+    /**
      * @notice getContract returns zero for an unregistered key on a fresh Registry
      */
     function test_getContract_returnsZeroForUnregistered() public {

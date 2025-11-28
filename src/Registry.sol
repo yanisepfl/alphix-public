@@ -43,7 +43,11 @@ contract Registry is AccessManaged, ERC165, IRegistry {
      * @dev Initialize with access manager address.
      * @param accessManager The AccessManager contract address.
      */
-    constructor(address accessManager) AccessManaged(accessManager) {}
+    constructor(address accessManager) AccessManaged(accessManager) {
+        if (accessManager == address(0)) {
+            revert InvalidAccessManager();
+        }
+    }
 
     /* REGISTRATION FUNCTIONS */
 
