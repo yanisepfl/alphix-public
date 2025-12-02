@@ -12,9 +12,14 @@ import {AlphixLogic} from "../../src/AlphixLogic.sol";
  *
  * USAGE: Run this script when you need to upgrade the logic contract
  *
+ * SENDER REQUIREMENTS: Must be run by AlphixLogic owner (ALPHIX_MANAGER or multisig).
+ * The sender must be the owner of the AlphixLogic proxy because:
+ * - proxy.upgradeToAndCall() has onlyOwner modifier (UUPS pattern)
+ *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
  * - ALPHIX_LOGIC_PROXY_{NETWORK}: AlphixLogic proxy address (the one being upgraded)
+ * - ACCOUNT_PRIVATE_KEY: Must correspond to AlphixLogic owner
  *
  * Security Notes:
  * - Only the owner of AlphixLogic can execute upgrades

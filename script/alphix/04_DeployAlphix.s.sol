@@ -17,23 +17,33 @@ import {Registry} from "../../src/Registry.sol";
  *
  * DEPLOYMENT ORDER: 4/11
  *
+ * IMPORTANT: This script must be run by the AccessManager admin (ALPHIX_MANAGER)
+ * because it calls:
+ * - accessMgr.setTargetFunctionRole() - requires ADMIN_ROLE
+ * - accessMgr.grantRole() - requires ADMIN_ROLE
+ *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
  * - POOL_MANAGER_{NETWORK}: Uniswap V4 PoolManager address
  * - CREATE2_DEPLOYER_{NETWORK}: CREATE2 factory address
- * - ALPHIX_MANAGER_{NETWORK}: Initial owner address
+ * - ALPHIX_MANAGER_{NETWORK}: Initial owner address (must be tx sender)
  * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
  * - REGISTRY_{NETWORK}: Registry contract address
  *
  * After Deployment:
  * - Copy the deployed address to ALPHIX_HOOK_{NETWORK} in .env
  *
- * Hook Permissions:
- * - afterInitialize: Register pool in registry
- * - afterAddLiquidity: Track liquidity events
- * - afterRemoveLiquidity: Track liquidity events
- * - beforeSwap: Update dynamic fees
- * - afterSwap: Track swap events
+ * Hook Permissions (all 14 enabled for maximum flexibility):
+ * - beforeInitialize: Validate pool initialization parameters
+ * - afterInitialize: Register pool in Registry
+ * - beforeAddLiquidity: Pre-liquidity checks
+ * - afterAddLiquidity: Track liquidity additions (with return delta)
+ * - beforeRemoveLiquidity: Pre-removal checks
+ * - afterRemoveLiquidity: Track liquidity removals (with return delta)
+ * - beforeSwap: Update dynamic fees before swap (with return delta)
+ * - afterSwap: Track swaps and update state (with return delta)
+ * - beforeDonate: Pre-donation checks
+ * - afterDonate: Track donations
  */
 contract DeployAlphixScript is Script {
     uint64 constant REGISTRAR_ROLE = 2;
@@ -93,19 +103,32 @@ contract DeployAlphixScript is Script {
         console.log("");
 
         // Hook contracts must have specific flags encoded in the address
-        // Required permissions (from Alphix.getHookPermissions()):
+        // All 14 permissions enabled (from Alphix.getHookPermissions()):
+        // Core lifecycle hooks:
         // - BEFORE_INITIALIZE_FLAG: Validate pool initialization
         // - AFTER_INITIALIZE_FLAG: Register pool in Registry
+        // Liquidity hooks:
         // - BEFORE_ADD_LIQUIDITY_FLAG: Pre-liquidity checks
         // - AFTER_ADD_LIQUIDITY_FLAG: Track liquidity additions
+        // - AFTER_ADD_LIQUIDITY_RETURNS_DELTA_FLAG: Return delta support
         // - BEFORE_REMOVE_LIQUIDITY_FLAG: Pre-removal checks
         // - AFTER_REMOVE_LIQUIDITY_FLAG: Track liquidity removals
+        // - AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG: Return delta support
+        // Swap hooks:
         // - BEFORE_SWAP_FLAG: Update dynamic fees before swap
+        // - BEFORE_SWAP_RETURNS_DELTA_FLAG: Return delta support
         // - AFTER_SWAP_FLAG: Track swaps and update state
+        // - AFTER_SWAP_RETURNS_DELTA_FLAG: Return delta support
+        // Donate hooks:
+        // - BEFORE_DONATE_FLAG: Pre-donation checks
+        // - AFTER_DONATE_FLAG: Track donations
         data.flags = uint160(
             Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
                 | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
                 | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+                | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
+                | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_ADD_LIQUIDITY_RETURNS_DELTA_FLAG
+                | Hooks.AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG
         );
 
         console.log("Mining hook address with required flags...");

@@ -10,11 +10,14 @@ import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManage
  * @notice Deploys the OpenZeppelin AccessManager for role-based access control
  * @dev This must be deployed first as other contracts depend on it
  *
- * DEPLOYMENT ORDER: 1/6
+ * DEPLOYMENT ORDER: 2/11
+ *
+ * SENDER REQUIREMENTS: Any address can run this script.
+ * The ALPHIX_MANAGER address will become the AccessManager admin (not necessarily the sender).
  *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier (e.g., BASE_SEPOLIA)
- * - ALPHIX_MANAGER_{NETWORK}: Initial admin address
+ * - ALPHIX_MANAGER_{NETWORK}: Initial admin address (will have ADMIN_ROLE)
  *
  * After Deployment:
  * - Copy the deployed address to ACCESS_MANAGER_{NETWORK} in .env

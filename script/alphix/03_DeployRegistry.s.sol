@@ -10,7 +10,10 @@ import {Registry} from "../../src/Registry.sol";
  * @notice Deploys the Registry contract for tracking Alphix ecosystem contracts and pools
  * @dev Requires AccessManager to be deployed first
  *
- * DEPLOYMENT ORDER: 2/6
+ * DEPLOYMENT ORDER: 3/11
+ *
+ * SENDER REQUIREMENTS: Any address can run this script.
+ * The Registry uses AccessManager for authorization, no specific sender required.
  *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier

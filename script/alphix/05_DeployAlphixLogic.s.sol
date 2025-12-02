@@ -14,9 +14,12 @@ import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
  *
  * DEPLOYMENT ORDER: 5/11
  *
+ * SENDER REQUIREMENTS: Any address can run this script.
+ * The ALPHIX_MANAGER address will become the AlphixLogic owner (not necessarily the sender).
+ *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
- * - ALPHIX_MANAGER_{NETWORK}: Initial owner address
+ * - ALPHIX_MANAGER_{NETWORK}: Initial owner address (will own AlphixLogic)
  * - ALPHIX_HOOK_{NETWORK}: Alphix Hook address (deployed in script 04)
  *
  * Prerequisites:
