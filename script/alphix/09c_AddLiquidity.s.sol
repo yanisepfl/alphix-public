@@ -108,6 +108,10 @@ contract AddLiquidityScript is Script {
         c.tickLower = (compressed - int24(uint24(c.liquidityRange))) * c.tickSpacing;
         c.tickUpper = (compressed + int24(uint24(c.liquidityRange))) * c.tickSpacing;
 
+        // Validate tick bounds before getSqrtPriceAtTick calls
+        require(c.tickLower >= TickMath.MIN_TICK, "tickLower below MIN_TICK");
+        require(c.tickUpper <= TickMath.MAX_TICK, "tickUpper above MAX_TICK");
+
         c.liquidity = LiquidityAmounts.getLiquidityForAmounts(
             c.sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(c.tickLower),
