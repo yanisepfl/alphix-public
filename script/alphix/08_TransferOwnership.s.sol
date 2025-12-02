@@ -13,12 +13,18 @@ import {AlphixLogic} from "../../src/AlphixLogic.sol";
  *
  * USAGE: Run this script before production to transfer to multisig
  *
+ * SENDER REQUIREMENTS: Must be run by current owner of Alphix Hook and AlphixLogic (ALPHIX_MANAGER).
+ * The sender must be the current owner of both contracts because:
+ * - alphix.transferOwnership() has onlyOwner modifier
+ * - logic.transferOwnership() has onlyOwner modifier
+ *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
  * - FUTURE_MANAGER_{NETWORK}: New owner address (multisig)
  * - ALPHIX_HOOK_{NETWORK}: Alphix Hook contract address
  * - ALPHIX_LOGIC_PROXY_{NETWORK}: AlphixLogic proxy address
  * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
+ * - ACCOUNT_PRIVATE_KEY: Must correspond to current owner (ALPHIX_MANAGER)
  *
  * Process (2-step transfer):
  * 1. Current owner calls transferOwnership(newOwner) - initiates transfer
@@ -30,7 +36,7 @@ import {AlphixLogic} from "../../src/AlphixLogic.sol";
  * Contracts to transfer:
  * - Alphix Hook
  * - AlphixLogic (proxy)
- * - AccessManager
+ * - AccessManager (separate role-based transfer)
  */
 contract TransferOwnershipScript is Script {
     function run() public {

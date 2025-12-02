@@ -14,6 +14,11 @@ import {Roles} from "./libraries/Roles.sol";
  *
  * DEPLOYMENT ORDER: 6b/11 (OPTIONAL - only if you want fee poker or additional registrar)
  *
+ * SENDER REQUIREMENTS: Must be run by AccessManager admin (ALPHIX_MANAGER).
+ * The sender must have ADMIN_ROLE (role ID 0) in AccessManager because:
+ * - accessManager.setTargetFunctionRole() requires ADMIN_ROLE
+ * - accessManager.grantRole() requires ADMIN_ROLE
+ *
  * NOTE: The Alphix Hook already has REGISTRAR role (granted in script 04).
  * This script is only for granting ADDITIONAL roles to OTHER addresses.
  *
@@ -21,7 +26,7 @@ import {Roles} from "./libraries/Roles.sol";
  * Required:
  * - DEPLOYMENT_NETWORK: Network identifier (e.g., BASE_SEPOLIA)
  * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
- * - ACCOUNT_PRIVATE_KEY: Private key of the broadcaster account
+ * - ACCOUNT_PRIVATE_KEY: Private key of the broadcaster (must be AccessManager admin)
  *
  * Optional (at least one required for script to execute):
  * - ALPHIX_HOOK_{NETWORK}: Alphix Hook contract address (required if configuring FEE_POKER)
@@ -31,10 +36,6 @@ import {Roles} from "./libraries/Roles.sol";
  * Optional Roles:
  * 1. FEE_POKER (optional) - Can call Alphix.poke() to manually update dynamic fees
  * 2. REGISTRAR (additional, optional) - Additional address for pool/contract registration
- *
- * Prerequisites:
- * - Broadcaster must have ADMIN_ROLE (role ID 0) in AccessManager
- * - Script will check permissions before broadcasting and revert if insufficient
  */
 contract ConfigureRolesScript is Script {
     function run() public {

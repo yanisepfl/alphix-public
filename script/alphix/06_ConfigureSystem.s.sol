@@ -13,9 +13,9 @@ import {AlphixLogic} from "../../src/AlphixLogic.sol";
  *
  * DEPLOYMENT ORDER: 6/11
  *
- * IMPORTANT: This script must be run by the ALPHIX_MANAGER address (contract owner)
- * Function called requires owner privileges:
- * - alphix.initialize() - onlyOwner
+ * SENDER REQUIREMENTS: Must be run by ALPHIX_MANAGER (Alphix Hook owner).
+ * The sender must be the owner of the Alphix Hook contract because:
+ * - alphix.initialize() has onlyOwner modifier
  *
  * Prerequisites:
  * - Script 04 (DeployAlphix) completed
