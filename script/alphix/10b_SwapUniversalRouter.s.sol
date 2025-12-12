@@ -37,11 +37,6 @@ import {Actions} from "v4-periphery/src/libraries/Actions.sol";
  * - SWAP_MIN_OUTPUT_{NETWORK}: (For exact input) Minimum output amount (slippage protection)
  * - SWAP_MAX_INPUT_{NETWORK}: (For exact output) Maximum input amount (slippage protection)
  *
- * Universal Router Addresses:
- * - Base Mainnet: 0x6ff5693b99212da76ad316178a184ab56d299b43
- * - Ethereum Mainnet: 0x66a9893cc07d91d95644aedd05d03f95e1dba8af
- * - Arbitrum: Check official Uniswap deployments
- *
  * IMPORTANT: SWAP_AMOUNT must be in base units (wei), NOT human-readable units.
  */
 contract SwapUniversalRouterScript is Script {
@@ -174,9 +169,7 @@ contract SwapUniversalRouterScript is Script {
         }
 
         // Execute via Universal Router
-        IUniversalRouter(config.universalRouter).execute{value: valueToSend}(
-            commands, inputs, block.timestamp + 120
-        );
+        IUniversalRouter(config.universalRouter).execute{value: valueToSend}(commands, inputs, block.timestamp + 120);
 
         vm.stopBroadcast();
 
@@ -232,9 +225,8 @@ contract SwapUniversalRouterScript is Script {
         inputs = new bytes[](1);
 
         // Build V4Router actions: SWAP_EXACT_IN_SINGLE -> SETTLE_ALL -> TAKE_ALL
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
 
         bytes[] memory params = new bytes[](3);
 
@@ -274,9 +266,8 @@ contract SwapUniversalRouterScript is Script {
         inputs = new bytes[](1);
 
         // Build V4Router actions: SWAP_EXACT_OUT_SINGLE -> SETTLE_ALL -> TAKE_ALL
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_OUT_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_OUT_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
 
         bytes[] memory params = new bytes[](3);
 
