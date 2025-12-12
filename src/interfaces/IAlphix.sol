@@ -115,6 +115,9 @@ interface IAlphix {
      * @notice Set per-pool type params.
      * @param poolType The pool type to set params to.
      * @param params The params to set.
+     * @dev IMPORTANT: Existing pools of this type are NOT automatically updated.
+     *      Fees and target ratios are only clamped to new bounds on the next poke().
+     *      Admin should manually poke affected pools after updating parameters if immediate effect is required.
      */
     function setPoolTypeParams(IAlphixLogic.PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params) external;
 

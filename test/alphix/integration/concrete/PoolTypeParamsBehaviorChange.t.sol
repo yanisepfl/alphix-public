@@ -247,6 +247,52 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     /* PARAMETER CHANGE BEHAVIOR TESTS */
 
     /**
+     * @notice Tests that existing pool fees are NOT immediately clamped after parameter change.
+     * @dev This is expected behavior: fees are only clamped to new bounds on the next poke().
+     *      Admin should manually poke affected pools after updating parameters if immediate effect is required.
+     */
+    function test_setPoolTypeParams_feeNotClampedUntilPoke() public {
+        // First, push the fee up to a high value using original params
+        uint256 highRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
+
+        // Multiple pokes to push fee higher (with cooldown waits)
+        for (uint256 i = 0; i < 3; i++) {
+            vm.warp(block.timestamp + originalParams.minPeriod + 1);
+            vm.prank(owner);
+            hook.poke(key, highRatio);
+        }
+
+        (,,, uint24 feeBeforeParamChange) = poolManager.getSlot0(poolId);
+        assertTrue(feeBeforeParamChange > INITIAL_FEE, "Fee should have increased");
+
+        // Now change to restrictive params with a much lower maxFee
+        vm.prank(owner);
+        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+
+        // The current fee is above restrictive maxFee, but it should NOT be automatically clamped
+        (,,, uint24 feeAfterParamChange) = poolManager.getSlot0(poolId);
+        assertEq(feeAfterParamChange, feeBeforeParamChange, "Fee should NOT change immediately after setPoolTypeParams");
+
+        // If the current fee exceeds the new max, verify it's still out of bounds
+        if (feeBeforeParamChange > restrictiveParams.maxFee) {
+            assertTrue(
+                feeAfterParamChange > restrictiveParams.maxFee, "Fee remains above new maxFee until poke() is called"
+            );
+        }
+
+        // Now poke to trigger the clamping
+        vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
+        vm.prank(owner);
+        hook.poke(key, INITIAL_TARGET_RATIO); // Use neutral ratio
+
+        (,,, uint24 feeAfterPoke) = poolManager.getSlot0(poolId);
+
+        // After poke, fee should be clamped to new bounds
+        assertTrue(feeAfterPoke >= restrictiveParams.minFee, "Fee should respect new minFee after poke");
+        assertTrue(feeAfterPoke <= restrictiveParams.maxFee, "Fee should respect new maxFee after poke");
+    }
+
+    /**
      * @notice Tests that restrictive parameters reduce maximum possible fees
      * @dev Verifies that when parameters are modified to more restrictive values,
      *      the fee adjustment magnitude is constrained by the new limits

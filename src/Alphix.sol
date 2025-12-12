@@ -312,6 +312,9 @@ contract Alphix is
 
     /**
      * @dev See {IAlphix-setPoolTypeParams}.
+     * @notice IMPORTANT: Existing pools are NOT automatically updated. Fees and target ratios
+     *         are only clamped to new bounds on the next poke(). Admin should manually poke
+     *         affected pools after this call if immediate effect is required.
      */
     function setPoolTypeParams(IAlphixLogic.PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
         external
