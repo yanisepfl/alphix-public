@@ -292,6 +292,8 @@ contract Alphix is
 
     /**
      * @dev See {IAlphix-setRegistry}.
+     * @notice IMPORTANT: Existing pools are NOT migrated. Admin must manually re-register pools
+     *         in the new registry after this call completes.
      */
     function setRegistry(address newRegistry) external override onlyOwner nonReentrant {
         if (newRegistry == address(0)) {

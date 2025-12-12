@@ -104,8 +104,10 @@ interface IAlphix {
 
     /**
      * @notice Set a new registry contract address.
-     * @param newRegistry The new logic contract address.
-     * @dev Also register Alphix Hook and logic contracts.
+     * @param newRegistry The new registry contract address.
+     * @dev Registers Alphix Hook and AlphixLogic contracts in the new registry.
+     *      IMPORTANT: Existing pools are NOT automatically migrated to the new registry.
+     *      Admin must manually re-register pools after updating the registry.
      */
     function setRegistry(address newRegistry) external;
 
