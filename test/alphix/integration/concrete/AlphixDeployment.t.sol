@@ -290,6 +290,32 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
+     * @notice setLogic should update the Registry with the new logic address.
+     * @dev Verifies that calling setLogic() also updates the AlphixLogic entry in the Registry.
+     */
+    function test_setLogic_updatesRegistry() public {
+        // Deploy new logic
+        AlphixLogic newImpl = new AlphixLogic();
+        ERC1967Proxy newProxy = new ERC1967Proxy(
+            address(newImpl),
+            abi.encodeCall(newImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
+        );
+
+        // Verify current registry state before update
+        address registeredLogicBefore = registry.getContract(IRegistry.ContractKey.AlphixLogic);
+        assertEq(registeredLogicBefore, address(logic), "Registry should have old logic");
+
+        // Update logic
+        vm.prank(owner);
+        hook.setLogic(address(newProxy));
+
+        // Verify Registry was updated with new logic address
+        address registeredLogicAfter = registry.getContract(IRegistry.ContractKey.AlphixLogic);
+        assertEq(registeredLogicAfter, address(newProxy), "Registry should have new logic");
+        assertFalse(registeredLogicAfter == registeredLogicBefore, "Registry logic should have changed");
+    }
+
+    /**
      * @notice setLogic should revert on zero address.
      */
     function test_setLogic_revertsOnZero() public {
