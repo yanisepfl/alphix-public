@@ -60,11 +60,15 @@ abstract contract BaseDynamicFee is BaseHook {
      * @dev Updates the dynamic LP fee for the given pool, which must have a key
      * that contains this hook's address.
      * @dev The currentRatio parameter has been added to OpenZeppelin's implementation.
+     *
+     * WARNING: This base implementation has NO ACCESS CONTROL. Inheriting contracts MUST override
+     * this function with proper access control (e.g., onlyOwner, role-based) to prevent unauthorized
+     * fee manipulation. Failure to do so allows any external caller to arbitrarily change pool fees.
+     *
      * @param key The pool key to update the dynamic LP fee for.
      * @param currentRatio The current ratio of the pool, used to update the dynamic LP fee.
      */
     function poke(PoolKey calldata key, uint256 currentRatio) external virtual onlyValidPools(key.hooks) {
-        // Base implementation ignores currentRatio but keeps signature for overrides
         (uint24 newFee,,,) = _getFee(key, currentRatio);
         poolManager.updateDynamicLPFee(key, newFee);
     }
