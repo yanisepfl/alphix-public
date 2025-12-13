@@ -599,12 +599,12 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setPoolTypeParams reverts when side factors not in [1e18, 1e19]
+     * @notice setPoolTypeParams reverts when side factors not in [1e17, 1e19]
      */
     function test_setPoolTypeParams_revertsOnSideFactors() public {
-        // Too low
+        // Too low (below ONE_TENTH_WAD = 1e17)
         DynamicFeeLib.PoolTypeParams memory low = standardParams;
-        low.upperSideFactor = 1e18 - 1;
+        low.upperSideFactor = 1e17 - 1;
         vm.prank(address(hook));
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, low);
@@ -621,10 +621,10 @@ contract AlphixLogicPoolManagementTest is BaseAlphixTest {
      * @notice setPoolTypeParams succeeds at side factor boundaries (edge cases)
      */
     function test_setPoolTypeParams_successOnSideFactorBounds() public {
-        // At minimum boundaries
+        // At minimum boundaries (ONE_TENTH_WAD = 1e17)
         DynamicFeeLib.PoolTypeParams memory minEdge = standardParams;
-        minEdge.upperSideFactor = AlphixGlobalConstants.ONE_WAD;
-        minEdge.lowerSideFactor = AlphixGlobalConstants.ONE_WAD;
+        minEdge.upperSideFactor = AlphixGlobalConstants.ONE_TENTH_WAD;
+        minEdge.lowerSideFactor = AlphixGlobalConstants.ONE_TENTH_WAD;
         vm.prank(address(hook));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, minEdge);
 

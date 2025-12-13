@@ -48,8 +48,8 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
     uint256 constant MIN_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.MIN_LINEAR_SLOPE;
     uint256 constant MAX_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.TEN_WAD;
 
-    // Side factor bounds
-    uint256 constant MIN_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.ONE_WAD;
+    // Side factor bounds (min 0.1x to allow dampening, max 10x)
+    uint256 constant MIN_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.ONE_TENTH_WAD;
     uint256 constant MAX_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.TEN_WAD;
 
     // BaseMaxFeeDelta bounds

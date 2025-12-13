@@ -12,6 +12,7 @@ library AlphixGlobalConstants {
     /**
      * @dev WAD constants for fixed-point arithmetic
      */
+    uint256 internal constant ONE_TENTH_WAD = 1e17;
     uint256 internal constant ONE_WAD = 1e18;
     uint256 internal constant TEN_WAD = 1e19;
 

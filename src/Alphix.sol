@@ -93,7 +93,6 @@ contract Alphix is
             revert InvalidAddress();
         }
         _setLogic(_logic);
-        IRegistry(registry).registerContract(IRegistry.ContractKey.AlphixLogic, _logic);
         _unpause();
     }
 
@@ -292,6 +291,8 @@ contract Alphix is
 
     /**
      * @dev See {IAlphix-setRegistry}.
+     * @notice IMPORTANT: Existing pools are NOT migrated. Admin must manually re-register pools
+     *         in the new registry after this call completes.
      */
     function setRegistry(address newRegistry) external override onlyOwner nonReentrant {
         if (newRegistry == address(0)) {
@@ -311,6 +312,9 @@ contract Alphix is
 
     /**
      * @dev See {IAlphix-setPoolTypeParams}.
+     * @notice IMPORTANT: Existing pools are NOT automatically updated. Fees and target ratios
+     *         are only clamped to new bounds on the next poke(). Admin should manually poke
+     *         affected pools after this call if immediate effect is required.
      */
     function setPoolTypeParams(IAlphixLogic.PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
         external
@@ -435,6 +439,7 @@ contract Alphix is
         }
         emit LogicUpdated(logic, newLogic);
         logic = newLogic;
+        IRegistry(registry).registerContract(IRegistry.ContractKey.AlphixLogic, newLogic);
     }
 
     /**

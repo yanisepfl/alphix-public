@@ -85,10 +85,6 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     uint256 constant MIN_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.MIN_LINEAR_SLOPE;
     uint256 constant MAX_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.TEN_WAD; // 1e19 (contract maximum)
 
-    // Side factor bounds
-    uint256 constant MIN_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.ONE_WAD; // 1e18 (min allowed)
-    uint256 constant MAX_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.TEN_WAD; // 10e18 (max allowed)
-
     // BaseMaxFeeDelta bounds
     uint24 constant MIN_BASE_MAX_FEE_DELTA_FUZZ = 1;
     uint24 constant MAX_BASE_MAX_FEE_DELTA_FUZZ = 1000;

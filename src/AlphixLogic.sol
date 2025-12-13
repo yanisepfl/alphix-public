@@ -573,13 +573,13 @@ contract AlphixLogic is
             revert InvalidParameter();
         }
 
-        // side multipliers checks
+        // side multipliers checks (min 0.1x to allow dampening, max 10x)
         if (
-            params.upperSideFactor < AlphixGlobalConstants.ONE_WAD
+            params.upperSideFactor < AlphixGlobalConstants.ONE_TENTH_WAD
                 || params.upperSideFactor > AlphixGlobalConstants.TEN_WAD
         ) revert InvalidParameter();
         if (
-            params.lowerSideFactor < AlphixGlobalConstants.ONE_WAD
+            params.lowerSideFactor < AlphixGlobalConstants.ONE_TENTH_WAD
                 || params.lowerSideFactor > AlphixGlobalConstants.TEN_WAD
         ) revert InvalidParameter();
 
