@@ -346,6 +346,7 @@ contract AlphixLogic is
         PoolId poolId = key.toId();
         PoolType poolTypeCache = poolConfig[poolId].poolType;
         DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[poolTypeCache];
+        uint256 maxRatio = pp.maxCurrentRatio;
 
         // Check currentRatio is valid for the pool type
         if (!_isValidRatioForPoolType(poolTypeCache, currentRatio)) {
@@ -357,8 +358,8 @@ contract AlphixLogic is
 
         // Load and clamp old target ratio
         oldTargetRatio = targetRatio[poolId];
-        if (oldTargetRatio > pp.maxCurrentRatio) {
-            oldTargetRatio = pp.maxCurrentRatio;
+        if (oldTargetRatio > maxRatio) {
+            oldTargetRatio = maxRatio;
         }
 
         // Compute the new fee (clamped as per pool type)
@@ -367,6 +368,9 @@ contract AlphixLogic is
 
         // Compute new target ratio via EMA and clamp
         newTargetRatio = DynamicFeeLib.ema(currentRatio, oldTargetRatio, pp.lookbackPeriod);
+        if (newTargetRatio > maxRatio) {
+            newTargetRatio = maxRatio;
+        }
         if (newTargetRatio == 0) {
             revert InvalidRatioForPoolType(poolTypeCache, newTargetRatio);
         }
