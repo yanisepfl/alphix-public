@@ -324,6 +324,8 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         vm.assume(permissiveMaxFee > restrictiveMaxFee + 1000);
 
         // Create restrictive and permissive parameter sets
+        // NOTE: Do NOT use struct copy (`permissiveParams = restrictiveParams`) in Solidity memory
+        // as it creates a reference, not a deep copy. Changes to one would affect the other.
         DynamicFeeLib.PoolTypeParams memory restrictiveParams = DynamicFeeLib.PoolTypeParams({
             minFee: 1,
             maxFee: restrictiveMaxFee,
@@ -337,8 +339,18 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             lowerSideFactor: 2e18
         });
 
-        DynamicFeeLib.PoolTypeParams memory permissiveParams = restrictiveParams;
-        permissiveParams.maxFee = permissiveMaxFee;
+        DynamicFeeLib.PoolTypeParams memory permissiveParams = DynamicFeeLib.PoolTypeParams({
+            minFee: 1,
+            maxFee: permissiveMaxFee,
+            baseMaxFeeDelta: baseMaxFeeDelta,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 5e15,
+            linearSlope: 2e18,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
+            upperSideFactor: 1e18,
+            lowerSideFactor: 2e18
+        });
 
         // Use a ratio above tolerance to trigger fee adjustment
         uint256 testRatio =
@@ -382,14 +394,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         (,,, uint24 feeAfterRestrictive) = poolManager.getSlot0(restrictiveKey.toId());
 
-        // Verify fee bounds - algorithm may exceed maxFee with consecutive OOB hits
+        // Verify fee bounds
         assertTrue(feeAfterPermissive <= permissiveMaxFee, "Should not exceed permissive max fee");
 
-        // Document when restrictive bounds are exceeded for analysis
-        if (feeAfterRestrictive > restrictiveMaxFee) {
-            emit log_named_uint("Fee exceeds restrictive maxFee", feeAfterRestrictive);
-            emit log_named_uint("Restrictive maxFee bound", restrictiveMaxFee);
-        }
+        // NOTE: When pool type params are changed mid-flight (particularly lowering maxFee),
+        // the algorithm uses the old fee as the starting point for delta calculation.
+        // The clampFee function in DynamicFee.sol should cap the result, but edge cases
+        // may exist. This assertion documents expected behavior - investigate if it fails.
+        assertTrue(feeAfterRestrictive <= restrictiveMaxFee, "Fee should be clamped to restrictive maxFee");
 
         // Verify directional behavior: restrictive settings should produce smaller/equal fees when not hitting bounds
         // Both pools started from same initial conditions, so this comparison is valid

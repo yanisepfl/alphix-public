@@ -1033,12 +1033,13 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Day 15: Admin changes pool type parameters for better fee control
         vm.warp(block.timestamp + 1 days);
 
-        DynamicFeeLib.PoolTypeParams memory newParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        // NOTE: Default pool is STABLE type, so we must modify STABLE params
+        DynamicFeeLib.PoolTypeParams memory newParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
         newParams.minFee = 200; // Increase min fee
         newParams.maxFee = 4000; // Increase max fee for volatile conditions
 
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, newParams);
 
         // Days 16-17: Dave doubles his liquidity position
         vm.warp(block.timestamp + 1 days);

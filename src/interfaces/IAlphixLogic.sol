@@ -319,6 +319,10 @@ interface IAlphixLogic {
      * @notice Compute what a poke would produce without any state changes.
      * @dev Useful for dry-run simulations, UI previews, or off-chain tooling.
      *      Does NOT check cooldown - that's only enforced in poke().
+     *      NOTE: This function CAN still revert on:
+     *        - InvalidRatioForPoolType: if currentRatio is 0 or exceeds pool type's maxCurrentRatio
+     *        - InvalidRatioForPoolType: if computed newTargetRatio is 0 (edge case)
+     *      Unlike poke(), it does NOT check PoolPaused, PoolNotConfigured, or CooldownNotElapsed.
      * @param key The pool key.
      * @param currentRatio The current ratio observed for this pool.
      * @return newFee The computed new fee that would be applied.

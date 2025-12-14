@@ -84,8 +84,10 @@ contract MockAlphixLogicTest is Test {
             hooks: IHooks(address(0))
         });
 
-        // This should revert when it tries to call poke on the mock hook address
-        // because the mock hook address (0x1234) doesn't have a poke function
+        // This should revert when it tries to call poke on the mock hook address (0x1234)
+        // because that address has no code. The revert type depends on EVM behavior for
+        // external calls to addresses without code - we use generic expectRevert since
+        // the specific error varies (could be empty return data or EvmError).
         vm.expectRevert();
         mockReenteringLogic.poke(key, 5e17);
     }

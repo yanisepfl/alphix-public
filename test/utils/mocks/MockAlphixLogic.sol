@@ -342,9 +342,12 @@ contract MockAlphixLogic is
         if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
         // Compute the fee update (view function does all the math)
-        (newFee, oldFee, oldTargetRatio, newTargetRatio,) = computeFeeUpdate(key, currentRatio);
+        DynamicFeeLib.OobState memory newOobState;
+        (newFee, oldFee, oldTargetRatio, newTargetRatio, newOobState) = computeFeeUpdate(key, currentRatio);
 
-        // Update storage
+        // Update storage (matching production behavior)
+        targetRatio[poolId] = newTargetRatio;
+        oobState[poolId] = newOobState;
         lastFeeUpdate[poolId] = block.timestamp;
     }
 
