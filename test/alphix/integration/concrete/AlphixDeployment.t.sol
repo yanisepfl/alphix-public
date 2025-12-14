@@ -312,7 +312,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         // Verify Registry was updated with new logic address
         address registeredLogicAfter = registry.getContract(IRegistry.ContractKey.AlphixLogic);
         assertEq(registeredLogicAfter, address(newProxy), "Registry should have new logic");
-        assertFalse(registeredLogicAfter == registeredLogicBefore, "Registry logic should have changed");
+        assertTrue(registeredLogicAfter != registeredLogicBefore, "Registry logic should have changed");
     }
 
     /**
