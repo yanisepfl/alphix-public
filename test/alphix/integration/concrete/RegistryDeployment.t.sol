@@ -295,21 +295,19 @@ contract RegistryDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice supportsInterface returns true for IERC165 interface via super call
-     * @dev This test covers the `super.supportsInterface()` branch in Registry.sol
+     * @notice supportsInterface returns true for IERC165 (ERC165 compliance)
      */
-    function test_supportsInterface_IERC165_viaSuperCall() public view {
-        // This triggers the else branch in supportsInterface, calling super.supportsInterface()
-        assertTrue(registry.supportsInterface(type(IERC165).interfaceId), "should support IERC165 via super");
+    function test_supportsInterface_IERC165() public view {
+        assertTrue(registry.supportsInterface(type(IERC165).interfaceId), "should support IERC165");
     }
 
     /**
      * @notice supportsInterface returns false for unsupported interfaces
      */
     function test_supportsInterface_unsupported() public view {
-        // Random interface ID that is not supported
-        bytes4 randomInterfaceId = bytes4(keccak256("random.unsupported.interface"));
-        assertFalse(registry.supportsInterface(randomInterfaceId), "should not support random interface");
+        // Use a fixed interface ID that is known to be unsupported
+        bytes4 unsupportedInterfaceId = 0x12345678;
+        assertFalse(registry.supportsInterface(unsupportedInterfaceId), "should not support interface");
     }
 
     /**
