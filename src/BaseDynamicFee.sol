@@ -9,7 +9,6 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
-import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
 
 /**
  * @dev This contract takes inspiration from OpenZeppelin's Uniswap BaseDynamicFee Hook and slightly
@@ -35,15 +34,6 @@ abstract contract BaseDynamicFee is BaseHook {
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
 
     /**
-     * @dev Returns a fee, denominated in hundredths of a bip, to be applied to the pool after it is initialized.
-     * @dev The currentRatio parameter and 3 return values have been added to OpenZeppelin's implementation.
-     */
-    function _getFee(PoolKey calldata key, uint256 currentRatio)
-        internal
-        virtual
-        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory);
-
-    /**
      * @dev Set the fee after the pool is initialized.
      */
     function _afterInitialize(address, PoolKey calldata key, uint160, int24)
@@ -59,19 +49,16 @@ abstract contract BaseDynamicFee is BaseHook {
     /**
      * @dev Updates the dynamic LP fee for the given pool, which must have a key
      * that contains this hook's address.
-     * @dev The currentRatio parameter has been added to OpenZeppelin's implementation.
      *
-     * WARNING: This base implementation has NO ACCESS CONTROL. Inheriting contracts MUST override
-     * this function with proper access control (e.g., onlyOwner, role-based) to prevent unauthorized
-     * fee manipulation. Failure to do so allows any external caller to arbitrarily change pool fees.
+     * WARNING: This base implementation is abstract. Inheriting contracts MUST override
+     * this function with proper access control (e.g., onlyOwner, role-based) and fee
+     * computation logic. Failure to do so allows any external caller to arbitrarily
+     * change pool fees.
      *
      * @param key The pool key to update the dynamic LP fee for.
      * @param currentRatio The current ratio of the pool, used to update the dynamic LP fee.
      */
-    function poke(PoolKey calldata key, uint256 currentRatio) external virtual onlyValidPools(key.hooks) {
-        (uint24 newFee,,,) = _getFee(key, currentRatio);
-        poolManager.updateDynamicLPFee(key, newFee);
-    }
+    function poke(PoolKey calldata key, uint256 currentRatio) external virtual;
 
     /**
      * @dev Set the hook permissions, specifically `afterInitialize`.
