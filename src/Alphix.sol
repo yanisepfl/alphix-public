@@ -290,7 +290,7 @@ contract Alphix is
      *         in the new registry after this call completes.
      */
     function setRegistry(address newRegistry) external override onlyOwner nonReentrant {
-        if (newRegistry == address(0)) {
+        if (newRegistry == address(0) || newRegistry.code.length == 0) {
             revert InvalidAddress();
         }
 
@@ -302,7 +302,9 @@ contract Alphix is
         emit RegistryUpdated(registry, newRegistry);
         registry = newRegistry;
         IRegistry(newRegistry).registerContract(IRegistry.ContractKey.Alphix, address(this));
-        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
+        if (logic != address(0)) {
+            IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
+        }
     }
 
     /**
