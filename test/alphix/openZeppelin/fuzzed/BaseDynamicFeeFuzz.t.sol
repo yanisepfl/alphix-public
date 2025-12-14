@@ -312,10 +312,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         uint24 mockFee = useMinFee ? MIN_FEE_FUZZ : MAX_FEE_FUZZ;
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
-        testHook.setMockFee(mockFee);
-
-        // Initialize pool
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         // Poke with boundary fee
         testHook.poke(dynamicFeeKey, currentRatio);
@@ -355,10 +354,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         ratio2 = bound(ratio2, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
         ratio3 = bound(ratio3, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
-        testHook.setMockFee(mockFee);
-
-        // Initialize pool
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         // First poke
         testHook.poke(dynamicFeeKey, ratio1);
