@@ -180,7 +180,7 @@ contract AlphixUpgradeabilityTest is BaseAlphixTest {
         customParams.maxFee = 4000;
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, customParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, customParams);
 
         // Upgrade
         vm.startPrank(owner);

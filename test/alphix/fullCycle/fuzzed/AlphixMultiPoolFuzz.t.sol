@@ -463,7 +463,7 @@ contract AlphixMultiPoolFuzzTest is BaseAlphixTest {
         modifiedParams.maxFee = newMaxFee;
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, modifiedParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, modifiedParams);
 
         DynamicFeeLib.PoolTypeParams memory updatedParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
 

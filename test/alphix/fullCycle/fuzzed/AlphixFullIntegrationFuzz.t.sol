@@ -1262,12 +1262,12 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         });
 
         vm.startPrank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsSlowSlope);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsSlowSlope);
         vm.stopPrank();
         (PoolKey memory keySlowSlope, PoolId poolIdSlowSlope) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
 
         vm.startPrank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, paramsFastSlope);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, paramsFastSlope);
         vm.stopPrank();
         (PoolKey memory keyFastSlope, PoolId poolIdFastSlope) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
 
@@ -1352,12 +1352,12 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         });
 
         vm.startPrank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsSlowFactor);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsSlowFactor);
         vm.stopPrank();
         (PoolKey memory keySlowFactor, PoolId poolIdSlowFactor) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
 
         vm.startPrank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, paramsFastFactor);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, paramsFastFactor);
         vm.stopPrank();
         (PoolKey memory keyFastFactor, PoolId poolIdFastFactor) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
 
@@ -1428,7 +1428,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         });
 
         vm.startPrank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsAsymmetric);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsAsymmetric);
         vm.stopPrank();
         (PoolKey memory keyAsymmetric, PoolId poolIdAsymmetric) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
 
@@ -1490,14 +1490,14 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         });
 
         vm.startPrank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsStreak);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, paramsStreak);
         vm.stopPrank();
 
         // Create two identical pools
         (PoolKey memory keyStreakAccum, PoolId poolIdStreakAccum) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
 
         vm.startPrank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, paramsStreak);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, paramsStreak);
         vm.stopPrank();
         (PoolKey memory keyStreakBreak, PoolId poolIdStreakBreak) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
 
@@ -1814,7 +1814,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         params.lowerSideFactor = lowerSideFactor;
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
 
@@ -1889,7 +1889,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         params.ratioTolerance = ratioTolerance;
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, params);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, params);
 
         IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
 

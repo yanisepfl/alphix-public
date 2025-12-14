@@ -10,6 +10,7 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {Alphix} from "../../src/Alphix.sol";
+import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
 
 // Minimal interface to access PositionManager's public poolKeys mapping
@@ -23,7 +24,7 @@ interface IPositionManagerPoolKeys {
 /**
  * @title Poke Dynamic Fee
  * @notice Manually updates the dynamic fee for a pool based on current ratio
- * @dev Calls Alphix.poke() to trigger fee recalculation
+ * @dev Calls Alphix.poke() to trigger fee recalculation. Uses computeFeeUpdate for dry-run preview.
  *
  * USAGE: Run this script to manually update pool fees (e.g., after swaps or ratio changes)
  *
@@ -109,12 +110,55 @@ contract PokeFeeScript is Script {
         console.log("===========================================");
     }
 
+    // Struct to hold pool info to reduce stack depth
+    struct PoolInfo {
+        PoolKey poolKey;
+        PoolId poolId;
+        Alphix alphix;
+        IAlphixLogic logic;
+    }
+
+    // Struct to hold fee computation results
+    struct FeeResult {
+        uint24 predictedNewFee;
+        uint24 currentFee;
+        uint256 oldTargetRatio;
+        uint256 newTargetRatio;
+    }
+
     /**
      * @dev Execute poke with the provided configuration
      */
     function _executePoke(PokeConfig memory config) internal {
-        // Create contract instances
-        IPoolManager poolManager = IPoolManager(config.poolManagerAddr);
+        // Build pool info
+        PoolInfo memory info = _buildPoolInfo(config);
+
+        // Log pool details
+        _logPoolDetails(info.poolKey);
+
+        // Get pool configuration and params directly from logic
+        IAlphixLogic.PoolConfig memory cfg = info.logic.getPoolConfig(info.poolId);
+        DynamicFeeLib.PoolTypeParams memory params = info.logic.getPoolTypeParams(cfg.poolType);
+
+        console.log("Pool Type Parameters:");
+        console.log("  - Min Period (cooldown): %s seconds", params.minPeriod);
+        console.log("  - Min Fee: %s bps", params.minFee);
+        console.log("  - Max Fee: %s bps", params.maxFee);
+        console.log("");
+
+        // Use computeFeeUpdate for a dry-run preview (no cooldown check)
+        FeeResult memory result = _computeDryRun(info.logic, info.poolKey, config.currentRatio);
+
+        _logDryRunResult(result, params.minPeriod);
+
+        // Execute the poke
+        _executePokeCall(info, config.currentRatio, result);
+    }
+
+    /**
+     * @dev Build PoolInfo struct from config
+     */
+    function _buildPoolInfo(PokeConfig memory config) internal view returns (PoolInfo memory info) {
         IPositionManagerPoolKeys posm = IPositionManagerPoolKeys(config.positionManagerAddr);
 
         // Fetch pool info from PoolId
@@ -122,46 +166,64 @@ contract PokeFeeScript is Script {
         (Currency currency0, Currency currency1, uint24 fee, int24 tickSpacing, IHooks hooks) =
             posm.poolKeys(poolIdBytes25);
 
-        // Get Alphix hook address from the pool info
-        Alphix alphix = Alphix(address(hooks));
+        info.poolKey =
+            PoolKey({currency0: currency0, currency1: currency1, fee: fee, tickSpacing: tickSpacing, hooks: hooks});
+        info.poolId = info.poolKey.toId();
+        info.alphix = Alphix(address(hooks));
+        info.logic = IAlphixLogic(info.alphix.getLogic());
+    }
 
-        // Log fetched pool info
+    /**
+     * @dev Log pool details
+     */
+    function _logPoolDetails(PoolKey memory poolKey) internal pure {
         console.log("Pool Details (fetched from PoolId):");
-        console.log("  - Token0:", Currency.unwrap(currency0));
-        console.log("  - Token1:", Currency.unwrap(currency1));
-        console.log("  - Fee: DYNAMIC (0x%x)", fee);
+        console.log("  - Token0:", Currency.unwrap(poolKey.currency0));
+        console.log("  - Token1:", Currency.unwrap(poolKey.currency1));
+        console.log("  - Fee: DYNAMIC (0x%x)", poolKey.fee);
         // Casting tickSpacing to uint256 via uint24 is safe for display purposes
         // forge-lint: disable-next-line(unsafe-typecast)
-        console.log("  - Tick Spacing:", uint256(uint24(tickSpacing)));
-        console.log("  - Hook:", address(hooks));
+        console.log("  - Tick Spacing:", uint256(uint24(poolKey.tickSpacing)));
+        console.log("  - Hook:", address(poolKey.hooks));
+        console.log("");
+    }
+
+    /**
+     * @dev Compute dry-run fee update
+     */
+    function _computeDryRun(IAlphixLogic logic, PoolKey memory poolKey, uint256 currentRatio)
+        internal
+        view
+        returns (FeeResult memory result)
+    {
+        (result.predictedNewFee, result.currentFee, result.oldTargetRatio, result.newTargetRatio,) =
+            logic.computeFeeUpdate(poolKey, currentRatio);
+    }
+
+    /**
+     * @dev Log dry-run results
+     */
+    function _logDryRunResult(FeeResult memory result, uint256 minPeriod) internal pure {
+        console.log("DRY RUN (computeFeeUpdate):");
+        console.log("  - Current Fee: %s bps (0.%s%%)", result.currentFee, _bpsToPercent(result.currentFee));
+        console.log(
+            "  - Predicted New Fee: %s bps (0.%s%%)", result.predictedNewFee, _bpsToPercent(result.predictedNewFee)
+        );
+        console.log("  - Old Target Ratio: %s", result.oldTargetRatio);
+        console.log("  - New Target Ratio: %s", result.newTargetRatio);
+
+        if (result.predictedNewFee > result.currentFee) {
+            console.log("  - Expected Change: +%s bps (fee increase)", result.predictedNewFee - result.currentFee);
+        } else if (result.predictedNewFee < result.currentFee) {
+            console.log("  - Expected Change: -%s bps (fee decrease)", result.currentFee - result.predictedNewFee);
+        } else {
+            console.log("  - Expected Change: 0 bps (no change)");
+        }
         console.log("");
 
-        // Create PoolKey
-        PoolKey memory poolKey =
-            PoolKey({currency0: currency0, currency1: currency1, fee: fee, tickSpacing: tickSpacing, hooks: hooks});
-
-        PoolId poolId = poolKey.toId();
-
-        // Get pool configuration to show cooldown info
-        try alphix.getPoolParams(poolId) returns (DynamicFeeLib.PoolTypeParams memory params) {
-            console.log("Pool Type Parameters:");
-            console.log("  - Min Period (cooldown): %s seconds", params.minPeriod);
-            console.log("  - Min Fee: %s bps", params.minFee);
-            console.log("  - Max Fee: %s bps", params.maxFee);
-            console.log("");
-            console.log("COOLDOWN WARNING:");
-            console.log("  - You must wait at least %s seconds between pokes", params.minPeriod);
-            console.log("  - If cooldown not met, this transaction will REVERT");
-            console.log("  - There is no way to check last update time on-chain currently");
-            console.log("");
-        } catch {
-            console.log("Could not fetch pool parameters");
-            console.log("");
-        }
-
-        // Get current fee before poke
-        (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
-        console.log("Current Fee: %s bps (0.%s%%)", oldFee, _bpsToPercent(oldFee));
+        console.log("COOLDOWN WARNING:");
+        console.log("  - You must wait at least %s seconds between pokes", minPeriod);
+        console.log("  - If cooldown not met, this transaction will REVERT");
         console.log("");
 
         console.log("Attempting to poke fee...");
@@ -169,11 +231,16 @@ contract PokeFeeScript is Script {
         console.log("  1. Caller does not have FEE_POKER role");
         console.log("  2. Pool cooldown period has not elapsed");
         console.log("");
+    }
 
+    /**
+     * @dev Execute the actual poke call
+     */
+    function _executePokeCall(PoolInfo memory info, uint256 currentRatio, FeeResult memory result) internal {
         vm.startBroadcast();
 
         // Poke the fee - may revert due to role or cooldown
-        try alphix.poke(poolKey, config.currentRatio) {
+        try info.alphix.poke(info.poolKey, currentRatio) {
             console.log("Poke successful!");
         } catch Error(string memory reason) {
             console.log("Poke FAILED with reason:", reason);
@@ -187,21 +254,28 @@ contract PokeFeeScript is Script {
         vm.stopBroadcast();
 
         // Get new fee after poke
-        (,,, uint24 newFee) = poolManager.getSlot0(poolId);
+        IPoolManager poolManager = info.alphix.poolManager();
+        (,,, uint24 actualNewFee) = poolManager.getSlot0(info.poolId);
 
         console.log("");
         console.log("===========================================");
         console.log("FEE UPDATE SUCCESSFUL");
         console.log("===========================================");
-        console.log("Old Fee: %s bps (0.%s%%)", oldFee, _bpsToPercent(oldFee));
-        console.log("New Fee: %s bps (0.%s%%)", newFee, _bpsToPercent(newFee));
+        console.log("Old Fee: %s bps (0.%s%%)", result.currentFee, _bpsToPercent(result.currentFee));
+        console.log("New Fee: %s bps (0.%s%%)", actualNewFee, _bpsToPercent(actualNewFee));
 
-        if (newFee > oldFee) {
-            console.log("Change: +%s bps (fee increased)", newFee - oldFee);
-        } else if (newFee < oldFee) {
-            console.log("Change: -%s bps (fee decreased)", oldFee - newFee);
+        if (actualNewFee > result.currentFee) {
+            console.log("Change: +%s bps (fee increased)", actualNewFee - result.currentFee);
+        } else if (actualNewFee < result.currentFee) {
+            console.log("Change: -%s bps (fee decreased)", result.currentFee - actualNewFee);
         } else {
             console.log("Change: 0 bps (no change)");
+        }
+
+        // Verify prediction matched reality
+        if (actualNewFee == result.predictedNewFee) {
+            console.log("");
+            console.log("(computeFeeUpdate prediction was correct)");
         }
     }
 

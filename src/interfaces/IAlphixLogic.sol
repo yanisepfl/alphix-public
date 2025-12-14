@@ -316,6 +316,45 @@ interface IAlphixLogic {
     function deactivatePool(PoolKey calldata key) external;
 
     /**
+     * @notice Compute what a poke would produce without any state changes.
+     * @dev Useful for dry-run simulations, UI previews, or off-chain tooling.
+     *      Does NOT check cooldown - that's only enforced in poke().
+     * @param key The pool key.
+     * @param currentRatio The current ratio observed for this pool.
+     * @return newFee The computed new fee that would be applied.
+     * @return oldFee The current fee before the update.
+     * @return oldTargetRatio The target ratio before the update.
+     * @return newTargetRatio The target ratio after the update.
+     * @return newOobState The new out-of-bounds state after the update.
+     */
+    function computeFeeUpdate(PoolKey calldata key, uint256 currentRatio)
+        external
+        view
+        returns (
+            uint24 newFee,
+            uint24 oldFee,
+            uint256 oldTargetRatio,
+            uint256 newTargetRatio,
+            DynamicFeeLib.OobState memory newOobState
+        );
+
+    /**
+     * @notice Compute and apply a fee update for a pool.
+     * @dev This is the main entry point for fee updates. It encapsulates all algorithm-specific
+     *      logic (fee computation, EMA updates, OOB state tracking, cooldown checks) internally,
+     *      treating AlphixLogic as a black box from Alphix's perspective.
+     * @param key The pool key.
+     * @param currentRatio The current ratio observed for this pool.
+     * @return newFee The computed new fee to be applied.
+     * @return oldFee The previous fee before this update.
+     * @return oldTargetRatio The target ratio before this update.
+     * @return newTargetRatio The target ratio after this update.
+     */
+    function poke(PoolKey calldata key, uint256 currentRatio)
+        external
+        returns (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio, uint256 newTargetRatio);
+
+    /**
      * @notice Set per-pool type params.
      * @param poolType The pool type to set params to.
      * @param params The parameters to set.
@@ -335,31 +374,6 @@ interface IAlphixLogic {
      * @return hookAddress The address of the main Alphix hook contract.
      */
     function getAlphixHook() external view returns (address hookAddress);
-
-    /**
-     * @notice Compute the new fee and target ratio of a given pool given its current ratio.
-     * @param key The key of the pool.
-     * @param currentRatio The current ratio of the pool.
-     * @return newFee The new fee of the pool.
-     * @return oldTargetRatio The old target ratio of the pool.
-     * @return newTargetRatio The new target ratio of the pool.
-     * @return sOut The OobState of the pool.
-     */
-    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
-        external
-        view
-        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut);
-
-    /**
-     * @notice Store new values right after a fee update.
-     * @param key The key of the pool.
-     * @param newTargetRatio The new target ratio of the pool.
-     * @param sOut The OobState of the pool.
-     * @return targetRatioAfterUpdate The target ratio after the update.
-     */
-    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OobState calldata sOut)
-        external
-        returns (uint256 targetRatioAfterUpdate);
 
     /**
      * @notice Get pool config for a specific pool.

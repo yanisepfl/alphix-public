@@ -1038,7 +1038,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         newParams.maxFee = 4000; // Increase max fee for volatile conditions
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
 
         // Days 16-17: Dave doubles his liquidity position
         vm.warp(block.timestamp + 1 days);

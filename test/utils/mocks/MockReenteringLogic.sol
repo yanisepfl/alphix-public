@@ -9,10 +9,9 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 /* LOCAL IMPORTS */
 import {BaseDynamicFee} from "../../../src/BaseDynamicFee.sol";
-import {DynamicFeeLib} from "../../../src/libraries/DynamicFee.sol";
 
 /**
- * @dev Minimal logic that supports IAlphixLogic and tries to re-enter hook.poke from getFee
+ * @dev Minimal logic that supports IAlphixLogic and tries to re-enter hook.poke from poke
  */
 contract MockReenteringLogic is IERC165 {
     address public immutable HOOK;
@@ -29,14 +28,11 @@ contract MockReenteringLogic is IERC165 {
     }
 
     /**
-     * @dev Signature matches IAlphixLogic.computeFeeAndTargetRatio, but implementation attempts a re-entrancy
+     * @dev Signature matches IAlphixLogic.poke, but implementation attempts a re-entrancy
      */
-    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
-        external
-        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory)
-    {
+    function poke(PoolKey calldata key, uint256 currentRatio) external returns (uint24, uint24, uint256, uint256) {
         // Attempt to re-enter poke
         BaseDynamicFee(HOOK).poke(key, currentRatio);
-        return (3000, 0, 0, DynamicFeeLib.OobState(false, 0));
+        return (3000, 3000, 0, 0);
     }
 }

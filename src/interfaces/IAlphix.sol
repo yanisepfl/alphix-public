@@ -7,7 +7,6 @@ import {PoolId} from "v4-core/src/types/PoolId.sol";
 
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "./IAlphixLogic.sol";
-import {DynamicFeeLib} from "../libraries/DynamicFee.sol";
 
 /**
  * @title IAlphix.
@@ -112,22 +111,6 @@ interface IAlphix {
     function setRegistry(address newRegistry) external;
 
     /**
-     * @notice Set per-pool type params.
-     * @param poolType The pool type to set params to.
-     * @param params The params to set.
-     * @dev IMPORTANT: Existing pools of this type are NOT automatically updated.
-     *      Fees and target ratios are only clamped to new bounds on the next poke().
-     *      Admin should manually poke affected pools after updating parameters if immediate effect is required.
-     */
-    function setPoolTypeParams(IAlphixLogic.PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params) external;
-
-    /**
-     * @notice Set global max adjustment rate.
-     * @param _globalMaxAdjRate The global max adjustment rate to set.
-     */
-    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external;
-
-    /**
      * @notice Initialize pool by activating and configuring it, and sets its initial fee.
      * @param key The key of the pool to initialize.
      * @param _initialFee The initial fee of the pool to initialize.
@@ -185,20 +168,4 @@ interface IAlphix {
      * @return fee The current fee of the given pool.
      */
     function getFee(PoolKey calldata key) external view returns (uint24 fee);
-
-    /**
-     * @notice Get the given pool params.
-     * @param poolId The pool ID to get the params of.
-     * @return poolParams The params of the given pool.
-     */
-    function getPoolParams(PoolId poolId) external view returns (DynamicFeeLib.PoolTypeParams memory);
-
-    /**
-     * @notice Get the given pool type params.
-     * @return poolType The pool type to get the params of.
-     */
-    function getPoolTypeParams(IAlphixLogic.PoolType poolType)
-        external
-        view
-        returns (DynamicFeeLib.PoolTypeParams memory);
 }

@@ -268,20 +268,23 @@ contract MockAlphixLogic is
         return this.afterDonate.selector;
     }
 
-    /* FEE COMPUTE/FINALIZE (ratio-aware, view + write) */
+    /* FEE POKE */
 
     /**
-     * @notice Compute fee and target ratio using mockFee if set; return no-op EMA and passthrough OOB state
-     * @dev View-only compute to maintain “compute, then manager update, then finalize” ordering in hook
+     * @notice Compute what a poke would produce without any state changes (mock implementation).
+     * @dev Simple mock: if mockFee is set, use it; otherwise keep current fee.
      */
-    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
-        external
+    function computeFeeUpdate(PoolKey calldata key, uint256 currentRatio)
+        public
         view
         override
-        onlyAlphixHook
-        poolActivated(key)
-        whenNotPaused
-        returns (uint24 newFee, uint256 oldTarget, uint256 newTarget, DynamicFeeLib.OobState memory sOut)
+        returns (
+            uint24 newFee,
+            uint24 oldFee,
+            uint256 oldTargetRatio,
+            uint256 newTargetRatio,
+            DynamicFeeLib.OobState memory newOobState
+        )
     {
         PoolId poolId = key.toId();
         PoolConfig memory cfg = poolConfig[poolId];
@@ -291,63 +294,57 @@ contract MockAlphixLogic is
             revert InvalidRatioForPoolType(cfg.poolType, currentRatio);
         }
 
-        // Get pool type parameters for clamping
+        // Get pool type parameters
         DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
 
         // Read current fee from PoolManager
-        (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
+        (,,, oldFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
 
-        // If mockFee is set, prefer it (clamped to bounds); otherwise reflect the current live fee
+        // If mockFee is set, prefer it (clamped to bounds); otherwise keep current fee
         uint24 mf = mockFee;
         if (mf == 0) {
-            newFee = currentFee;
+            newFee = oldFee;
         } else {
-            // Clamp mockFee to per-type bounds to avoid unrealistic test states
             newFee = DynamicFeeLib.clampFee(uint256(mf), pp.minFee, pp.maxFee);
         }
 
-        oldTarget = targetRatio[poolId];
-        // Clamp oldTarget to current pool-type cap (in case parameters changed)
-        if (oldTarget > pp.maxCurrentRatio) {
-            oldTarget = pp.maxCurrentRatio;
+        // Load and clamp old target ratio
+        oldTargetRatio = targetRatio[poolId];
+        if (oldTargetRatio > pp.maxCurrentRatio) {
+            oldTargetRatio = pp.maxCurrentRatio;
         }
 
-        newTarget = oldTarget; // no-op EMA for the mock, but clamp for consistency
-        sOut = oobState[poolId]; // passthrough
+        // For mock, keep target ratio unchanged (no-op EMA)
+        newTargetRatio = oldTargetRatio;
+
+        // Return empty OobState for mock
+        newOobState = DynamicFeeLib.OobState(false, 0);
     }
 
     /**
-     * @notice Finalize after fee update by persisting target ratio, OOB state, and timestamp
-     * @dev This matches the hook's post-manager-update finalize step
+     * @notice Compute and apply a fee update for a pool (mock implementation).
+     * @dev Uses computeFeeUpdate for calculation, then updates storage.
      */
-    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTarget, DynamicFeeLib.OobState calldata sOut)
+    function poke(PoolKey calldata key, uint256 currentRatio)
         external
         override
         onlyAlphixHook
         poolActivated(key)
         whenNotPaused
         nonReentrant
-        returns (uint256 targetRatioAfterUpdate)
+        returns (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio, uint256 newTargetRatio)
     {
         PoolId poolId = key.toId();
-        PoolConfig memory cfg = poolConfig[poolId];
-        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
 
-        // Revert if cooldown not elapsed
+        // Check cooldown
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[poolConfig[poolId].poolType];
         uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
         if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
-        // Validate and clamp newTarget (same logic as main implementation)
-        if (newTarget == 0) {
-            revert InvalidRatioForPoolType(cfg.poolType, newTarget);
-        }
-        if (newTarget > pp.maxCurrentRatio) {
-            newTarget = pp.maxCurrentRatio;
-        }
+        // Compute the fee update (view function does all the math)
+        (newFee, oldFee, oldTargetRatio, newTargetRatio,) = computeFeeUpdate(key, currentRatio);
 
-        targetRatio[poolId] = newTarget;
-        targetRatioAfterUpdate = newTarget;
-        oobState[poolId] = sOut;
+        // Update storage
         lastFeeUpdate[poolId] = block.timestamp;
     }
 
@@ -390,7 +387,7 @@ contract MockAlphixLogic is
     function setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
         external
         override
-        onlyAlphixHook
+        onlyOwner
         whenNotPaused
     {
         _setPoolTypeParams(poolType, params);
@@ -398,7 +395,7 @@ contract MockAlphixLogic is
 
     /* GLOBAL PARAMS */
 
-    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyAlphixHook whenNotPaused {
+    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyOwner whenNotPaused {
         _setGlobalMaxAdjRate(_globalMaxAdjRate);
     }
 
@@ -475,13 +472,13 @@ contract MockAlphixLogic is
         if (params.maxCurrentRatio == 0 || params.maxCurrentRatio > AlphixGlobalConstants.MAX_CURRENT_RATIO) {
             revert InvalidParameter();
         }
-        // side multipliers
+        // side multipliers checks (min 0.1x to allow dampening, max 10x)
         if (
-            params.upperSideFactor < AlphixGlobalConstants.ONE_WAD
+            params.upperSideFactor < AlphixGlobalConstants.ONE_TENTH_WAD
                 || params.upperSideFactor > AlphixGlobalConstants.TEN_WAD
         ) revert InvalidParameter();
         if (
-            params.lowerSideFactor < AlphixGlobalConstants.ONE_WAD
+            params.lowerSideFactor < AlphixGlobalConstants.ONE_TENTH_WAD
                 || params.lowerSideFactor > AlphixGlobalConstants.TEN_WAD
         ) revert InvalidParameter();
 

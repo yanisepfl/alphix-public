@@ -495,7 +495,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         params.maxFee = maxFee;
 
         vm.prank(owner);
-        hook.setPoolTypeParams(poolType, params);
+        logic.setPoolTypeParams(poolType, params);
 
         // Add liquidity
         vm.startPrank(alice);

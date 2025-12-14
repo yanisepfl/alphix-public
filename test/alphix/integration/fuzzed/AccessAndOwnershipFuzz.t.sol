@@ -17,6 +17,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
+import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {IRegistry} from "../../../../src/Registry.sol";
 
@@ -263,43 +264,44 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
      * @param callerSeed Seed for caller address
      * @param valueSeed Seed for parameter value
      */
-    function testFuzz_only_hook_can_call_protected_functions(uint256 callerSeed, uint256 valueSeed) public {
+    function testFuzz_only_owner_can_call_admin_functions(uint256 callerSeed, uint256 valueSeed) public {
         address caller = address(uint160(bound(callerSeed, 1, type(uint160).max)));
         uint256 value = bound(valueSeed, 1, 1e20);
 
-        // Assume caller is not the hook
-        vm.assume(caller != address(hook));
+        // Assume caller is not the owner
+        vm.assume(caller != owner);
 
-        // Should revert with InvalidCaller
+        // Should revert with OwnableUnauthorizedAccount
         vm.prank(caller);
-        vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, caller));
         logic.setGlobalMaxAdjRate(value);
     }
 
     /**
-     * @notice Fuzz test that hook ownership changes don't affect onlyAlphixHook
-     * @dev Verifies that hook address (not owner) is what matters
-     * @param newOwnerSeed Seed for new hook owner
+     * @notice Fuzz test that logic ownership changes properly control admin access
+     * @dev Verifies that logic owner (not hook) can call admin functions
+     * @param newOwnerSeed Seed for new logic owner
      */
-    function testFuzz_hook_ownership_change_doesnt_affect_hook_calls(uint256 newOwnerSeed) public {
+    function testFuzz_logic_ownership_change_affects_admin_calls(uint256 newOwnerSeed) public {
         address newOwner = address(uint160(bound(newOwnerSeed, 1, type(uint160).max)));
         vm.assume(newOwner != owner);
         vm.assume(newOwner != address(0));
         vm.assume(newOwner != address(hook));
+        vm.assume(newOwner != address(logic));
 
-        // Transfer hook ownership
+        // Transfer logic ownership
         vm.prank(owner);
-        hook.transferOwnership(newOwner);
+        AlphixLogic(address(logic)).transferOwnership(newOwner);
         vm.prank(newOwner);
-        hook.acceptOwnership();
+        AlphixLogic(address(logic)).acceptOwnership();
 
-        // New owner still can't call hook-protected functions directly
-        vm.prank(newOwner);
-        vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
+        // Old owner can no longer call admin functions
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, owner));
         logic.setGlobalMaxAdjRate(1e19);
 
-        // But hook address can
-        vm.prank(address(hook));
+        // New owner can call admin functions
+        vm.prank(newOwner);
         logic.setGlobalMaxAdjRate(1e19); // Should succeed
     }
 
