@@ -12,6 +12,7 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* OZ IMPORTS */
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 /* SOLMATE IMPORTS */
 
@@ -284,6 +285,31 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         assertEq(reg2.getContract(IRegistry.ContractKey.Alphix), address(hook), "alphix");
         assertEq(reg2.getContract(IRegistry.ContractKey.AlphixLogic), address(logic), "logic");
+    }
+
+    /**
+     * @notice supportsInterface returns true for IRegistry interface
+     */
+    function test_supportsInterface_IRegistry() public view {
+        assertTrue(registry.supportsInterface(type(IRegistry).interfaceId), "should support IRegistry");
+    }
+
+    /**
+     * @notice supportsInterface returns true for IERC165 interface via super call
+     * @dev This test covers the `super.supportsInterface()` branch in Registry.sol
+     */
+    function test_supportsInterface_IERC165_viaSuperCall() public view {
+        // This triggers the else branch in supportsInterface, calling super.supportsInterface()
+        assertTrue(registry.supportsInterface(type(IERC165).interfaceId), "should support IERC165 via super");
+    }
+
+    /**
+     * @notice supportsInterface returns false for unsupported interfaces
+     */
+    function test_supportsInterface_unsupported() public view {
+        // Random interface ID that is not supported
+        bytes4 randomInterfaceId = bytes4(keccak256("random.unsupported.interface"));
+        assertFalse(registry.supportsInterface(randomInterfaceId), "should not support random interface");
     }
 
     /**

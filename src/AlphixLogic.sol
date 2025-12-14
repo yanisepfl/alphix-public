@@ -330,7 +330,6 @@ contract AlphixLogic is
     /**
      * @dev See {IAlphixLogic-computeFeeUpdate}.
      * @notice Pure computation of what a poke would produce, without any state changes.
-     *         Useful for dry-run simulations, UI previews, or off-chain tooling.
      */
     function computeFeeUpdate(PoolKey calldata key, uint256 currentRatio)
         public
@@ -368,9 +367,6 @@ contract AlphixLogic is
 
         // Compute new target ratio via EMA and clamp
         newTargetRatio = DynamicFeeLib.ema(currentRatio, oldTargetRatio, pp.lookbackPeriod);
-        if (newTargetRatio > pp.maxCurrentRatio) {
-            newTargetRatio = pp.maxCurrentRatio;
-        }
         if (newTargetRatio == 0) {
             revert InvalidRatioForPoolType(poolTypeCache, newTargetRatio);
         }

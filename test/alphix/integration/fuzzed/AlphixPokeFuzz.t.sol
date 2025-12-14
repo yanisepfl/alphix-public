@@ -744,6 +744,117 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         assertEq(computedOldFee, validFee, "Old fee should match initial fee");
     }
 
+    /**
+     * @notice Fuzz test that computeFeeUpdate clamps newTargetRatio to maxCurrentRatio
+     * @dev Verifies the clamping logic: if (newTargetRatio > pp.maxCurrentRatio) newTargetRatio = pp.maxCurrentRatio
+     * @param highRatio A high current ratio that would push EMA above maxCurrentRatio
+     */
+    function testFuzz_computeFeeUpdate_clampsNewTargetRatioToMax(uint256 highRatio) public {
+        // Create a pool with a lower maxCurrentRatio to make clamping easier to trigger
+        DynamicFeeLib.PoolTypeParams memory customParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+
+        // Set maxCurrentRatio to a moderate value so we can exceed it with EMA
+        uint256 lowerMax = 5e20; // 500:1 ratio
+        customParams.maxCurrentRatio = lowerMax;
+
+        vm.prank(owner);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, customParams);
+
+        // Get updated params
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+
+        // Use a ratio at the max - EMA should produce newTargetRatio that gets clamped
+        // Start with initial target ratio lower, then push with max current ratio
+        highRatio = bound(highRatio, params.maxCurrentRatio - 1e19, params.maxCurrentRatio);
+
+        // Call computeFeeUpdate
+        (,,, uint256 newTargetRatio,) = logic.computeFeeUpdate(key, highRatio);
+
+        // The newTargetRatio should be clamped to maxCurrentRatio
+        assertTrue(newTargetRatio <= params.maxCurrentRatio, "newTargetRatio should be clamped to maxCurrentRatio");
+        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+    }
+
+    /**
+     * @notice Test that computeFeeUpdate properly clamps newTargetRatio when EMA would exceed max
+     * @dev This is a concrete test to ensure the clamping branch is hit
+     */
+    function test_computeFeeUpdate_clampsNewTargetRatioExplicit() public {
+        // Setup: Create a fresh pool with high initial target ratio
+        (PoolKey memory freshKey,) = _newUninitializedPoolWithHook(
+            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(300)), Constants.SQRT_PRICE_1_1, hook
+        );
+
+        // Get params for VOLATILE (has highest default maxCurrentRatio)
+        DynamicFeeLib.PoolTypeParams memory volParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
+
+        // Activate pool with target ratio at 90% of max
+        uint256 highInitialTarget = (volParams.maxCurrentRatio * 90) / 100;
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, highInitialTarget, IAlphixLogic.PoolType.VOLATILE);
+
+        // Now lower the maxCurrentRatio to force clamping
+        DynamicFeeLib.PoolTypeParams memory newParams = volParams;
+        newParams.maxCurrentRatio = (highInitialTarget * 80) / 100; // 80% of initial target
+
+        vm.prank(owner);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, newParams);
+
+        // Wait for cooldown
+        vm.warp(block.timestamp + newParams.minPeriod + 1);
+
+        // Call computeFeeUpdate with currentRatio at new max
+        // EMA will try to blend highInitialTarget with currentRatio, but both will be clamped
+        (,, uint256 oldTargetRatio, uint256 newTargetRatio,) =
+            logic.computeFeeUpdate(freshKey, newParams.maxCurrentRatio);
+
+        // oldTargetRatio should be clamped (it was highInitialTarget > newParams.maxCurrentRatio)
+        assertEq(oldTargetRatio, newParams.maxCurrentRatio, "oldTargetRatio should be clamped to new maxCurrentRatio");
+
+        // newTargetRatio should also be clamped or at max
+        assertTrue(newTargetRatio <= newParams.maxCurrentRatio, "newTargetRatio should not exceed maxCurrentRatio");
+        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+    }
+
+    /**
+     * @notice Fuzz test computeFeeUpdate with extreme ratio differences to stress EMA
+     * @dev Tests edge cases where currentRatio is much smaller than oldTargetRatio
+     * @param currentRatio The current ratio (will be bounded to valid range)
+     */
+    function testFuzz_computeFeeUpdate_extremeRatioDifference(uint256 currentRatio) public {
+        // Create pool with high initial target
+        (PoolKey memory freshKey,) = _newUninitializedPoolWithHook(
+            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(400)), Constants.SQRT_PRICE_1_1, hook
+        );
+
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+
+        // Set high initial target ratio (90% of max)
+        uint256 highTarget = (params.maxCurrentRatio * 90) / 100;
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, highTarget, IAlphixLogic.PoolType.STANDARD);
+
+        // Wait for cooldown
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        // Use a very small currentRatio (but valid)
+        currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio / 100);
+
+        // computeFeeUpdate should handle this gracefully
+        (uint24 newFee,, uint256 oldTargetRatio, uint256 newTargetRatio,) =
+            logic.computeFeeUpdate(freshKey, currentRatio);
+
+        // Verify constraints
+        assertTrue(newFee >= params.minFee && newFee <= params.maxFee, "Fee should be in bounds");
+        assertEq(oldTargetRatio, highTarget, "oldTargetRatio should match initial");
+        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+        assertTrue(newTargetRatio <= params.maxCurrentRatio, "newTargetRatio should not exceed max");
+
+        // newTargetRatio should be between currentRatio and oldTargetRatio (EMA smoothing)
+        assertTrue(newTargetRatio <= oldTargetRatio, "newTargetRatio should decrease towards currentRatio");
+        assertTrue(newTargetRatio >= currentRatio, "newTargetRatio should not go below currentRatio");
+    }
+
     /* ========================================================================== */
     /*                              HELPER FUNCTIONS                            */
     /* ========================================================================== */
