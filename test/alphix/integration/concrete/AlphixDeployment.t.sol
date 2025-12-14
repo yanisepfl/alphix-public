@@ -301,9 +301,9 @@ contract AlphixDeploymentTest is BaseAlphixTest {
             abi.encodeCall(newImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
         );
 
-        // Verify current registry state before update
+        // Verify current registry state before update (use hook.getLogic() to avoid coupling to test setup naming)
         address registeredLogicBefore = registry.getContract(IRegistry.ContractKey.AlphixLogic);
-        assertEq(registeredLogicBefore, address(logic), "Registry should have old logic");
+        assertEq(registeredLogicBefore, hook.getLogic(), "Registry should have current logic");
 
         // Update logic
         vm.prank(owner);

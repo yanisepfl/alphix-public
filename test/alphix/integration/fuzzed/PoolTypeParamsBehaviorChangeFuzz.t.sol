@@ -323,9 +323,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         // Ensure meaningful difference between parameters
         vm.assume(permissiveMaxFee > restrictiveMaxFee + 1000);
 
-        // Create restrictive and permissive parameter sets
-        // NOTE: Do NOT use struct copy (`permissiveParams = restrictiveParams`) in Solidity memory
-        // as it creates a reference, not a deep copy. Changes to one would affect the other.
+        // Create restrictive and permissive parameter sets with different maxFee values.
+        // NOTE: For structs in memory, assignment copies values. (Aliasing concerns apply when
+        // the struct contains reference-typed members like arrays/bytes/strings, which this struct does not.)
         DynamicFeeLib.PoolTypeParams memory restrictiveParams = DynamicFeeLib.PoolTypeParams({
             minFee: 1,
             maxFee: restrictiveMaxFee,
@@ -397,10 +397,8 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         // Verify fee bounds
         assertTrue(feeAfterPermissive <= permissiveMaxFee, "Should not exceed permissive max fee");
 
-        // NOTE: When pool type params are changed mid-flight (particularly lowering maxFee),
-        // the algorithm uses the old fee as the starting point for delta calculation.
-        // The clampFee function in DynamicFee.sol should cap the result, but edge cases
-        // may exist. This assertion documents expected behavior - investigate if it fails.
+        // DynamicFeeLib.clampFee() ensures the computed fee never exceeds the pool type's maxFee.
+        // This invariant holds even when params are modified mid-flight.
         assertTrue(feeAfterRestrictive <= restrictiveMaxFee, "Fee should be clamped to restrictive maxFee");
 
         // Verify directional behavior: restrictive settings should produce smaller/equal fees when not hitting bounds

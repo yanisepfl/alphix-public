@@ -39,6 +39,7 @@ contract TestBaseDynamicFeeFuzz is BaseDynamicFee {
     }
 
     // Test helper functions
+    // Note: Callers should ensure _fee is within [1, LPFeeLibrary.MAX_LP_FEE]; fuzz harness constrains inputs
     function setMockFee(uint24 _fee) external {
         mockFee = _fee;
     }
@@ -213,10 +214,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
         currentRatio = bound(currentRatio, 0, MAX_RATIO_FUZZ);
 
-        testHook.setMockFee(mockFee);
-
-        // Initialize pool first
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         // Poke with ratio
         testHook.poke(dynamicFeeKey, currentRatio);
@@ -237,10 +237,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
 
-        testHook.setMockFee(mockFee);
-
-        // Initialize pool first
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         testHook.poke(dynamicFeeKey, 0);
 
@@ -256,12 +255,11 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
     function testFuzz_poke_maxCurrentRatio(uint24 mockFee) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
-
         uint256 maxRatio = MAX_RATIO_FUZZ;
-        testHook.setMockFee(mockFee);
 
-        // Initialize pool first
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         testHook.poke(dynamicFeeKey, maxRatio);
 
