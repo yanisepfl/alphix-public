@@ -148,9 +148,6 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         // Bound to valid sqrt price range (exclusive of MAX to avoid edge case rejection)
         sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE - 1));
 
-        // Ensure we're actually in valid range
-        vm.assume(sqrtPriceX96 >= TickMath.MIN_SQRT_PRICE && sqrtPriceX96 < TickMath.MAX_SQRT_PRICE);
-
         // Initialize the pool first
         poolManager.initialize(dynamicFeeKey, sqrtPriceX96);
 
