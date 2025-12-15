@@ -297,8 +297,8 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             upperSideFactor: standardParams.upperSideFactor
         });
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
-        DynamicFeeLib.PoolTypeParams memory got = hook.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
+        DynamicFeeLib.PoolTypeParams memory got = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
         assertEq(got.minFee, newParams.minFee);
         assertEq(got.maxFee, newParams.maxFee);
     }
@@ -321,7 +321,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         });
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, unauthorized));
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
     }
 
     /**
@@ -337,7 +337,8 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
             defaultTickSpacing,
             Constants.SQRT_PRICE_1_1
         );
-        DynamicFeeLib.PoolTypeParams memory setParams = hook.getPoolParams(id);
+        IAlphixLogic.PoolType poolType = logic.getPoolConfig(id).poolType;
+        DynamicFeeLib.PoolTypeParams memory setParams = logic.getPoolTypeParams(poolType);
         assertEq(setParams.minFee, standardParams.minFee);
         assertEq(setParams.maxFee, standardParams.maxFee);
         // silence k
@@ -348,7 +349,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      * @notice getPoolTypeBounds returns the current bounds for a pool type.
      */
     function test_getPoolTypeBounds() public view {
-        DynamicFeeLib.PoolTypeParams memory current = hook.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+        DynamicFeeLib.PoolTypeParams memory current = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
         assertEq(current.minFee, stableParams.minFee);
         assertEq(current.maxFee, stableParams.maxFee);
     }
@@ -381,7 +382,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         (,,, uint24 postLpFee) = poolManager.getSlot0(id);
 
         // Verify within STANDARD bounds
-        DynamicFeeLib.PoolTypeParams memory pp = hook.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
         assertTrue(postLpFee >= pp.minFee && postLpFee <= pp.maxFee);
 
         // Either updated or remained the same depending on algorithm and inputs; both acceptable within bounds
@@ -586,6 +587,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         PoolKey memory k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 20, IHooks(testHook));
 
         // initialize reverts due to validLogic in beforeInitialize
+        // PoolManager wraps the LogicNotSet error in a WrappedError
         vm.expectRevert();
         poolManager.initialize(k, Constants.SQRT_PRICE_1_1);
 
@@ -657,7 +659,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
     function test_setGlobalMaxAdjRate_success() public {
         uint256 newRate = 2e18; // within allowed bounds per logic
         vm.prank(owner);
-        hook.setGlobalMaxAdjRate(newRate);
+        logic.setGlobalMaxAdjRate(newRate);
         assertEq(logic.getGlobalMaxAdjRate(), newRate);
     }
 
@@ -667,7 +669,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
     function test_setGlobalMaxAdjRate_revertsOnZero() public {
         vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
-        hook.setGlobalMaxAdjRate(0);
+        logic.setGlobalMaxAdjRate(0);
     }
 
     /**
@@ -677,7 +679,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         uint256 tooHigh = AlphixGlobalConstants.MAX_ADJUSTMENT_RATE + 1;
         vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
-        hook.setGlobalMaxAdjRate(tooHigh);
+        logic.setGlobalMaxAdjRate(tooHigh);
     }
 
     /**

@@ -413,7 +413,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
             assertTrue(uint8(config.poolType) <= 2, "Invalid pool type");
 
             // Initial fee should be within pool type bounds
-            DynamicFeeLib.PoolTypeParams memory params = hook.getPoolTypeParams(config.poolType);
+            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
             assertGe(config.initialFee, params.minFee, "Initial fee below pool type min");
             assertLe(config.initialFee, params.maxFee, "Initial fee above pool type max");
         }
@@ -438,7 +438,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
             uint24 currentFee = hook.getFee(poolKey);
 
             // Fee must be within pool type bounds regardless of manipulation attempts
-            DynamicFeeLib.PoolTypeParams memory params = hook.getPoolTypeParams(config.poolType);
+            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
             assertGe(currentFee, params.minFee, "Fee below min despite manipulation");
             assertLe(currentFee, params.maxFee, "Fee above max despite manipulation");
         }
@@ -601,7 +601,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
 
             // Fees should respect bounds even with side factor asymmetry
             uint24 currentFee = hook.getFee(poolKey);
-            DynamicFeeLib.PoolTypeParams memory params = hook.getPoolTypeParams(config.poolType);
+            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
             assertGe(currentFee, params.minFee, "Side factor violated min");
             assertLe(currentFee, params.maxFee, "Side factor violated max");
         }

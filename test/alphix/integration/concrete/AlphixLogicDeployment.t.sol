@@ -188,7 +188,7 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         newVol.minFee = 1500;
         newVol.maxFee = 30000;
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, newVol);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, newVol);
 
         DynamicFeeLib.PoolTypeParams memory preVol = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
         assertEq(preVol.minFee, newVol.minFee, "pre-upgrade minFee");

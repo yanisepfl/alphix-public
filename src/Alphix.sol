@@ -24,7 +24,6 @@ import {BaseDynamicFee} from "./BaseDynamicFee.sol";
 import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 import {IAlphix} from "./interfaces/IAlphix.sol";
 import {IRegistry} from "./interfaces/IRegistry.sol";
-import {DynamicFeeLib} from "./libraries/DynamicFee.sol";
 
 /**
  * @title Alphix.
@@ -93,7 +92,6 @@ contract Alphix is
             revert InvalidAddress();
         }
         _setLogic(_logic);
-        IRegistry(registry).registerContract(IRegistry.ContractKey.AlphixLogic, _logic);
         _unpause();
     }
 
@@ -257,7 +255,8 @@ contract Alphix is
 
     /**
      * @dev See {BaseDynamicFee-poke}.
-     * @notice Can be called by addresses with the POKER_ROLE granted via AccessManager
+     * @notice Can be called by addresses with the POKER_ROLE granted via AccessManager.
+     *         Delegates all fee computation and state management to AlphixLogic.
      */
     function poke(PoolKey calldata key, uint256 currentRatio)
         external
@@ -266,21 +265,16 @@ contract Alphix is
         restricted
         nonReentrant
         whenNotPaused
+        validLogic
     {
-        PoolId poolId = key.toId();
-        (,,, uint24 oldFee) = poolManager.getSlot0(poolId);
+        // Delegate to AlphixLogic - it handles all algorithm-specific logic internally
+        (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio, uint256 newTargetRatio) =
+            IAlphixLogic(logic).poke(key, currentRatio);
 
-        // Compute new fee and target ratio
-        (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut) =
-            _getFee(key, currentRatio);
-
-        // Update the fee
+        // Update the fee in PoolManager
         _setDynamicFee(key, newFee);
 
-        // Update the storage
-        newTargetRatio = IAlphixLogic(logic).finalizeAfterFeeUpdate(key, newTargetRatio, sOut);
-
-        emit FeeUpdated(poolId, oldFee, newFee, oldTargetRatio, currentRatio, newTargetRatio);
+        emit FeeUpdated(key.toId(), oldFee, newFee, oldTargetRatio, currentRatio, newTargetRatio);
     }
 
     /**
@@ -292,9 +286,11 @@ contract Alphix is
 
     /**
      * @dev See {IAlphix-setRegistry}.
+     * @notice IMPORTANT: Existing pools are NOT migrated. Admin must manually re-register pools
+     *         in the new registry after this call completes.
      */
     function setRegistry(address newRegistry) external override onlyOwner nonReentrant {
-        if (newRegistry == address(0)) {
+        if (newRegistry == address(0) || newRegistry.code.length == 0) {
             revert InvalidAddress();
         }
 
@@ -306,25 +302,9 @@ contract Alphix is
         emit RegistryUpdated(registry, newRegistry);
         registry = newRegistry;
         IRegistry(newRegistry).registerContract(IRegistry.ContractKey.Alphix, address(this));
-        IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
-    }
-
-    /**
-     * @dev See {IAlphix-setPoolTypeParams}.
-     */
-    function setPoolTypeParams(IAlphixLogic.PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
-        external
-        override
-        onlyOwner
-    {
-        IAlphixLogic(logic).setPoolTypeParams(poolType, params);
-    }
-
-    /**
-     * @dev See {IAlphix-setGlobalMaxAdjRate}.
-     */
-    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyOwner {
-        IAlphixLogic(logic).setGlobalMaxAdjRate(_globalMaxAdjRate);
+        if (logic != address(0)) {
+            IRegistry(newRegistry).registerContract(IRegistry.ContractKey.AlphixLogic, logic);
+        }
     }
 
     /**
@@ -400,26 +380,6 @@ contract Alphix is
         (,,, fee) = poolManager.getSlot0(poolId);
     }
 
-    /**
-     * @dev See {IAlphix-getPoolParams}.
-     */
-    function getPoolParams(PoolId poolId) external view override returns (DynamicFeeLib.PoolTypeParams memory) {
-        IAlphixLogic.PoolType poolType = IAlphixLogic(logic).getPoolConfig(poolId).poolType;
-        return getPoolTypeParams(poolType);
-    }
-
-    /**
-     * @dev See {IAlphix-getPoolTypeParams}.
-     */
-    function getPoolTypeParams(IAlphixLogic.PoolType poolType)
-        public
-        view
-        override
-        returns (DynamicFeeLib.PoolTypeParams memory)
-    {
-        return IAlphixLogic(logic).getPoolTypeParams(poolType);
-    }
-
     /* INTERNAL FUNCTIONS */
 
     /**
@@ -435,6 +395,7 @@ contract Alphix is
         }
         emit LogicUpdated(logic, newLogic);
         logic = newLogic;
+        IRegistry(registry).registerContract(IRegistry.ContractKey.AlphixLogic, newLogic);
     }
 
     /**
@@ -448,19 +409,6 @@ contract Alphix is
         if (oldFee != newFee) {
             poolManager.updateDynamicLPFee(key, newFee);
         }
-    }
-
-    /**
-     * @dev See {BaseDynamicFee-_getFee}.
-     */
-    function _getFee(PoolKey calldata key, uint256 currentRatio)
-        internal
-        view
-        override
-        validLogic
-        returns (uint24 fee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut)
-    {
-        return IAlphixLogic(logic).computeFeeAndTargetRatio(key, currentRatio);
     }
 
     /* MODIFIER HELPERS */

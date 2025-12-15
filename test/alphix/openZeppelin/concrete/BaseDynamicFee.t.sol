@@ -15,7 +15,6 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* LOCAL IMPORTS */
 import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
-import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 
 /**
@@ -24,44 +23,27 @@ import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
  */
 contract TestBaseDynamicFee is BaseDynamicFee {
     uint24 public mockFee = 500;
-    uint256 public mockOldTargetRatio = 5e17;
-    uint256 public mockNewTargetRatio = 6e17;
-    DynamicFeeLib.OobState public mockOobState;
-    bool public shouldRevertOnGetFee = false;
+    bool public shouldRevertOnPoke = false;
 
     constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) {}
 
-    function _getFee(PoolKey calldata, uint256)
-        internal
-        view
-        override
-        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory)
-    {
-        if (shouldRevertOnGetFee) {
-            revert("Mock revert in _getFee");
+    /**
+     * @dev Implementation of abstract poke function
+     */
+    function poke(PoolKey calldata key, uint256) external override onlyValidPools(key.hooks) {
+        if (shouldRevertOnPoke) {
+            revert("Mock revert in poke");
         }
-        return (mockFee, mockOldTargetRatio, mockNewTargetRatio, mockOobState);
+        poolManager.updateDynamicLPFee(key, mockFee);
     }
 
     // Test helper functions
-    function setMockValues(
-        uint24 _fee,
-        uint256 _oldTargetRatio,
-        uint256 _newTargetRatio,
-        DynamicFeeLib.OobState memory _oobState
-    ) external {
+    function setMockFee(uint24 _fee) external {
         mockFee = _fee;
-        mockOldTargetRatio = _oldTargetRatio;
-        mockNewTargetRatio = _newTargetRatio;
-        mockOobState = _oobState;
     }
 
-    function getMockOobState() external view returns (DynamicFeeLib.OobState memory) {
-        return mockOobState;
-    }
-
-    function setShouldRevertOnGetFee(bool _shouldRevert) external {
-        shouldRevertOnGetFee = _shouldRevert;
+    function setShouldRevertOnPoke(bool _shouldRevert) external {
+        shouldRevertOnPoke = _shouldRevert;
     }
 
     // Expose internal functions for testing
@@ -159,9 +141,8 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
-        // Set mock values
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(expectedFee, 5e17, 6e17, oobState);
+        // Set mock fee
+        testHook.setMockFee(expectedFee);
 
         // Get initial fee
         (,,, uint24 initialFee) = poolManager.getSlot0(dynamicFeeKey.toId());
@@ -188,22 +169,21 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         testHook.poke(invalidKey, 5e17);
     }
 
-    function test_poke_handlesGetFeeRevert() public {
+    function test_poke_handlesPokeFunctionRevert() public {
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
-        // Configure mock to revert on _getFee
-        testHook.setShouldRevertOnGetFee(true);
+        // Configure mock to revert on poke
+        testHook.setShouldRevertOnPoke(true);
 
         // Should propagate the revert
-        vm.expectRevert("Mock revert in _getFee");
+        vm.expectRevert("Mock revert in poke");
         testHook.poke(dynamicFeeKey, 5e17);
     }
 
     function test_poke_withDifferentCurrentRatios() public {
         uint24 baseFee = 750;
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(baseFee, 5e17, 6e17, oobState);
+        testHook.setMockFee(baseFee);
 
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
@@ -229,8 +209,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
 
     function test_poke_zeroCurrentRatio() public {
         uint24 expectedFee = 300;
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(expectedFee, 0, 0, oobState);
+        testHook.setMockFee(expectedFee);
 
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
@@ -244,8 +223,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
     function test_poke_maxCurrentRatio() public {
         uint24 expectedFee = 9999;
         uint256 maxRatio = type(uint256).max;
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(expectedFee, maxRatio, maxRatio, oobState);
+        testHook.setMockFee(expectedFee);
 
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
@@ -258,45 +236,27 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
 
     /* MOCK FUNCTIONALITY TESTS */
 
-    function test_mockValues_setAndRetrieve() public {
+    function test_mockFee_setAndRetrieve() public {
         uint24 expectedFee = 1500;
-        uint256 expectedOldRatio = 4e17;
-        uint256 expectedNewRatio = 7e17;
-        DynamicFeeLib.OobState memory expectedOobState =
-            DynamicFeeLib.OobState({lastOobWasUpper: true, consecutiveOobHits: 3});
 
-        // Set mock values
-        testHook.setMockValues(expectedFee, expectedOldRatio, expectedNewRatio, expectedOobState);
+        // Set mock fee
+        testHook.setMockFee(expectedFee);
 
-        // Verify values are set correctly
+        // Verify value is set correctly
         assertEq(testHook.mockFee(), expectedFee, "Mock fee should be set");
-        assertEq(testHook.mockOldTargetRatio(), expectedOldRatio, "Mock old target ratio should be set");
-        assertEq(testHook.mockNewTargetRatio(), expectedNewRatio, "Mock new target ratio should be set");
-
-        DynamicFeeLib.OobState memory retrievedOobState = testHook.getMockOobState();
-        assertEq(
-            retrievedOobState.lastOobWasUpper,
-            expectedOobState.lastOobWasUpper,
-            "Mock OOB state lastOobWasUpper should be set"
-        );
-        assertEq(
-            retrievedOobState.consecutiveOobHits,
-            expectedOobState.consecutiveOobHits,
-            "Mock OOB state consecutiveOobHits should be set"
-        );
     }
 
-    function test_shouldRevertOnGetFee_toggle() public {
+    function test_shouldRevertOnPoke_toggle() public {
         // Initially should not revert
-        assertFalse(testHook.shouldRevertOnGetFee(), "Should not revert initially");
+        assertFalse(testHook.shouldRevertOnPoke(), "Should not revert initially");
 
         // Set to revert
-        testHook.setShouldRevertOnGetFee(true);
-        assertTrue(testHook.shouldRevertOnGetFee(), "Should be set to revert");
+        testHook.setShouldRevertOnPoke(true);
+        assertTrue(testHook.shouldRevertOnPoke(), "Should be set to revert");
 
         // Set back to not revert
-        testHook.setShouldRevertOnGetFee(false);
-        assertFalse(testHook.shouldRevertOnGetFee(), "Should be set to not revert");
+        testHook.setShouldRevertOnPoke(false);
+        assertFalse(testHook.shouldRevertOnPoke(), "Should be set to not revert");
     }
 
     /* INTEGRATION TESTS */
@@ -306,8 +266,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
         uint24 newFee = 1250;
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(newFee, 5e17, 6e17, oobState);
+        testHook.setMockFee(newFee);
 
         // Get fee before poke
         (,,, uint24 feeBefore) = poolManager.getSlot0(dynamicFeeKey.toId());

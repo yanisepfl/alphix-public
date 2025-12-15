@@ -553,6 +553,309 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
     }
 
     /* ========================================================================== */
+    /*                    COMPUTE FEE UPDATE TESTS (DRY RUN)                   */
+    /* ========================================================================== */
+
+    /**
+     * @notice Fuzz test that computeFeeUpdate returns consistent results with poke
+     * @dev Verifies that the view function produces the same fee computations as poke
+     * @param currentRatio The ratio to test
+     */
+    function testFuzz_computeFeeUpdate_matchesPoke(uint256 currentRatio) public {
+        // Get pool configuration and params
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+
+        // Bound to valid range for the pool type
+        currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
+
+        // Call computeFeeUpdate (view function)
+        (
+            uint24 computedNewFee,
+            uint24 computedOldFee,
+            uint256 computedOldTargetRatio,
+            uint256 computedNewTargetRatio,
+        ) = logic.computeFeeUpdate(key, currentRatio);
+
+        // Now execute the actual poke
+        vm.prank(owner);
+        hook.poke(key, currentRatio);
+
+        // Get actual new fee from pool
+        (,,, uint24 actualNewFee) = poolManager.getSlot0(poolId);
+
+        // Verify computeFeeUpdate predicted correctly
+        assertEq(computedNewFee, actualNewFee, "computeFeeUpdate newFee should match poke result");
+        assertEq(computedOldFee, INITIAL_FEE, "computeFeeUpdate oldFee should match initial fee");
+
+        // Verify target ratio was computed
+        assertTrue(computedOldTargetRatio > 0, "Old target ratio should be non-zero");
+        assertTrue(computedNewTargetRatio > 0, "New target ratio should be non-zero");
+    }
+
+    /**
+     * @notice Fuzz test that computeFeeUpdate does not modify state
+     * @dev Verifies that calling computeFeeUpdate multiple times has no side effects
+     * @param currentRatio The ratio to test
+     * @param numCalls Number of times to call computeFeeUpdate (2-10)
+     */
+    function testFuzz_computeFeeUpdate_noStateChange(uint256 currentRatio, uint8 numCalls) public view {
+        // Get pool configuration and params
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+
+        // Bound inputs
+        currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
+        numCalls = uint8(bound(numCalls, 2, 10));
+
+        // Get initial state
+        (,,, uint24 initialFee) = poolManager.getSlot0(poolId);
+
+        // Call computeFeeUpdate multiple times
+        for (uint256 i = 0; i < numCalls; i++) {
+            (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio,,) = logic.computeFeeUpdate(key, currentRatio);
+
+            // All calls should return the same values (since no state changed)
+            if (i == 0) {
+                // First call establishes baseline
+                assertTrue(newFee >= params.minFee && newFee <= params.maxFee, "Fee should be in bounds");
+            }
+
+            // oldFee should always match current pool fee (unchanged)
+            assertEq(oldFee, initialFee, "oldFee should remain constant across calls");
+
+            // oldTargetRatio should remain constant (no state change)
+            assertEq(oldTargetRatio, cfg.initialTargetRatio, "oldTargetRatio should match initial");
+        }
+
+        // Verify pool fee hasn't changed
+        (,,, uint24 finalFee) = poolManager.getSlot0(poolId);
+        assertEq(finalFee, initialFee, "Pool fee should not change from computeFeeUpdate calls");
+    }
+
+    /**
+     * @notice Fuzz test that computeFeeUpdate can be called during cooldown
+     * @dev Unlike poke, computeFeeUpdate should not enforce cooldown
+     * @param currentRatio The ratio to test
+     */
+    function testFuzz_computeFeeUpdate_succeedsDuringCooldown(uint256 currentRatio) public {
+        // Get pool configuration and params
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+
+        // Bound to valid range
+        currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
+
+        // Execute a poke first
+        vm.prank(owner);
+        hook.poke(key, currentRatio);
+
+        // DON'T advance time - we're still in cooldown
+
+        // computeFeeUpdate should still work (no cooldown check)
+        (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio, uint256 newTargetRatio,) =
+            logic.computeFeeUpdate(key, currentRatio);
+
+        // Verify it returned valid results
+        assertTrue(newFee >= params.minFee && newFee <= params.maxFee, "Fee should be in bounds");
+        assertTrue(oldFee >= params.minFee && oldFee <= params.maxFee, "Old fee should be in bounds");
+        assertTrue(oldTargetRatio > 0, "Old target ratio should be non-zero");
+        assertTrue(newTargetRatio > 0, "New target ratio should be non-zero");
+
+        // But poke should still revert during cooldown
+        vm.prank(owner);
+        vm.expectRevert();
+        hook.poke(key, currentRatio);
+    }
+
+    /**
+     * @notice Fuzz test that computeFeeUpdate validates ratio bounds
+     * @dev Should revert on invalid ratios just like poke does
+     * @param invalidRatio A ratio outside valid bounds
+     */
+    function testFuzz_computeFeeUpdate_revertsOnInvalidRatio(uint256 invalidRatio) public {
+        // Get pool configuration
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+
+        // Test with ratio above max
+        invalidRatio = bound(invalidRatio, params.maxCurrentRatio + 1, type(uint256).max / 2);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, cfg.poolType, invalidRatio)
+        );
+        logic.computeFeeUpdate(key, invalidRatio);
+
+        // Test with zero ratio
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, cfg.poolType, 0));
+        logic.computeFeeUpdate(key, 0);
+    }
+
+    /**
+     * @notice Fuzz test computeFeeUpdate across pool types
+     * @dev Verifies computeFeeUpdate works correctly for all pool types
+     * @param poolTypeIndex Index to select pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @param testRatio Ratio to test
+     */
+    function testFuzz_computeFeeUpdate_acrossPoolTypes(uint8 poolTypeIndex, uint256 testRatio) public {
+        // Bound pool type index
+        poolTypeIndex = uint8(bound(poolTypeIndex, 0, 2));
+
+        // Map to pool type
+        IAlphixLogic.PoolType poolType;
+        if (poolTypeIndex == 0) poolType = IAlphixLogic.PoolType.STABLE;
+        else if (poolTypeIndex == 1) poolType = IAlphixLogic.PoolType.STANDARD;
+        else poolType = IAlphixLogic.PoolType.VOLATILE;
+
+        // Get pool type params and bound ratio
+        DynamicFeeLib.PoolTypeParams memory poolParams = logic.getPoolTypeParams(poolType);
+        testRatio = bound(testRatio, MIN_RATIO_FUZZ, poolParams.maxCurrentRatio);
+
+        // Get valid initial fee for pool type
+        uint24 validFee = uint24(bound(INITIAL_FEE, poolParams.minFee, poolParams.maxFee));
+
+        // Create pool with specific type
+        (PoolKey memory freshKey, PoolId freshPoolId) = _initPoolWithHook(
+            poolType,
+            validFee,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            _safeAddToTickSpacing(defaultTickSpacing, int24(200) + int24(uint24(poolTypeIndex)) * int24(20)),
+            Constants.SQRT_PRICE_1_1,
+            hook
+        );
+
+        // Wait past cooldown for poke comparison
+        vm.warp(block.timestamp + poolParams.minPeriod + 1);
+
+        // Call computeFeeUpdate
+        (uint24 computedNewFee, uint24 computedOldFee,,,) = logic.computeFeeUpdate(freshKey, testRatio);
+
+        // Execute actual poke
+        vm.prank(owner);
+        hook.poke(freshKey, testRatio);
+
+        // Get actual fee
+        (,,, uint24 actualNewFee) = poolManager.getSlot0(freshPoolId);
+
+        // Verify match
+        assertEq(computedNewFee, actualNewFee, "computeFeeUpdate should match poke for all pool types");
+        assertEq(computedOldFee, validFee, "Old fee should match initial fee");
+    }
+
+    /**
+     * @notice Fuzz test that computeFeeUpdate clamps newTargetRatio to maxCurrentRatio
+     * @dev Verifies the clamping logic: if (newTargetRatio > pp.maxCurrentRatio) newTargetRatio = pp.maxCurrentRatio
+     * @param highRatio A high current ratio that would push EMA above maxCurrentRatio
+     */
+    function testFuzz_computeFeeUpdate_clampsNewTargetRatioToMax(uint256 highRatio) public {
+        // Create a pool with a lower maxCurrentRatio to make clamping easier to trigger
+        DynamicFeeLib.PoolTypeParams memory customParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+
+        // Set maxCurrentRatio to a moderate value so we can exceed it with EMA
+        uint256 lowerMax = 5e20; // 500:1 ratio
+        customParams.maxCurrentRatio = lowerMax;
+
+        vm.prank(owner);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, customParams);
+
+        // Get updated params
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+
+        // Use a ratio at the max - EMA should produce newTargetRatio that gets clamped
+        // Start with initial target ratio lower, then push with max current ratio
+        highRatio = bound(highRatio, params.maxCurrentRatio - 1e19, params.maxCurrentRatio);
+
+        // Call computeFeeUpdate
+        (,,, uint256 newTargetRatio,) = logic.computeFeeUpdate(key, highRatio);
+
+        // The newTargetRatio should be clamped to maxCurrentRatio
+        assertTrue(newTargetRatio <= params.maxCurrentRatio, "newTargetRatio should be clamped to maxCurrentRatio");
+        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+    }
+
+    /**
+     * @notice Test that computeFeeUpdate properly clamps newTargetRatio when EMA would exceed max
+     * @dev This is a concrete test to ensure the clamping branch is hit
+     */
+    function test_computeFeeUpdate_clampsNewTargetRatioExplicit() public {
+        // Setup: Create a fresh pool with high initial target ratio
+        (PoolKey memory freshKey,) = _newUninitializedPoolWithHook(
+            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(300)), Constants.SQRT_PRICE_1_1, hook
+        );
+
+        // Get params for VOLATILE (has highest default maxCurrentRatio)
+        DynamicFeeLib.PoolTypeParams memory volParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
+
+        // Activate pool with target ratio at 90% of max
+        uint256 highInitialTarget = (volParams.maxCurrentRatio * 90) / 100;
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, highInitialTarget, IAlphixLogic.PoolType.VOLATILE);
+
+        // Now lower the maxCurrentRatio to force clamping
+        DynamicFeeLib.PoolTypeParams memory newParams = volParams;
+        newParams.maxCurrentRatio = (highInitialTarget * 80) / 100; // 80% of initial target
+
+        vm.prank(owner);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, newParams);
+
+        // Wait for cooldown
+        vm.warp(block.timestamp + newParams.minPeriod + 1);
+
+        // Call computeFeeUpdate with currentRatio at new max
+        // EMA will try to blend highInitialTarget with currentRatio, but both will be clamped
+        (,, uint256 oldTargetRatio, uint256 newTargetRatio,) =
+            logic.computeFeeUpdate(freshKey, newParams.maxCurrentRatio);
+
+        // oldTargetRatio should be clamped (it was highInitialTarget > newParams.maxCurrentRatio)
+        assertEq(oldTargetRatio, newParams.maxCurrentRatio, "oldTargetRatio should be clamped to new maxCurrentRatio");
+
+        // newTargetRatio should also be clamped or at max
+        assertTrue(newTargetRatio <= newParams.maxCurrentRatio, "newTargetRatio should not exceed maxCurrentRatio");
+        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+    }
+
+    /**
+     * @notice Fuzz test computeFeeUpdate with extreme ratio differences to stress EMA
+     * @dev Tests edge cases where currentRatio is much smaller than oldTargetRatio
+     * @param currentRatio The current ratio (will be bounded to valid range)
+     */
+    function testFuzz_computeFeeUpdate_extremeRatioDifference(uint256 currentRatio) public {
+        // Create pool with high initial target
+        (PoolKey memory freshKey,) = _newUninitializedPoolWithHook(
+            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(400)), Constants.SQRT_PRICE_1_1, hook
+        );
+
+        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+
+        // Set high initial target ratio (90% of max)
+        uint256 highTarget = (params.maxCurrentRatio * 90) / 100;
+        vm.prank(address(hook));
+        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, highTarget, IAlphixLogic.PoolType.STANDARD);
+
+        // Wait for cooldown
+        vm.warp(block.timestamp + params.minPeriod + 1);
+
+        // Use a very small currentRatio (but valid)
+        currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio / 100);
+
+        // computeFeeUpdate should handle this gracefully
+        (uint24 newFee,, uint256 oldTargetRatio, uint256 newTargetRatio,) =
+            logic.computeFeeUpdate(freshKey, currentRatio);
+
+        // Verify constraints
+        assertTrue(newFee >= params.minFee && newFee <= params.maxFee, "Fee should be in bounds");
+        assertEq(oldTargetRatio, highTarget, "oldTargetRatio should match initial");
+        assertTrue(newTargetRatio > 0, "newTargetRatio should be positive");
+        assertTrue(newTargetRatio <= params.maxCurrentRatio, "newTargetRatio should not exceed max");
+
+        // newTargetRatio should be between currentRatio and oldTargetRatio (EMA smoothing)
+        assertTrue(newTargetRatio <= oldTargetRatio, "newTargetRatio should decrease towards currentRatio");
+        assertTrue(newTargetRatio >= currentRatio, "newTargetRatio should not go below currentRatio");
+    }
+
+    /* ========================================================================== */
     /*                              HELPER FUNCTIONS                            */
     /* ========================================================================== */
 

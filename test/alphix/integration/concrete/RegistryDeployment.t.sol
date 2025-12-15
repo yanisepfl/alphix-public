@@ -12,6 +12,7 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* OZ IMPORTS */
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 /* SOLMATE IMPORTS */
 
@@ -284,6 +285,29 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         assertEq(reg2.getContract(IRegistry.ContractKey.Alphix), address(hook), "alphix");
         assertEq(reg2.getContract(IRegistry.ContractKey.AlphixLogic), address(logic), "logic");
+    }
+
+    /**
+     * @notice supportsInterface returns true for IRegistry interface
+     */
+    function test_supportsInterface_IRegistry() public view {
+        assertTrue(registry.supportsInterface(type(IRegistry).interfaceId), "should support IRegistry");
+    }
+
+    /**
+     * @notice supportsInterface returns true for IERC165 (ERC165 compliance)
+     */
+    function test_supportsInterface_IERC165() public view {
+        assertTrue(registry.supportsInterface(type(IERC165).interfaceId), "should support IERC165");
+    }
+
+    /**
+     * @notice supportsInterface returns false for unsupported interfaces
+     */
+    function test_supportsInterface_unsupported() public view {
+        // Use a fixed interface ID that is known to be unsupported
+        bytes4 unsupportedInterfaceId = 0x12345678;
+        assertFalse(registry.supportsInterface(unsupportedInterfaceId), "should not support interface");
     }
 
     /**

@@ -328,16 +328,20 @@ contract AlphixLogic is
     }
 
     /**
-     * @dev See {IAlphixLogic-computeFeeAndTargetRatio}.
+     * @dev See {IAlphixLogic-computeFeeUpdate}.
+     * @notice Pure computation of what a poke would produce, without any state changes.
      */
-    function computeFeeAndTargetRatio(PoolKey calldata key, uint256 currentRatio)
-        external
+    function computeFeeUpdate(PoolKey calldata key, uint256 currentRatio)
+        public
         view
         override
-        onlyAlphixHook
-        poolActivated(key)
-        whenNotPaused
-        returns (uint24 newFee, uint256 oldTargetRatio, uint256 newTargetRatio, DynamicFeeLib.OobState memory sOut)
+        returns (
+            uint24 newFee,
+            uint24 oldFee,
+            uint256 oldTargetRatio,
+            uint256 newTargetRatio,
+            DynamicFeeLib.OobState memory newOobState
+        )
     {
         PoolId poolId = key.toId();
         PoolType poolTypeCache = poolConfig[poolId].poolType;
@@ -348,63 +352,58 @@ contract AlphixLogic is
             revert InvalidRatioForPoolType(poolTypeCache, currentRatio);
         }
 
-        (,,, uint24 currentFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
-        oldTargetRatio = targetRatio[poolId];
+        // Get current fee from pool
+        (,,, oldFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
 
-        // Clamp oldTargetRatio to current pool-type cap
-        if (oldTargetRatio > pp.maxCurrentRatio) {
-            oldTargetRatio = pp.maxCurrentRatio;
+        uint256 maxCurrentRatioCache = pp.maxCurrentRatio;
+        // Load and clamp old target ratio
+        oldTargetRatio = targetRatio[poolId];
+        if (oldTargetRatio > maxCurrentRatioCache) {
+            oldTargetRatio = maxCurrentRatioCache;
         }
 
-        // Compute the new fee (the newFee is clamped as per its pool type)
-        (newFee, sOut) = DynamicFeeLib.computeNewFee(
-            currentFee, currentRatio, oldTargetRatio, globalMaxAdjRate, pp, oobState[poolId]
-        );
+        // Compute the new fee (clamped as per pool type)
+        (newFee, newOobState) =
+            DynamicFeeLib.computeNewFee(oldFee, currentRatio, oldTargetRatio, globalMaxAdjRate, pp, oobState[poolId]);
 
-        // Apply EMA for targetRatio update and clamp to current pool-type cap
+        // Compute new target ratio via EMA and clamp
         newTargetRatio = DynamicFeeLib.ema(currentRatio, oldTargetRatio, pp.lookbackPeriod);
-        if (newTargetRatio > pp.maxCurrentRatio) {
-            newTargetRatio = pp.maxCurrentRatio;
+        if (newTargetRatio > maxCurrentRatioCache) {
+            newTargetRatio = maxCurrentRatioCache;
+        }
+        if (newTargetRatio == 0) {
+            revert InvalidRatioForPoolType(poolTypeCache, newTargetRatio);
         }
     }
 
     /**
-     * @dev See {IAlphixLogic-finalizeAfterFeeUpdate}.
+     * @dev See {IAlphixLogic-poke}.
+     * @notice Encapsulates all fee computation and state update logic internally.
+     *         Alphix treats this as a black box: ratio in, fee + event data out.
      */
-    function finalizeAfterFeeUpdate(PoolKey calldata key, uint256 newTargetRatio, DynamicFeeLib.OobState calldata sOut)
+    function poke(PoolKey calldata key, uint256 currentRatio)
         external
         override
         onlyAlphixHook
         poolActivated(key)
         whenNotPaused
         nonReentrant
-        returns (uint256 targetRatioAfterUpdate)
+        returns (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio, uint256 newTargetRatio)
     {
         PoolId poolId = key.toId();
-        PoolType poolTypeCache = poolConfig[poolId].poolType;
-
-        // Cache only needed fields from poolTypeParams
-        uint256 minPeriodCache = poolTypeParams[poolTypeCache].minPeriod;
-        uint256 maxCurrentRatioCache = poolTypeParams[poolTypeCache].maxCurrentRatio;
 
         // Revert if cooldown not elapsed
-        uint256 nextTs = lastFeeUpdate[poolId] + minPeriodCache;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, minPeriodCache);
+        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[poolConfig[poolId].poolType];
+        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
 
-        // Update targetRatio (validate and clamp to current pool-type cap)
-        if (newTargetRatio == 0) {
-            revert InvalidRatioForPoolType(poolTypeCache, newTargetRatio);
-        }
-        if (newTargetRatio > maxCurrentRatioCache) {
-            newTargetRatio = maxCurrentRatioCache;
-        }
+        // Compute the fee update (view function does all the math)
+        DynamicFeeLib.OobState memory newOobState;
+        (newFee, oldFee, oldTargetRatio, newTargetRatio, newOobState) = computeFeeUpdate(key, currentRatio);
+
+        // Update storage
         targetRatio[poolId] = newTargetRatio;
-        targetRatioAfterUpdate = newTargetRatio;
-
-        // Update OOB state
-        oobState[poolId] = sOut;
-
-        // Update last fee update timestamp
+        oobState[poolId] = newOobState;
         lastFeeUpdate[poolId] = block.timestamp;
     }
 
@@ -461,7 +460,7 @@ contract AlphixLogic is
     function setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
         external
         override
-        onlyAlphixHook
+        onlyOwner
         whenNotPaused
     {
         _setPoolTypeParams(poolType, params);
@@ -470,7 +469,7 @@ contract AlphixLogic is
     /**
      * @dev See {IAlphixLogic-setGlobalMaxAdjRate}.
      */
-    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyAlphixHook whenNotPaused {
+    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyOwner whenNotPaused {
         _setGlobalMaxAdjRate(_globalMaxAdjRate);
     }
 
@@ -573,13 +572,13 @@ contract AlphixLogic is
             revert InvalidParameter();
         }
 
-        // side multipliers checks
+        // side multipliers checks (min 0.1x to allow dampening, max 10x)
         if (
-            params.upperSideFactor < AlphixGlobalConstants.ONE_WAD
+            params.upperSideFactor < AlphixGlobalConstants.ONE_TENTH_WAD
                 || params.upperSideFactor > AlphixGlobalConstants.TEN_WAD
         ) revert InvalidParameter();
         if (
-            params.lowerSideFactor < AlphixGlobalConstants.ONE_WAD
+            params.lowerSideFactor < AlphixGlobalConstants.ONE_TENTH_WAD
                 || params.lowerSideFactor > AlphixGlobalConstants.TEN_WAD
         ) revert InvalidParameter();
 

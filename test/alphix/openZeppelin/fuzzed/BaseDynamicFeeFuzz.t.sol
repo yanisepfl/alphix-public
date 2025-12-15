@@ -16,7 +16,6 @@ import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 
 /* LOCAL IMPORTS */
 import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
-import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 
 /**
@@ -25,44 +24,28 @@ import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
  */
 contract TestBaseDynamicFeeFuzz is BaseDynamicFee {
     uint24 public mockFee = 500;
-    uint256 public mockOldTargetRatio = 5e17;
-    uint256 public mockNewTargetRatio = 6e17;
-    DynamicFeeLib.OobState public mockOobState;
-    bool public shouldRevertOnGetFee = false;
+    bool public shouldRevertOnPoke = false;
 
     constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) {}
 
-    function _getFee(PoolKey calldata, uint256)
-        internal
-        view
-        override
-        returns (uint24, uint256, uint256, DynamicFeeLib.OobState memory)
-    {
-        if (shouldRevertOnGetFee) {
-            revert("Mock revert in _getFee");
+    /**
+     * @dev Implementation of abstract poke function
+     */
+    function poke(PoolKey calldata key, uint256) external override onlyValidPools(key.hooks) {
+        if (shouldRevertOnPoke) {
+            revert("Mock revert in poke");
         }
-        return (mockFee, mockOldTargetRatio, mockNewTargetRatio, mockOobState);
+        poolManager.updateDynamicLPFee(key, mockFee);
     }
 
     // Test helper functions
-    function setMockValues(
-        uint24 _fee,
-        uint256 _oldTargetRatio,
-        uint256 _newTargetRatio,
-        DynamicFeeLib.OobState memory _oobState
-    ) external {
+    // Note: Callers should ensure _fee is within [1, LPFeeLibrary.MAX_LP_FEE]; fuzz harness constrains inputs
+    function setMockFee(uint24 _fee) external {
         mockFee = _fee;
-        mockOldTargetRatio = _oldTargetRatio;
-        mockNewTargetRatio = _newTargetRatio;
-        mockOobState = _oobState;
     }
 
-    function getMockOobState() external view returns (DynamicFeeLib.OobState memory) {
-        return mockOobState;
-    }
-
-    function setShouldRevertOnGetFee(bool _shouldRevert) external {
-        shouldRevertOnGetFee = _shouldRevert;
+    function setShouldRevertOnPoke(bool _shouldRevert) external {
+        shouldRevertOnPoke = _shouldRevert;
     }
 
     // Expose internal functions for testing
@@ -96,10 +79,6 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
     // Ratio bounds
     uint256 constant MIN_RATIO_FUZZ = 1e12; // 0.0001%
     uint256 constant MAX_RATIO_FUZZ = 1e24; // 1,000,000x
-
-    // OOB state bounds
-    uint24 constant MIN_OOB_HITS_FUZZ = 0;
-    uint24 constant MAX_OOB_HITS_FUZZ = 100;
 
     /**
      * @notice Sets up test environment with test hook
@@ -170,9 +149,6 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         // Bound to valid sqrt price range (exclusive of MAX to avoid edge case rejection)
         sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE - 1));
 
-        // Ensure we're actually in valid range
-        vm.assume(sqrtPriceX96 >= TickMath.MIN_SQRT_PRICE && sqrtPriceX96 < TickMath.MAX_SQRT_PRICE);
-
         // Initialize the pool first
         poolManager.initialize(dynamicFeeKey, sqrtPriceX96);
 
@@ -207,27 +183,17 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @dev Fee should be updated to mock value regardless of input ratio
      * @param mockFee Fee to set in mock
      * @param currentRatio Current ratio to poke with
-     * @param oldTargetRatio Old target ratio
-     * @param newTargetRatio New target ratio
      */
-    function testFuzz_poke_success_validPool(
-        uint24 mockFee,
-        uint256 currentRatio,
-        uint256 oldTargetRatio,
-        uint256 newTargetRatio
-    ) public {
+    function testFuzz_poke_success_validPool(uint24 mockFee, uint256 currentRatio) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
-        oldTargetRatio = bound(oldTargetRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
-        newTargetRatio = bound(newTargetRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
-        // Set mock values
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, oobState);
+        // Set mock fee
+        testHook.setMockFee(mockFee);
 
         // Poke the pool
         testHook.poke(dynamicFeeKey, currentRatio);
@@ -235,46 +201,6 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         // Check fee was updated
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(newFee, mockFee, "Fee should be updated to mock value");
-    }
-
-    /**
-     * @notice Fuzz test that poke works with different OOB states
-     * @dev Should handle all valid OOB state combinations
-     * @param mockFee Fee to set
-     * @param currentRatio Current ratio
-     * @param lastOobWasUpper Whether last OOB was upper
-     * @param consecutiveOobHits Number of consecutive OOB hits
-     */
-    function testFuzz_poke_success_withDifferentOobStates(
-        uint24 mockFee,
-        uint256 currentRatio,
-        bool lastOobWasUpper,
-        uint24 consecutiveOobHits
-    ) public {
-        // Bound parameters
-        mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
-        currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
-        consecutiveOobHits = uint24(bound(consecutiveOobHits, MIN_OOB_HITS_FUZZ, MAX_OOB_HITS_FUZZ));
-
-        // Initialize pool
-        poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
-
-        // Set mock values with OOB state
-        DynamicFeeLib.OobState memory oobState =
-            DynamicFeeLib.OobState({lastOobWasUpper: lastOobWasUpper, consecutiveOobHits: consecutiveOobHits});
-        testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
-
-        // Poke the pool
-        testHook.poke(dynamicFeeKey, currentRatio);
-
-        // Check fee was updated
-        (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
-        assertEq(newFee, mockFee, "Fee should be updated to mock value");
-
-        // Verify OOB state was stored
-        DynamicFeeLib.OobState memory retrievedState = testHook.getMockOobState();
-        assertEq(retrievedState.lastOobWasUpper, lastOobWasUpper, "OOB state lastOobWasUpper should match");
-        assertEq(retrievedState.consecutiveOobHits, consecutiveOobHits, "OOB state consecutiveOobHits should match");
     }
 
     /**
@@ -288,11 +214,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
         currentRatio = bound(currentRatio, 0, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
-
-        // Initialize pool first
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         // Poke with ratio
         testHook.poke(dynamicFeeKey, currentRatio);
@@ -308,20 +232,14 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @notice Fuzz test that poke handles zero current ratio
      * @dev Zero ratio should be handled gracefully
      * @param mockFee Fee to set
-     * @param oldTargetRatio Old target ratio
-     * @param newTargetRatio New target ratio
      */
-    function testFuzz_poke_zeroCurrentRatio(uint24 mockFee, uint256 oldTargetRatio, uint256 newTargetRatio) public {
+    function testFuzz_poke_zeroCurrentRatio(uint24 mockFee) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
-        oldTargetRatio = bound(oldTargetRatio, 0, MAX_RATIO_FUZZ);
-        newTargetRatio = bound(newTargetRatio, 0, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, oobState);
-
-        // Initialize pool first
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         testHook.poke(dynamicFeeKey, 0);
 
@@ -337,13 +255,11 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
     function testFuzz_poke_maxCurrentRatio(uint24 mockFee) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
-
         uint256 maxRatio = MAX_RATIO_FUZZ;
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(mockFee, maxRatio, maxRatio, oobState);
 
-        // Initialize pool first
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         testHook.poke(dynamicFeeKey, maxRatio);
 
@@ -368,8 +284,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
         // Set initial fee
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(initialFee, 5e17, 6e17, oobState);
+        testHook.setMockFee(initialFee);
         testHook.poke(dynamicFeeKey, currentRatio);
 
         // Get fee before second poke
@@ -377,7 +292,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         assertEq(feeBefore, initialFee, "Initial fee should be set");
 
         // Update to new fee
-        testHook.setMockValues(newFee, 5e17, 6e17, oobState);
+        testHook.setMockFee(newFee);
         testHook.poke(dynamicFeeKey, currentRatio);
 
         // Get fee after poke
@@ -392,23 +307,14 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
      * @param useMinFee Whether to test min fee (true) or max fee (false)
      * @param currentRatio Current ratio
      */
-    function testFuzz_poke_boundaryFeeValues(
-        uint24,
-        /* feeAtBoundary */
-        bool useMinFee,
-        uint256 currentRatio
-    )
-        public
-    {
+    function testFuzz_poke_boundaryFeeValues(bool useMinFee, uint256 currentRatio) public {
         // Set fee to exact boundary
         uint24 mockFee = useMinFee ? MIN_FEE_FUZZ : MAX_FEE_FUZZ;
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
-
-        // Initialize pool
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         // Poke with boundary fee
         testHook.poke(dynamicFeeKey, currentRatio);
@@ -418,49 +324,19 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Fuzz test that mock values are set and retrieved correctly
-     * @dev All mock values should be stored and retrievable accurately
+     * @notice Fuzz test that mock fee is set and retrieved correctly
+     * @dev Mock fee should be stored and retrievable accurately
      * @param mockFee Fee to set
-     * @param oldTargetRatio Old target ratio
-     * @param newTargetRatio New target ratio
-     * @param lastOobWasUpper OOB state flag
-     * @param consecutiveOobHits OOB hit count
      */
-    function testFuzz_mockValues_setAndRetrieve(
-        uint24 mockFee,
-        uint256 oldTargetRatio,
-        uint256 newTargetRatio,
-        bool lastOobWasUpper,
-        uint24 consecutiveOobHits
-    ) public {
+    function testFuzz_mockFee_setAndRetrieve(uint24 mockFee) public {
         // Bound parameters
         mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
-        oldTargetRatio = bound(oldTargetRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
-        newTargetRatio = bound(newTargetRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
-        consecutiveOobHits = uint24(bound(consecutiveOobHits, MIN_OOB_HITS_FUZZ, MAX_OOB_HITS_FUZZ));
 
-        DynamicFeeLib.OobState memory expectedOobState =
-            DynamicFeeLib.OobState({lastOobWasUpper: lastOobWasUpper, consecutiveOobHits: consecutiveOobHits});
+        // Set mock fee
+        testHook.setMockFee(mockFee);
 
-        // Set mock values
-        testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, expectedOobState);
-
-        // Verify values are set correctly
+        // Verify value is set correctly
         assertEq(testHook.mockFee(), mockFee, "Mock fee should be set");
-        assertEq(testHook.mockOldTargetRatio(), oldTargetRatio, "Mock old target ratio should be set");
-        assertEq(testHook.mockNewTargetRatio(), newTargetRatio, "Mock new target ratio should be set");
-
-        DynamicFeeLib.OobState memory retrievedOobState = testHook.getMockOobState();
-        assertEq(
-            retrievedOobState.lastOobWasUpper,
-            expectedOobState.lastOobWasUpper,
-            "Mock OOB state lastOobWasUpper should be set"
-        );
-        assertEq(
-            retrievedOobState.consecutiveOobHits,
-            expectedOobState.consecutiveOobHits,
-            "Mock OOB state consecutiveOobHits should be set"
-        );
     }
 
     /**
@@ -478,11 +354,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         ratio2 = bound(ratio2, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
         ratio3 = bound(ratio3, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(mockFee, 5e17, 6e17, oobState);
-
-        // Initialize pool
+        // Standardized order: initialize → setMockFee → poke
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
+        testHook.setMockFee(mockFee);
 
         // First poke
         testHook.poke(dynamicFeeKey, ratio1);
@@ -501,39 +375,22 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Fuzz test that extreme ratio differences are handled
-     * @dev Should handle large differences between old and new target ratios
-     * @param mockFee Fee to set
-     * @param oldTargetRatio Old target ratio
-     * @param newTargetRatio New target ratio (different from old)
-     * @param currentRatio Current ratio
+     * @notice Fuzz test that poke reverts when configured to do so
+     * @dev Should propagate revert from poke implementation
+     * @param currentRatio Current ratio to test
      */
-    function testFuzz_poke_extremeRatioDifferences(
-        uint24 mockFee,
-        uint256 oldTargetRatio,
-        uint256 newTargetRatio,
-        uint256 currentRatio
-    ) public {
-        // Bound parameters
-        mockFee = uint24(bound(mockFee, MIN_FEE_FUZZ, MAX_FEE_FUZZ));
-        oldTargetRatio = bound(oldTargetRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ / 2);
-        newTargetRatio = bound(newTargetRatio, MAX_RATIO_FUZZ / 2, MAX_RATIO_FUZZ);
+    function testFuzz_poke_revertsWhenConfigured(uint256 currentRatio) public {
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, MAX_RATIO_FUZZ);
 
-        // Ensure they're different
-        vm.assume(oldTargetRatio != newTargetRatio);
-
-        DynamicFeeLib.OobState memory oobState;
-        testHook.setMockValues(mockFee, oldTargetRatio, newTargetRatio, oobState);
-
-        // Initialize pool
+        // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
-        // Poke should succeed even with extreme ratio differences
-        testHook.poke(dynamicFeeKey, currentRatio);
+        // Configure mock to revert
+        testHook.setShouldRevertOnPoke(true);
 
-        (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
-        assertEq(newFee, mockFee, "Should handle extreme ratio differences");
+        // Should propagate the revert
+        vm.expectRevert("Mock revert in poke");
+        testHook.poke(dynamicFeeKey, currentRatio);
     }
 
     /* ========================================================================== */

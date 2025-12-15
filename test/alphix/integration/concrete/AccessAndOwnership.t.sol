@@ -165,26 +165,26 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
     /**
      * @notice Only hook can call logic-onlyAlphixHook entrypoints; ownership changes on hook update the authority
      */
-    function test_only_hook_can_call_logic_endpoints_despite_ownership_changes() public {
-        // Confirm non-hook reverts on a restricted function
+    function test_only_owner_can_call_logic_admin_endpoints_despite_ownership_changes() public {
+        // Confirm non-owner reverts on a restricted function (now onlyOwner, not onlyAlphixHook)
         vm.prank(user1);
-        vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, user1));
         logic.setGlobalMaxAdjRate(1e19);
 
-        // Transfer hook ownership; only owner change on hook, but caller address must still be hook
-        address newOwner = makeAddr("newHookOwner2");
+        // Transfer logic ownership
+        address newOwner = makeAddr("newLogicOwner");
         vm.prank(owner);
-        hook.transferOwnership(newOwner);
+        AlphixLogic(address(logic)).transferOwnership(newOwner);
         vm.prank(newOwner);
-        hook.acceptOwnership();
+        AlphixLogic(address(logic)).acceptOwnership();
 
-        // Restricted path still only callable by hook address (not owners)
-        vm.prank(newOwner);
-        vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
+        // Old owner can no longer call
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, owner));
         logic.setGlobalMaxAdjRate(1e19);
 
-        // Hook itself can call
-        vm.prank(address(hook));
+        // New owner can call
+        vm.prank(newOwner);
         logic.setGlobalMaxAdjRate(1e19); // Should succeed
     }
 }

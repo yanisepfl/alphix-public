@@ -74,7 +74,7 @@ contract MockAlphixLogicTest is Test {
         );
     }
 
-    function test_mockReenteringLogic_computeFeeAndTargetRatio_attemptsReentry() public {
+    function test_mockReenteringLogic_poke_attemptsReentry() public {
         // Create a mock pool key
         PoolKey memory key = PoolKey({
             currency0: Currency.wrap(address(0)),
@@ -84,13 +84,15 @@ contract MockAlphixLogicTest is Test {
             hooks: IHooks(address(0))
         });
 
-        // This should revert when it tries to call poke on the mock hook address
-        // because the mock hook address (0x1234) doesn't have a poke function
+        // This should revert when it tries to call poke on the mock hook address (0x1234)
+        // because that address has no code. Since poke() returns values, calling an address
+        // without code will fail during ABI decoding of the empty return data. We use
+        // generic expectRevert since the specific error type may vary across EVM versions.
         vm.expectRevert();
-        mockReenteringLogic.computeFeeAndTargetRatio(key, 5e17);
+        mockReenteringLogic.poke(key, 5e17);
     }
 
-    function test_mockReenteringLogic_computeFeeAndTargetRatio_withMockHook() public {
+    function test_mockReenteringLogic_poke_withMockHook() public {
         // Deploy a mock hook that has a poke function to test the reentrancy attempt
         MockHookWithPoke mockHookWithPoke = new MockHookWithPoke();
         MockReenteringLogic reenteringLogic = new MockReenteringLogic(address(mockHookWithPoke));
@@ -104,15 +106,13 @@ contract MockAlphixLogicTest is Test {
         });
 
         // This should succeed and call the mock hook's poke function
-        (uint24 fee, uint256 oldRatio, uint256 newRatio, DynamicFeeLib.OobState memory oobState) =
-            reenteringLogic.computeFeeAndTargetRatio(key, 5e17);
+        (uint24 newFee, uint24 oldFee, uint256 oldRatio, uint256 newRatio) = reenteringLogic.poke(key, 5e17);
 
         // Verify the returned values match the mock implementation
-        assertEq(fee, 3000, "Should return mock fee");
+        assertEq(newFee, 3000, "Should return mock new fee");
+        assertEq(oldFee, 3000, "Should return mock old fee");
         assertEq(oldRatio, 0, "Should return zero old ratio");
         assertEq(newRatio, 0, "Should return zero new ratio");
-        assertFalse(oobState.lastOobWasUpper, "Should return false for lastOobWasUpper");
-        assertEq(oobState.consecutiveOobHits, 0, "Should return zero consecutive hits");
 
         // Verify the mock hook's poke was called
         assertTrue(mockHookWithPoke.pokeCalled(), "Poke should have been called");

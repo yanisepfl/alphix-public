@@ -85,10 +85,6 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     uint256 constant MIN_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.MIN_LINEAR_SLOPE;
     uint256 constant MAX_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.TEN_WAD; // 1e19 (contract maximum)
 
-    // Side factor bounds
-    uint256 constant MIN_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.ONE_WAD; // 1e18 (min allowed)
-    uint256 constant MAX_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.TEN_WAD; // 10e18 (max allowed)
-
     // BaseMaxFeeDelta bounds
     uint24 constant MIN_BASE_MAX_FEE_DELTA_FUZZ = 1;
     uint24 constant MAX_BASE_MAX_FEE_DELTA_FUZZ = 1000;
@@ -156,7 +152,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         });
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, baselineParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, baselineParams);
 
         // Create a new pool for this test to avoid PoolAlreadyConfigured error
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
@@ -247,7 +243,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         });
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, inBandParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, inBandParams);
 
         // Create a new pool for this test to avoid PoolAlreadyConfigured error
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
@@ -327,7 +323,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         // Ensure meaningful difference between parameters
         vm.assume(permissiveMaxFee > restrictiveMaxFee + 1000);
 
-        // Create restrictive and permissive parameter sets
+        // Create restrictive and permissive parameter sets with different maxFee values.
+        // NOTE: For structs in memory, assignment copies values. (Aliasing concerns apply when
+        // the struct contains reference-typed members like arrays/bytes/strings, which this struct does not.)
         DynamicFeeLib.PoolTypeParams memory restrictiveParams = DynamicFeeLib.PoolTypeParams({
             minFee: 1,
             maxFee: restrictiveMaxFee,
@@ -341,8 +339,18 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             lowerSideFactor: 2e18
         });
 
-        DynamicFeeLib.PoolTypeParams memory permissiveParams = restrictiveParams;
-        permissiveParams.maxFee = permissiveMaxFee;
+        DynamicFeeLib.PoolTypeParams memory permissiveParams = DynamicFeeLib.PoolTypeParams({
+            minFee: 1,
+            maxFee: permissiveMaxFee,
+            baseMaxFeeDelta: baseMaxFeeDelta,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 5e15,
+            linearSlope: 2e18,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
+            upperSideFactor: 1e18,
+            lowerSideFactor: 2e18
+        });
 
         // Use a ratio above tolerance to trigger fee adjustment
         uint256 testRatio =
@@ -368,7 +376,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Test with permissive parameters
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
 
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
         vm.prank(owner);
@@ -378,7 +386,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Test with restrictive parameters on separate pool
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
 
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
         vm.prank(owner);
@@ -386,14 +394,12 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         (,,, uint24 feeAfterRestrictive) = poolManager.getSlot0(restrictiveKey.toId());
 
-        // Verify fee bounds - algorithm may exceed maxFee with consecutive OOB hits
+        // Verify fee bounds
         assertTrue(feeAfterPermissive <= permissiveMaxFee, "Should not exceed permissive max fee");
 
-        // Document when restrictive bounds are exceeded for analysis
-        if (feeAfterRestrictive > restrictiveMaxFee) {
-            emit log_named_uint("Fee exceeds restrictive maxFee", feeAfterRestrictive);
-            emit log_named_uint("Restrictive maxFee bound", restrictiveMaxFee);
-        }
+        // DynamicFeeLib.clampFee() ensures the computed fee never exceeds the pool type's maxFee.
+        // This invariant holds even when params are modified mid-flight.
+        assertTrue(feeAfterRestrictive <= restrictiveMaxFee, "Fee should be clamped to restrictive maxFee");
 
         // Verify directional behavior: restrictive settings should produce smaller/equal fees when not hitting bounds
         // Both pools started from same initial conditions, so this comparison is valid
@@ -445,7 +451,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             _getAboveToleranceRatio(INITIAL_TARGET_RATIO, permissiveParams.ratioTolerance) + ratioDeviation;
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
 
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
         vm.prank(owner);
@@ -691,7 +697,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         });
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, testParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, testParams);
 
         // Test fee calculation with different ratio
         uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, testParams.ratioTolerance) + ratioDeviation;
@@ -770,9 +776,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         vm.prank(owner);
         if (shouldRevert) {
             vm.expectRevert();
-            hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
+            logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
         } else {
-            hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
+            logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
             // Verify the parameters were set correctly
             DynamicFeeLib.PoolTypeParams memory retrieved = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
             assertEq(retrieved.minFee, minFee, "minFee mismatch");
@@ -819,7 +825,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         });
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, extremeParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, extremeParams);
 
         vm.warp(block.timestamp + extremeParams.minPeriod + 1);
 
@@ -1016,14 +1022,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Poke pool1 with params1
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params1);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params1);
         vm.warp(block.timestamp + params1.minPeriod + 1);
         vm.prank(owner);
         hook.poke(testData.key1, testData.testRatio);
 
         // Poke pool2 with params2
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params2);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params2);
         vm.warp(block.timestamp + params2.minPeriod + 1);
         vm.prank(owner);
         hook.poke(testData.key2, testData.testRatio);
@@ -1255,7 +1261,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Set short lookback params
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, shortParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, shortParams);
 
         // Initial poke
         vm.warp(block.timestamp + shortParams.minPeriod + 1);
@@ -1275,7 +1281,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Set long lookback params
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, longParams);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, longParams);
 
         // Initial poke
         vm.warp(block.timestamp + longParams.minPeriod + 1);
@@ -1556,13 +1562,13 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Set parameters and poke each pool
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params1);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params1);
         vm.warp(block.timestamp + params1.minPeriod + 1);
         vm.prank(owner);
         hook.poke(testData.key1, testData.testRatio);
 
         vm.prank(owner);
-        hook.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params2);
+        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params2);
         vm.warp(block.timestamp + params2.minPeriod + 1);
         vm.prank(owner);
         hook.poke(testData.key2, testData.testRatio);

@@ -48,8 +48,8 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
     uint256 constant MIN_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.MIN_LINEAR_SLOPE;
     uint256 constant MAX_LINEAR_SLOPE_FUZZ = AlphixGlobalConstants.TEN_WAD;
 
-    // Side factor bounds
-    uint256 constant MIN_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.ONE_WAD;
+    // Side factor bounds (min 0.1x to allow dampening, max 10x)
+    uint256 constant MIN_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.ONE_TENTH_WAD;
     uint256 constant MAX_SIDE_FACTOR_FUZZ = AlphixGlobalConstants.TEN_WAD;
 
     // BaseMaxFeeDelta bounds
@@ -166,7 +166,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         params.minFee = minFee;
         params.maxFee = maxFee;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -193,7 +193,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         params.minFee = minFee;
         params.maxFee = maxFee;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, minFee, maxFee));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -211,7 +211,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         uint24 minFee = params.minFee;
         params.maxFee = excessiveFee;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, minFee, excessiveFee));
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -232,7 +232,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.baseMaxFeeDelta = baseMaxFeeDelta;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -257,7 +257,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.baseMaxFeeDelta = baseMaxFeeDelta;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -278,7 +278,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.minPeriod = minPeriod;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -304,7 +304,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.minPeriod = minPeriod;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -325,7 +325,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.lookbackPeriod = lookbackPeriod;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -351,7 +351,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.lookbackPeriod = lookbackPeriod;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -372,7 +372,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.ratioTolerance = ratioTolerance;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -398,7 +398,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.ratioTolerance = ratioTolerance;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -419,7 +419,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.linearSlope = linearSlope;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -445,7 +445,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.linearSlope = linearSlope;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -471,7 +471,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         params.upperSideFactor = upperSideFactor;
         params.lowerSideFactor = lowerSideFactor;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -506,7 +506,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
             params.lowerSideFactor = sideFactor;
         }
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -527,7 +527,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.maxCurrentRatio = maxCurrentRatio;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify params were set
@@ -553,7 +553,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
         DynamicFeeLib.PoolTypeParams memory params = _createValidParams();
         params.maxCurrentRatio = maxCurrentRatio;
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         vm.expectRevert(IAlphixLogic.InvalidParameter.selector);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
     }
@@ -616,7 +616,7 @@ contract AlphixLogicPoolManagementFuzzTest is BaseAlphixTest {
             lowerSideFactor: lowerSideFactor
         });
 
-        vm.prank(address(hook));
+        vm.prank(owner);
         logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, params);
 
         // Verify all params were set correctly
