@@ -73,7 +73,7 @@ contract SwapUniversalRouterScript is Script {
 
         config.universalRouter = _getEnvAddress("UNIVERSAL_ROUTER_", config.network);
         config.poolManager = _getEnvAddress("POOL_MANAGER_", config.network);
-        config.token0Addr = _getEnvAddress("DEPLOYMENT_TOKEN0_", config.network);
+        config.token0Addr = _getEnvAddressAllowZero("DEPLOYMENT_TOKEN0_", config.network); // Allow zero for native ETH
         config.token1Addr = _getEnvAddress("DEPLOYMENT_TOKEN1_", config.network);
         config.tickSpacing = int24(uint24(_getEnvUint("POOL_TICK_SPACING_", config.network)));
         config.hookAddr = _getEnvAddress("ALPHIX_HOOK_", config.network);
@@ -303,6 +303,12 @@ contract SwapUniversalRouterScript is Script {
         address addr = vm.envAddress(envVar);
         require(addr != address(0), string.concat(envVar, " not set or invalid"));
         return addr;
+    }
+
+    /// @dev Like _getEnvAddress but allows zero address (for native ETH)
+    function _getEnvAddressAllowZero(string memory prefix, string memory network) internal view returns (address) {
+        string memory envVar = string.concat(prefix, network);
+        return vm.envAddress(envVar);
     }
 
     function _getEnvUint(string memory prefix, string memory network) internal view returns (uint256) {
