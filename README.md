@@ -250,4 +250,9 @@ Alphix builds on top of Uniswap V4, leveraging its new **[Hook Feature](#hooks)*
 
 ## License
 
-This code is released under the **MIT License**.
+This project is licensed under the **Business Source License 1.1 (BUSL-1.1)**.
+
+- **Change Date:** December 25, 2028
+- **Change License:** MIT
+
+After the Change Date, the code will be available under the MIT License. See [LICENSE](./LICENSE) for full terms.
