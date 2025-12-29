@@ -926,7 +926,8 @@ contract OlympixMutationsTest is BaseAlphixTest {
         });
 
         // Try to initialize pool on pool manager - should fail because logic is not set
-        // The error is wrapped by PoolManager
+        // The error is wrapped by PoolManager using CustomRevert.WrappedError with dynamic parameters,
+        // making precise matching complex. Bare expectRevert() is acceptable per ERC-7751.
         vm.expectRevert();
         poolManager.initialize(uninitKey, Constants.SQRT_PRICE_1_1);
 
