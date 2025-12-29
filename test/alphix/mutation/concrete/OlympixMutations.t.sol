@@ -16,6 +16,10 @@ import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManage
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+/* BASE HOOK IMPORTS */
+import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
@@ -461,7 +465,7 @@ contract OlympixMutationsTest is BaseAlphixTest {
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
         vm.prank(user1);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
     }
 
@@ -754,7 +758,7 @@ contract OlympixMutationsTest is BaseAlphixTest {
      */
     function test_mutation_setPoolTypeParamsRequiresOwner() public {
         vm.prank(user1);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         AlphixLogic(address(logicProxy)).setPoolTypeParams(IAlphixLogic.PoolType.STABLE, stableParams);
     }
 
@@ -815,7 +819,7 @@ contract OlympixMutationsTest is BaseAlphixTest {
      */
     function test_mutation_setGlobalMaxAdjRateRequiresOwner() public {
         vm.prank(user1);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         AlphixLogic(address(logicProxy)).setGlobalMaxAdjRate(5e18);
     }
 
@@ -965,7 +969,7 @@ contract OlympixMutationsTest is BaseAlphixTest {
         PoolKey memory inactiveKey = _createDeactivatedPool();
 
         vm.prank(user1);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.activatePool(inactiveKey);
     }
 
@@ -975,7 +979,7 @@ contract OlympixMutationsTest is BaseAlphixTest {
      */
     function test_mutation_deactivatePoolRequiresOwner() public {
         vm.prank(user1);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         hook.deactivatePool(key);
     }
 
@@ -1093,7 +1097,7 @@ contract OlympixMutationsTest is BaseAlphixTest {
         });
 
         vm.prank(owner);
-        vm.expectRevert();
+        vm.expectRevert(BaseHook.InvalidPool.selector);
         hook.poke(badKey, 1e18);
     }
 
