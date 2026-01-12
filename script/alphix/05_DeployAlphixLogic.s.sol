@@ -16,6 +16,7 @@ import {AlphixLogic} from "../../src/AlphixLogic.sol";
  * ARCHITECTURE: Single-Pool-Per-Hook Design
  * Each AlphixLogic proxy is paired with exactly ONE Alphix Hook and manages ONE pool.
  * AlphixLogic is an ERC20 token - LP shares are transferable tokens.
+ * This script is where the LP share token name and symbol are configured.
  *
  * To deploy multiple pools, you need to:
  * 1. Deploy a new Alphix Hook (script 04) - requires CREATE2 mining

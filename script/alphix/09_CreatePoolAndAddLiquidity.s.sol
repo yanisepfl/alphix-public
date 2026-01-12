@@ -154,6 +154,7 @@ contract CreatePoolAndAddLiquidityScript is Script {
 
         // Load pool params from environment or use defaults
         // These can be customized per-deployment for fine-tuning
+        // NOTE: This is where pool-specific fee bounds and parameters are configured
         config.poolParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 100001, // Wide range
