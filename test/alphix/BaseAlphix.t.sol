@@ -76,6 +76,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 constant UNIT = 1e18;
     uint64 constant FEE_POKER_ROLE = 1;
     uint64 constant REGISTRAR_ROLE = 2;
+    uint64 constant YIELD_MANAGER_ROLE = 3;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
@@ -110,10 +111,8 @@ abstract contract BaseAlphixTest is Test, Deployers {
     int24 public tickUpper;
     int24 public defaultTickSpacing;
 
-    // Unified per-pool-type parameters
-    DynamicFeeLib.PoolTypeParams public stableParams;
-    DynamicFeeLib.PoolTypeParams public standardParams;
-    DynamicFeeLib.PoolTypeParams public volatileParams;
+    // Default pool parameters (used for single-pool-per-hook architecture)
+    DynamicFeeLib.PoolParams public defaultPoolParams;
 
     // Namespace so each hook salt/address is unique
     uint16 private hookNamespace;
@@ -137,8 +136,8 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
         vm.startPrank(owner);
 
-        // Setup unified PoolTypeParams
-        _initializePoolTypeParams();
+        // Setup default pool params
+        _initializeDefaultPoolParams();
 
         // Deploy a default Alphix Infrastructure (AccessManager, Registry, Hook, Logic)
         (accessManager, registry, hook, logicImplementation, logicProxy, logic) =
@@ -157,7 +156,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         poolManager.initialize(key, Constants.SQRT_PRICE_1_1);
 
         // Initialize pool (Alphix side)
-        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
 
         // Seed initial liquidity
         _seedInitialLiquidity();
@@ -166,45 +165,19 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
-     * @notice Initializes the unified parameters for different pool types
-     * @dev Sets up stable, standard, and volatile pool params with e.g. fee bounds, lookbackPeriod etc.
+     * @notice Initializes the default pool parameters
+     * @dev Sets up default params for single-pool-per-hook architecture
      */
-    function _initializePoolTypeParams() internal {
-        stableParams = DynamicFeeLib.PoolTypeParams({
+    function _initializeDefaultPoolParams() internal {
+        defaultPoolParams = DynamicFeeLib.PoolParams({
             minFee: 1,
-            maxFee: 5001,
-            baseMaxFeeDelta: 25,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: 1e21, // 1000x for stable pools
-            upperSideFactor: 1e18,
-            lowerSideFactor: 2e18
-        });
-
-        standardParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 99,
-            maxFee: 10001,
+            maxFee: 100001, // Wide range to support various pool types
             baseMaxFeeDelta: 50,
             lookbackPeriod: 30,
             minPeriod: 1 days,
-            ratioTolerance: 5e16,
+            ratioTolerance: 5e15,
             linearSlope: 1e18,
-            maxCurrentRatio: 1e21, // 1000x for standard pools
-            upperSideFactor: 1e18,
-            lowerSideFactor: 2e18
-        });
-
-        volatileParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 499,
-            maxFee: 100001,
-            baseMaxFeeDelta: 500,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 1e16,
-            linearSlope: 5e17,
-            maxCurrentRatio: 1e21, // 1000x for volatile pools
+            maxCurrentRatio: 1e21, // 1000x
             upperSideFactor: 1e18,
             lowerSideFactor: 2e18
         });
@@ -240,7 +213,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         newHook = _deployAlphixHook(pm, alphixOwner, am, reg);
 
         // Logic implementation + proxy (initialize sets per-type params and default global max adj rate)
-        (impl, proxy, newLogic) = _deployAlphixLogic(alphixOwner, address(newHook));
+        (impl, proxy, newLogic) = _deployAlphixLogic(alphixOwner, address(newHook), address(am));
 
         // Finalize Hook initialization (unpauses)
         newHook.initialize(address(newLogic));
@@ -267,25 +240,71 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
     /**
      * @notice Deploy Alphix Logic
-     * @dev Deploys implementation and proxy and initializes it with provided owner, hook, base fee, and per-type params
+     * @dev Deploys implementation and proxy and initializes it with provided owner, hook, and accessManager.
+     *      Pool params are now passed at pool activation via initializePool(), not at AlphixLogic deployment.
      * @param alphixOwner The logic admin
      * @param hookAddr The hook address to wire
+     * @param accessManagerAddr The AccessManager address for YIELD_MANAGER_ROLE gating
      * @return impl AlphixLogic implementation
      * @return proxy ERC1967Proxy instance
      * @return newLogic IAlphixLogic interface
      */
-    function _deployAlphixLogic(address alphixOwner, address hookAddr)
+    function _deployAlphixLogic(address alphixOwner, address hookAddr, address accessManagerAddr)
         internal
         returns (AlphixLogic impl, ERC1967Proxy proxy, IAlphixLogic newLogic)
     {
         impl = new AlphixLogic();
 
-        // AlphixLogic.initialize(owner, hook, baseFee, stable, standard, volatile)
+        // AlphixLogic.initialize(owner, hook, accessManager, name, symbol)
         bytes memory initData =
-            abi.encodeCall(impl.initialize, (alphixOwner, hookAddr, stableParams, standardParams, volatileParams));
+            abi.encodeCall(impl.initialize, (alphixOwner, hookAddr, accessManagerAddr, "Alphix LP Shares", "ALP"));
 
         proxy = new ERC1967Proxy(address(impl), initData);
         newLogic = IAlphixLogic(address(proxy));
+    }
+
+    /**
+     * @notice Deploy a fresh Alphix infrastructure (Hook + Logic) without initializing a pool.
+     * @dev Used by tests that need to test pool initialization on a clean hook.
+     *      Each call deploys a completely fresh AccessManager, Registry, Hook, and Logic.
+     *      Automatically pranks as owner during deployment.
+     * @return freshHook The new hook
+     * @return freshLogic The new logic interface
+     */
+    function _deployFreshAlphixStack() internal returns (Alphix freshHook, IAlphixLogic freshLogic) {
+        // Deploy fresh infrastructure (must be as owner for AccessManager operations)
+        vm.startPrank(owner);
+        (,, Alphix newHook,,, IAlphixLogic newLogic) = _deployAlphixInfrastructure(poolManager, owner);
+        vm.stopPrank();
+
+        freshHook = newHook;
+        freshLogic = newLogic;
+    }
+
+    /**
+     * @notice Deploy a fresh Alphix infrastructure (Hook + Logic) without initializing a pool,
+     *         returning also the AccessManager for role management.
+     * @dev Used by tests that need access to the AccessManager for role manipulation.
+     *      Automatically pranks as owner during deployment.
+     * @return freshHook The new hook
+     * @return freshLogic The new logic interface
+     * @return freshAccessManager The new AccessManager for this hook
+     * @return freshRegistry The new Registry for this hook
+     */
+    function _deployFreshAlphixStackFull()
+        internal
+        returns (Alphix freshHook, IAlphixLogic freshLogic, AccessManager freshAccessManager, Registry freshRegistry)
+    {
+        // Deploy fresh infrastructure (must be as owner for AccessManager operations)
+        vm.startPrank(owner);
+        (AccessManager freshAm, Registry freshReg, Alphix newHook,,, IAlphixLogic newLogic) =
+            _deployAlphixInfrastructure(poolManager, owner);
+        vm.stopPrank();
+
+        freshHook = newHook;
+        freshLogic = newLogic;
+        freshAccessManager = freshAm;
+        freshRegistry = freshReg;
     }
 
     /**
@@ -348,14 +367,14 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
     /**
      * @notice Deploys a pool with custom token decimals and initializes it in Alphix
-     * @dev Creates currencies, pool key, initializes in Uniswap, and configures in Alphix
+     * @dev Creates currencies, pool key, initializes in Uniswap, and configures in Alphix.
+     *      Uses defaultPoolParams for pool configuration.
      */
     function deployPoolWithDecimals(
         uint8 decimals0,
         uint8 decimals1,
         int24 tickSpacing,
         Alphix _hook,
-        IAlphixLogic.PoolType poolType,
         uint24 initialFee,
         uint256 targetRatio
     ) internal returns (PoolKey memory _key, PoolId _poolId) {
@@ -366,7 +385,31 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
         poolManager.initialize(_key, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        _hook.initializePool(_key, initialFee, targetRatio, poolType);
+        _hook.initializePool(_key, initialFee, targetRatio, defaultPoolParams);
+        return (_key, _poolId);
+    }
+
+    /**
+     * @notice Deploys a pool with custom token decimals and custom pool params
+     * @dev Creates currencies, pool key, initializes in Uniswap, and configures in Alphix.
+     */
+    function deployPoolWithDecimalsAndParams(
+        uint8 decimals0,
+        uint8 decimals1,
+        int24 tickSpacing,
+        Alphix _hook,
+        uint24 initialFee,
+        uint256 targetRatio,
+        DynamicFeeLib.PoolParams memory poolParams
+    ) internal returns (PoolKey memory _key, PoolId _poolId) {
+        (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(decimals0, decimals1);
+        // forge-lint: disable-next-line(named-struct-fields)
+        _key = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing, IHooks(_hook));
+        _poolId = _key.toId();
+
+        poolManager.initialize(_key, Constants.SQRT_PRICE_1_1);
+        vm.prank(owner);
+        _hook.initializePool(_key, initialFee, targetRatio, poolParams);
         return (_key, _poolId);
     }
 
@@ -461,18 +504,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
-     * @notice Bounds a raw uint8 to a valid PoolType enum for fuzzing
-     * @param raw Raw fuzzed value
-     * @return Bounded PoolType (STABLE, STANDARD, or VOLATILE)
-     */
-    function _boundPoolType(uint8 raw) internal pure returns (IAlphixLogic.PoolType) {
-        uint8 bounded = uint8(bound(raw, 0, 2));
-        if (bounded == 0) return IAlphixLogic.PoolType.STABLE;
-        if (bounded == 1) return IAlphixLogic.PoolType.STANDARD;
-        return IAlphixLogic.PoolType.VOLATILE;
-    }
-
-    /**
      * @notice Sets up AccessManager roles for the registry and hook
      * @dev Grants registrar role to Hook and poker role to owner, sets function-level permissions
      */
@@ -500,6 +531,26 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
+     * @notice Configure YIELD_MANAGER_ROLE for AlphixLogic
+     * @dev Grants the role to the specified address and sets function-level permissions
+     * @param yieldManagerAddr The address to grant YIELD_MANAGER_ROLE
+     * @param am The AccessManager instance
+     * @param logicAddr The AlphixLogic proxy address
+     */
+    function _setupYieldManagerRole(address yieldManagerAddr, AccessManager am, address logicAddr) internal {
+        // Grant yield manager role
+        am.grantRole(YIELD_MANAGER_ROLE, yieldManagerAddr, 0);
+
+        // Assign yield manager role to specific functions on AlphixLogic
+        bytes4[] memory yieldManagerSelectors = new bytes4[](4);
+        yieldManagerSelectors[0] = AlphixLogic(logicAddr).setYieldSource.selector;
+        yieldManagerSelectors[1] = AlphixLogic(logicAddr).setTickRange.selector;
+        yieldManagerSelectors[2] = AlphixLogic(logicAddr).setYieldTaxPips.selector;
+        yieldManagerSelectors[3] = AlphixLogic(logicAddr).setYieldTreasury.selector;
+        am.setTargetFunctionRole(logicAddr, yieldManagerSelectors, YIELD_MANAGER_ROLE);
+    }
+
+    /**
      * @notice Create a new Uniswap pool bound to a given hook without configuring it.
      * @param d0 Decimals for token0
      * @param d1 Decimals for token1
@@ -520,7 +571,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
     /**
      * @notice Create and initialize a pool in Alphix for a given hook with supplied params.
-     * @param ptype Pool type for Alphix configuration
+     * @dev Uses defaultPoolParams for pool configuration.
      * @param fee Initial dynamic LP fee
      * @param ratio Initial target ratio
      * @param d0 Decimals for token0
@@ -530,7 +581,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
      * @param _hook Hook to bind in the PoolKey (IHooks)
      */
     function _initPoolWithHook(
-        IAlphixLogic.PoolType ptype,
         uint24 fee,
         uint256 ratio,
         uint8 d0,
@@ -541,7 +591,33 @@ abstract contract BaseAlphixTest is Test, Deployers {
     ) internal returns (PoolKey memory k, PoolId id) {
         (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, _hook);
         vm.prank(_hook.owner());
-        _hook.initializePool(k, fee, ratio, ptype);
+        _hook.initializePool(k, fee, ratio, defaultPoolParams);
+    }
+
+    /**
+     * @notice Create and initialize a pool in Alphix for a given hook with custom pool params.
+     * @param fee Initial dynamic LP fee
+     * @param ratio Initial target ratio
+     * @param d0 Decimals for token0
+     * @param d1 Decimals for token1
+     * @param spacing Tick spacing for the pool
+     * @param initialPrice Sqrt price at initialization (X96)
+     * @param _hook Hook to bind in the PoolKey (IHooks)
+     * @param poolParams Custom pool parameters
+     */
+    function _initPoolWithHookAndParams(
+        uint24 fee,
+        uint256 ratio,
+        uint8 d0,
+        uint8 d1,
+        int24 spacing,
+        uint160 initialPrice,
+        Alphix _hook,
+        DynamicFeeLib.PoolParams memory poolParams
+    ) internal returns (PoolKey memory k, PoolId id) {
+        (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, _hook);
+        vm.prank(_hook.owner());
+        _hook.initializePool(k, fee, ratio, poolParams);
     }
 
     /**

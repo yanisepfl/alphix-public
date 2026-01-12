@@ -12,7 +12,6 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /* LOCAL IMPORTS */
 import {IRegistry} from "./interfaces/IRegistry.sol";
-import {IAlphixLogic} from "./interfaces/IAlphixLogic.sol";
 
 /**
  * @title Registry.
@@ -63,12 +62,11 @@ contract Registry is AccessManaged, ERC165, IRegistry {
     /**
      * @dev See {IRegistry-registerPool}.
      */
-    function registerPool(
-        PoolKey calldata key,
-        IAlphixLogic.PoolType poolType,
-        uint24 _initialFee,
-        uint256 _initialTargetRatio
-    ) external override restricted {
+    function registerPool(PoolKey calldata key, uint24 _initialFee, uint256 _initialTargetRatio)
+        external
+        override
+        restricted
+    {
         PoolId poolId = key.toId();
         if (pools[poolId].timestamp != 0) {
             revert PoolAlreadyRegistered(poolId);
@@ -78,20 +76,27 @@ contract Registry is AccessManaged, ERC165, IRegistry {
         address token0 = Currency.unwrap(key.currency0);
         address token1 = Currency.unwrap(key.currency1);
         uint256 currentTimestamp = block.timestamp;
+        address hookAddress = address(key.hooks);
 
         pools[poolId] = PoolInfo({
             token0: token0,
             token1: token1,
             fee: key.fee,
             tickSpacing: key.tickSpacing,
-            hooks: address(key.hooks),
+            hooks: hookAddress,
             initialFee: _initialFee,
             initialTargetRatio: _initialTargetRatio,
-            timestamp: currentTimestamp,
-            poolType: poolType
+            timestamp: currentTimestamp
         });
         allPools.push(poolId);
-        emit PoolRegistered(poolId, token0, token1, currentTimestamp, poolType);
+        emit PoolRegistered(poolId, token0, token1, currentTimestamp, hookAddress);
+    }
+
+    /**
+     * @dev See {IRegistry-getHookForPool}.
+     */
+    function getHookForPool(PoolId poolId) external view override returns (address) {
+        return pools[poolId].hooks;
     }
 
     /* VIEW FUNCTIONS */

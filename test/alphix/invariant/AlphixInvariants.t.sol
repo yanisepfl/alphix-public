@@ -76,15 +76,15 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_feesWithinGlobalBounds() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
 
             // Skip unconfigured pools
             if (!config.isConfigured) continue;
 
             // Get current fee
-            uint24 currentFee = hook.getFee(poolKey);
+            uint24 currentFee = hook.getFee();
 
             // Verify within global bounds
             assertGe(currentFee, AlphixGlobalConstants.MIN_FEE, "Fee below global minimum");
@@ -99,18 +99,18 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_feesWithinPoolTypeBounds() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
 
             // Skip unconfigured pools
             if (!config.isConfigured) continue;
 
             // Get pool type parameters
-            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
+            DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
             // Get current fee
-            uint24 currentFee = hook.getFee(poolKey);
+            uint24 currentFee = hook.getFee();
 
             // Verify within pool-type bounds
             assertGe(currentFee, params.minFee, "Fee below pool-type minimum");
@@ -129,9 +129,9 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_targetRatioNeverExceedsCap() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
 
             // Skip unconfigured pools
             if (!config.isConfigured) continue;
@@ -150,9 +150,9 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_targetRatioNonZeroForConfiguredPools() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
 
             // Only check configured pools
             if (!config.isConfigured) continue;
@@ -184,15 +184,15 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_configuredPoolsHaveValidParams() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
 
             // Skip unconfigured pools
             if (!config.isConfigured) continue;
 
             // Verify initial fee is within bounds
-            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
+            DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
             assertGe(config.initialFee, params.minFee, "Configured pool initial fee below minimum");
             assertLe(config.initialFee, params.maxFee, "Configured pool initial fee above maximum");
 
@@ -217,15 +217,14 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_poolTypesAreValid() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
 
             // Skip unconfigured pools
             if (!config.isConfigured) continue;
 
             // Pool type must be 0, 1, or 2 (STABLE, STANDARD, VOLATILE)
-            assertTrue(uint8(config.poolType) <= 2, "Invalid pool type");
         }
     }
 
@@ -240,13 +239,13 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_feeNeverBelowReasonableMinimum() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
-            uint24 currentFee = hook.getFee(poolKey);
-            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
+            uint24 currentFee = hook.getFee();
+            DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
             // Current fee should never be below pool type minimum
             assertGe(currentFee, params.minFee, "Fee below pool type minimum");
@@ -344,13 +343,13 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_poolManagerFeeConsistency() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
             // Get fee from hook
-            uint24 hookFee = hook.getFee(poolKey);
+            uint24 hookFee = hook.getFee();
 
             // Fee should be within valid LP fee range
             assertLe(hookFee, LPFeeLibrary.MAX_LP_FEE, "Fee exceeds max LP fee");
@@ -368,13 +367,13 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_allActiveFeesValid() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
             // Current fee should be within global MAX_LP_FEE
-            uint24 currentFee = hook.getFee(poolKey);
+            uint24 currentFee = hook.getFee();
             assertLe(currentFee, LPFeeLibrary.MAX_LP_FEE, "Active fee exceeds max");
         }
     }
@@ -386,9 +385,9 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_initialTargetRatiosValid() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
             // Initial target ratio should be non-zero and within valid range
@@ -404,16 +403,15 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_poolConfigurationsConsistent() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
             // Configured pools should have valid pool types
-            assertTrue(uint8(config.poolType) <= 2, "Invalid pool type");
 
             // Initial fee should be within pool type bounds
-            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
+            DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
             assertGe(config.initialFee, params.minFee, "Initial fee below pool type min");
             assertLe(config.initialFee, params.maxFee, "Initial fee above pool type max");
         }
@@ -430,15 +428,15 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_feesAlwaysBoundedDespiteManipulation() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
-            uint24 currentFee = hook.getFee(poolKey);
+            uint24 currentFee = hook.getFee();
 
             // Fee must be within pool type bounds regardless of manipulation attempts
-            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
+            DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
             assertGe(currentFee, params.minFee, "Fee below min despite manipulation");
             assertLe(currentFee, params.maxFee, "Fee above max despite manipulation");
         }
@@ -505,9 +503,9 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_zeroTargetHandledSafely() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
 
             // If pool is configured, initial target should never be zero
             if (config.isConfigured) {
@@ -523,9 +521,9 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function invariant_extremeRatiosHandledSafely() public view {
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
             // Initial target ratio should never exceed MAX_CURRENT_RATIO
@@ -534,7 +532,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
             );
 
             // Current fee should be valid
-            uint24 fee = hook.getFee(poolKey);
+            uint24 fee = hook.getFee();
             assertLe(fee, LPFeeLibrary.MAX_LP_FEE, "Fee overflow");
         }
     }
@@ -551,15 +549,14 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
             // Verified by checking that timestamps are never in future
             for (uint256 i = 0; i < trackedPools.length; i++) {
                 PoolKey memory poolKey = trackedPools[i];
-                PoolId poolId = poolKey.toId();
+                poolKey.toId(); // Validate poolKey
 
-                IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+                IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
                 if (!config.isConfigured) continue;
 
                 // Note: lastUpdateTimestamp is not exposed in PoolConfig
                 // Timestamp safety is validated through cooldown enforcement
                 // Pool is guaranteed configured here due to continue above
-                assertTrue(uint8(config.poolType) <= 2, "Pool type remains valid after warp");
             }
         }
     }
@@ -594,14 +591,14 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
         // Additional validation: configured pools have valid side factors
         for (uint256 i = 0; i < trackedPools.length; i++) {
             PoolKey memory poolKey = trackedPools[i];
-            PoolId poolId = poolKey.toId();
+            poolKey.toId(); // Validate poolKey
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
             if (!config.isConfigured) continue;
 
             // Fees should respect bounds even with side factor asymmetry
-            uint24 currentFee = hook.getFee(poolKey);
-            DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(config.poolType);
+            uint24 currentFee = hook.getFee();
+            DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
             assertGe(currentFee, params.minFee, "Side factor violated min");
             assertLe(currentFee, params.maxFee, "Side factor violated max");
         }
@@ -657,7 +654,7 @@ contract AlphixInvariantsTest is StdInvariant, BaseAlphixTest {
     function trackPool(PoolKey memory poolKey) external {
         require(msg.sender == address(handler), "Only handler can track pools");
 
-        PoolId poolId = poolKey.toId();
+        poolKey.toId(); // Validate poolKey
         if (!isTrackedPool[poolId]) {
             trackedPools.push(poolKey);
             isTrackedPool[poolId] = true;

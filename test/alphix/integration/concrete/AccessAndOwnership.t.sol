@@ -17,8 +17,8 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {IRegistry} from "../../../../src/interfaces/IRegistry.sol";
 
 /**
@@ -44,29 +44,43 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
      * @notice Transfer hook ownership via two-step, only new owner can call owner-only functions afterwards
      */
     function test_hook_two_step_ownership_transfer() public {
+        // Deploy a fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
+
         address newOwner = makeAddr("newHookOwner");
 
         // Initiate transfer
         vm.prank(owner);
-        hook.transferOwnership(newOwner);
+        freshHook.transferOwnership(newOwner);
 
         // Accept transfer
         vm.prank(newOwner);
-        hook.acceptOwnership();
+        freshHook.acceptOwnership();
 
-        assertEq(hook.owner(), newOwner, "hook owner not updated");
+        assertEq(freshHook.owner(), newOwner, "hook owner not updated");
 
-        // New owner can initialize fresh pool on hook
+        // New owner can initialize fresh pool on the hook
         (PoolKey memory freshKey,) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         vm.prank(newOwner);
-        hook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        freshHook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
 
-        // Old owner now unauthorized for owner-only functions
+        // Old owner now unauthorized for owner-only functions - create another fresh hook for this test
+        (Alphix anotherHook,) = _deployFreshAlphixStack();
+        (PoolKey memory anotherKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, anotherHook);
+
+        // Transfer ownership to newOwner
+        vm.prank(owner);
+        anotherHook.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        anotherHook.acceptOwnership();
+
+        // Old owner should be unauthorized
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, owner));
-        hook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        anotherHook.initializePool(anotherKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
     }
 
     /**
@@ -136,7 +150,7 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
         PoolId freshId = freshKey.toId();
 
         vm.prank(owner);
-        registry.registerPool(freshKey, IAlphixLogic.PoolType.STANDARD, 500, 5e17);
+        registry.registerPool(freshKey, 500, 5e17);
         IRegistry.PoolInfo memory info = registry.getPoolInfo(freshId);
         assertEq(info.hooks, address(hook), "pool not stored");
 
@@ -151,7 +165,7 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
 
         vm.prank(owner);
         vm.expectRevert();
-        registry.registerPool(freshKey, IAlphixLogic.PoolType.VOLATILE, 5000, 7e17);
+        registry.registerPool(freshKey, 5000, 7e17);
 
         // Grant role to user1; user1 can now register
         vm.prank(owner);

@@ -136,11 +136,10 @@ contract PokeFeeScript is Script {
         // Log pool details
         _logPoolDetails(info.poolKey);
 
-        // Get pool configuration and params directly from logic
-        IAlphixLogic.PoolConfig memory cfg = info.logic.getPoolConfig(info.poolId);
-        DynamicFeeLib.PoolTypeParams memory params = info.logic.getPoolTypeParams(cfg.poolType);
+        // Get pool params directly from logic (single pool)
+        DynamicFeeLib.PoolParams memory params = info.logic.getPoolParams();
 
-        console.log("Pool Type Parameters:");
+        console.log("Pool Parameters:");
         console.log("  - Min Period (cooldown): %s seconds", params.minPeriod);
         console.log("  - Min Fee: %s bps", params.minFee);
         console.log("  - Max Fee: %s bps", params.maxFee);
@@ -191,13 +190,13 @@ contract PokeFeeScript is Script {
     /**
      * @dev Compute dry-run fee update
      */
-    function _computeDryRun(IAlphixLogic logic, PoolKey memory poolKey, uint256 currentRatio)
+    function _computeDryRun(IAlphixLogic logic, PoolKey memory, uint256 currentRatio)
         internal
         view
         returns (FeeResult memory result)
     {
         (result.predictedNewFee, result.currentFee, result.oldTargetRatio, result.newTargetRatio,) =
-            logic.computeFeeUpdate(poolKey, currentRatio);
+            logic.computeFeeUpdate(currentRatio);
     }
 
     /**
@@ -240,7 +239,7 @@ contract PokeFeeScript is Script {
         vm.startBroadcast();
 
         // Poke the fee - may revert due to role or cooldown
-        try info.alphix.poke(info.poolKey, currentRatio) {
+        try info.alphix.poke(currentRatio) {
             console.log("Poke successful!");
         } catch Error(string memory reason) {
             console.log("Poke FAILED with reason:", reason);

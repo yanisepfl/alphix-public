@@ -18,7 +18,6 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {Registry, IRegistry} from "../../../../src/Registry.sol";
 
 /**
@@ -73,7 +72,6 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         assertEq(info.initialFee, 0, "init fee");
         assertEq(info.initialTargetRatio, 0, "init ratio");
         assertEq(info.timestamp, 0, "timestamp");
-        assertEq(uint8(info.poolType), uint8(IAlphixLogic.PoolType.STABLE), "ptype default");
     }
 
     /**
@@ -172,7 +170,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         // Register the pool (avoid event brittleness; assert via storage)
         vm.prank(owner);
-        reg2.registerPool(kFresh, IAlphixLogic.PoolType.STANDARD, INITIAL_FEE, INITIAL_TARGET_RATIO);
+        reg2.registerPool(kFresh, INITIAL_FEE, INITIAL_TARGET_RATIO);
 
         IRegistry.PoolInfo memory info = reg2.getPoolInfo(idFresh);
         assertEq(info.token0, Currency.unwrap(kFresh.currency0), "token0");
@@ -182,7 +180,6 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         assertEq(info.hooks, address(hook), "hooks");
         assertEq(info.initialFee, INITIAL_FEE, "init fee");
         assertEq(info.initialTargetRatio, INITIAL_TARGET_RATIO, "init ratio");
-        assertEq(uint8(info.poolType), uint8(IAlphixLogic.PoolType.STANDARD), "ptype");
         assertTrue(info.timestamp > 0, "timestamp > 0");
 
         PoolId[] memory pools = reg2.listPools();
@@ -207,11 +204,11 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         PoolId idFresh = kFresh.toId();
 
         vm.prank(owner);
-        reg2.registerPool(kFresh, IAlphixLogic.PoolType.STANDARD, INITIAL_FEE, INITIAL_TARGET_RATIO);
+        reg2.registerPool(kFresh, INITIAL_FEE, INITIAL_TARGET_RATIO);
 
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IRegistry.PoolAlreadyRegistered.selector, idFresh));
-        reg2.registerPool(kFresh, IAlphixLogic.PoolType.VOLATILE, 5000, 7e17);
+        reg2.registerPool(kFresh, 5000, 7e17);
     }
 
     /**
@@ -228,7 +225,7 @@ contract RegistryDeploymentTest is BaseAlphixTest {
 
         vm.prank(unauthorized);
         vm.expectRevert();
-        reg2.registerPool(kFresh, IAlphixLogic.PoolType.STANDARD, INITIAL_FEE, INITIAL_TARGET_RATIO);
+        reg2.registerPool(kFresh, INITIAL_FEE, INITIAL_TARGET_RATIO);
     }
 
     /**
@@ -256,10 +253,10 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         PoolId id2 = k2.toId();
 
         vm.prank(owner);
-        reg2.registerPool(k1, IAlphixLogic.PoolType.STANDARD, 500, 5e17);
+        reg2.registerPool(k1, 500, 5e17);
 
         vm.prank(owner);
-        reg2.registerPool(k2, IAlphixLogic.PoolType.VOLATILE, 5000, 7e17);
+        reg2.registerPool(k2, 5000, 7e17);
 
         PoolId[] memory pools = reg2.listPools();
         assertEq(pools.length, 2, "len");
@@ -329,7 +326,6 @@ contract RegistryDeploymentTest is BaseAlphixTest {
         assertEq(info.hooks, address(hook), "default hooks");
         assertEq(info.initialFee, INITIAL_FEE, "default initialFee");
         assertEq(info.initialTargetRatio, INITIAL_TARGET_RATIO, "default initialTargetRatio");
-        assertEq(uint8(info.poolType), uint8(IAlphixLogic.PoolType.STABLE), "default poolType");
         assertTrue(info.timestamp > 0, "default timestamp");
 
         // The pool list should include exactly that default poolId

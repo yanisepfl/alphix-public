@@ -15,7 +15,6 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* UNISWAP V4 IMPORTS */
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
@@ -30,7 +29,7 @@ import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
  * @title AlphixLogicDeploymentTest
  * @author Alphix
  * @notice Tests for AlphixLogic deployment, initialization, UUPS upgrades and admin paths
- * @dev Updated to unified PoolTypeParams and ratio-aware compute/finalize flow
+ * @dev Updated to unified PoolParams and ratio-aware compute/finalize flow
  */
 contract AlphixLogicDeploymentTest is BaseAlphixTest {
     using StateLibrary for IPoolManager;
@@ -45,35 +44,26 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
     function test_constructor_disablesInitializers() public {
         AlphixLogic freshImpl = new AlphixLogic();
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        // initialize(owner, hook, baseFee, stable, standard, volatile)
-        freshImpl.initialize(owner, address(hook), stableParams, standardParams, volatileParams);
+        // initialize(owner, hook, accessManager, name, symbol)
+        freshImpl.initialize(owner, address(hook), address(accessManager), "Alphix LP Shares", "ALP");
     }
 
     /**
      * @notice Properly deploying a new logic and checks it behaves as expected.
-     * @dev Verifies per-type params seeded from initializer and owner is correct.
+     * @dev Verifies owner is correct and hook is set properly.
      */
     function test_initialize_success() public {
         AlphixLogic freshImpl = new AlphixLogic();
         ERC1967Proxy freshProxy = new ERC1967Proxy(
             address(freshImpl),
-            abi.encodeCall(freshImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
+            abi.encodeCall(
+                freshImpl.initialize, (owner, address(hook), address(accessManager), "Alphix LP Shares", "ALP")
+            )
         );
         IAlphixLogic freshLogic = IAlphixLogic(address(freshProxy));
 
         assertEq(freshLogic.getAlphixHook(), address(hook), "hook mismatch");
         assertEq(Ownable2StepUpgradeable(address(freshProxy)).owner(), owner, "owner mismatch");
-
-        DynamicFeeLib.PoolTypeParams memory ps = freshLogic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
-        assertEq(ps.minFee, stableParams.minFee, "minFee mismatch");
-        assertEq(ps.maxFee, stableParams.maxFee, "maxFee mismatch");
-        assertEq(ps.baseMaxFeeDelta, stableParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch");
-        assertEq(ps.lookbackPeriod, stableParams.lookbackPeriod, "lookbackPeriod mismatch");
-        assertEq(ps.minPeriod, stableParams.minPeriod, "minPeriod mismatch");
-        assertEq(ps.ratioTolerance, stableParams.ratioTolerance, "ratioTolerance mismatch");
-        assertEq(ps.linearSlope, stableParams.linearSlope, "linearSlope mismatch");
-        assertEq(ps.upperSideFactor, stableParams.upperSideFactor, "upperSideFactor mismatch");
-        assertEq(ps.lowerSideFactor, stableParams.lowerSideFactor, "lowerSideFactor mismatch");
     }
 
     /**
@@ -86,7 +76,7 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         new ERC1967Proxy(
             address(freshImpl),
             abi.encodeCall(
-                freshImpl.initialize, (address(0), address(hook), stableParams, standardParams, volatileParams)
+                freshImpl.initialize, (address(0), address(hook), address(accessManager), "Alphix LP Shares", "ALP")
             )
         );
     }
@@ -100,7 +90,7 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
         vm.expectRevert(IAlphixLogic.InvalidAddress.selector);
         new ERC1967Proxy(
             address(freshImpl),
-            abi.encodeCall(freshImpl.initialize, (owner, address(0), stableParams, standardParams, volatileParams))
+            abi.encodeCall(freshImpl.initialize, (owner, address(0), address(accessManager), "Alphix LP Shares", "ALP"))
         );
     }
 
@@ -109,41 +99,8 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
      */
     function test_initialize_canOnlyBeCalledOnce() public {
         vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
-        AlphixLogic(address(logicProxy)).initialize(owner, address(hook), stableParams, standardParams, volatileParams);
-    }
-
-    /**
-     * @notice Calling initialize should revert with invalid params (minFee > maxFee).
-     */
-    function test_initialize_revertsOnInvalidParams_minGtMax() public {
-        AlphixLogic freshImpl = new AlphixLogic();
-        DynamicFeeLib.PoolTypeParams memory badStable = stableParams;
-        badStable.minFee = badStable.maxFee + 1;
-
-        vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, badStable.minFee, badStable.maxFee)
-        );
-        new ERC1967Proxy(
-            address(freshImpl),
-            abi.encodeCall(freshImpl.initialize, (owner, address(hook), badStable, standardParams, volatileParams))
-        );
-    }
-
-    /**
-     * @notice Calling initialize should revert when maxFee is over LPFeeLibrary.MAX_LP_FEE.
-     */
-    function test_initialize_revertsOnInvalidParams_maxTooHigh() public {
-        AlphixLogic freshImpl = new AlphixLogic();
-        DynamicFeeLib.PoolTypeParams memory badStandard = standardParams;
-        badStandard.maxFee = uint24(LPFeeLibrary.MAX_LP_FEE + 1);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.InvalidFeeBounds.selector, badStandard.minFee, badStandard.maxFee)
-        );
-        new ERC1967Proxy(
-            address(freshImpl),
-            abi.encodeCall(freshImpl.initialize, (owner, address(hook), stableParams, badStandard, volatileParams))
-        );
+        AlphixLogic(address(logicProxy))
+            .initialize(owner, address(hook), address(accessManager), "Alphix LP Shares", "ALP");
     }
 
     /* ERC165 */
@@ -183,17 +140,6 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
      * @dev After upgrade and reinitializer, poke through the hook should adopt the mock fee.
      */
     function test_upgradeToMockLogicAddStorageAndChangesBehavior() public {
-        // Pre-upgrade: adjust a per-type param to test state preservation
-        DynamicFeeLib.PoolTypeParams memory newVol = volatileParams;
-        newVol.minFee = 1500;
-        newVol.maxFee = 30000;
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, newVol);
-
-        DynamicFeeLib.PoolTypeParams memory preVol = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(preVol.minFee, newVol.minFee, "pre-upgrade minFee");
-        assertEq(preVol.maxFee, newVol.maxFee, "pre-upgrade maxFee");
-
         // Upgrade to mock and set mockFee via reinitializer
         MockAlphixLogic mockImpl = new MockAlphixLogic();
         vm.prank(owner);
@@ -205,16 +151,13 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
 
         // Poke with any ratio to trigger compute->manager update->finalize
         vm.prank(owner);
-        hook.poke(key, 6e17); // 60%
+        hook.poke(6e17); // 60%
 
         // Read fee from PoolManager, should reflect mockFee=2000 set by mock
         (,,, uint24 newFee) = poolManager.getSlot0(poolId);
         assertEq(newFee, 2000, "mock fee not applied");
 
         // Verify state preserved
-        DynamicFeeLib.PoolTypeParams memory postVol = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(postVol.minFee, newVol.minFee, "post-upgrade minFee preserved");
-        assertEq(postVol.maxFee, newVol.maxFee, "post-upgrade maxFee preserved");
         assertEq(logic.getAlphixHook(), address(hook), "hook preserved");
         assertEq(Ownable2StepUpgradeable(address(logicProxy)).owner(), owner, "owner preserved");
     }
@@ -236,15 +179,12 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
 
         // Poke; mock returns live fee when mockFee == 0
         vm.prank(owner);
-        hook.poke(key, 5e17);
+        hook.poke(5e17);
 
         (,,, uint24 postFee) = poolManager.getSlot0(poolId);
         assertEq(postFee, preFee, "fee should remain unchanged when mockFee is zero");
 
         // State intact
-        DynamicFeeLib.PoolTypeParams memory st = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
-        assertEq(st.minFee, stableParams.minFee, "stable params preserved");
-        assertEq(st.maxFee, stableParams.maxFee, "stable params preserved");
         assertEq(logic.getAlphixHook(), address(hook), "hook preserved");
         assertEq(Ownable2StepUpgradeable(address(logicProxy)).owner(), owner, "owner preserved");
     }
@@ -324,35 +264,13 @@ contract AlphixLogicDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Tests AlphixLogic's getPoolTypeParams returns the expected values for STABLE.
+     * @notice Tests AlphixLogic's getPoolParams returns the expected values.
      */
-    function test_getPoolTypeParams_stable() public view {
-        DynamicFeeLib.PoolTypeParams memory p = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
-        assertEq(p.minFee, stableParams.minFee);
-        assertEq(p.maxFee, stableParams.maxFee);
-        assertEq(p.lookbackPeriod, stableParams.lookbackPeriod);
-        assertEq(p.minPeriod, stableParams.minPeriod);
-    }
-
-    /**
-     * @notice Tests AlphixLogic's getPoolTypeParams returns the expected values for STANDARD.
-     */
-    function test_getPoolTypeParams_standard() public view {
-        DynamicFeeLib.PoolTypeParams memory p = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
-        assertEq(p.minFee, standardParams.minFee);
-        assertEq(p.maxFee, standardParams.maxFee);
-        assertEq(p.lookbackPeriod, standardParams.lookbackPeriod);
-        assertEq(p.minPeriod, standardParams.minPeriod);
-    }
-
-    /**
-     * @notice Tests AlphixLogic's getPoolTypeParams returns the expected values for VOLATILE.
-     */
-    function test_getPoolTypeParams_volatile() public view {
-        DynamicFeeLib.PoolTypeParams memory p = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
-        assertEq(p.minFee, volatileParams.minFee);
-        assertEq(p.maxFee, volatileParams.maxFee);
-        assertEq(p.lookbackPeriod, volatileParams.lookbackPeriod);
-        assertEq(p.minPeriod, volatileParams.minPeriod);
+    function test_getPoolParams() public view {
+        DynamicFeeLib.PoolParams memory p = logic.getPoolParams();
+        assertEq(p.minFee, defaultPoolParams.minFee);
+        assertEq(p.maxFee, defaultPoolParams.maxFee);
+        assertEq(p.lookbackPeriod, defaultPoolParams.lookbackPeriod);
+        assertEq(p.minPeriod, defaultPoolParams.minPeriod);
     }
 }

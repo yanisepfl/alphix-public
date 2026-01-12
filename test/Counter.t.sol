@@ -57,6 +57,7 @@ contract CounterTest is Test, Deployers {
         hook = Counter(flags);
 
         // Create the pool
+        // forge-lint: disable-next-line(named-struct-fields)
         poolKey = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         poolId = poolKey.toId();
         poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
@@ -108,6 +109,7 @@ contract CounterTest is Test, Deployers {
         });
         // ------------------- //
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(int256(swapDelta.amount0()), -int256(amountIn));
 
         assertEq(hook.beforeSwapCount(poolId), 1);

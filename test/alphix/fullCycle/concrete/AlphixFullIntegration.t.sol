@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 /* FORGE IMPORTS */
 
 /* UNISWAP V4 IMPORTS */
-import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -12,7 +11,6 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* SOLMATE IMPORTS */
@@ -149,7 +147,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Verify pool has accumulated significant liquidity
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
         assertTrue(config.isConfigured, "Pool should be configured with liquidity");
     }
 
@@ -194,7 +192,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Verify pool still operational
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
         assertTrue(config.isConfigured, "Pool should remain configured");
     }
 
@@ -241,7 +239,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Verify pool is operational after all swaps
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
         assertTrue(config.isConfigured, "Pool should be operational");
     }
 
@@ -266,7 +264,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         }
 
         // Pool should still be operational despite directional pressure
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
         assertTrue(config.isConfigured, "Pool operational despite directional pressure");
     }
 
@@ -316,12 +314,12 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         }
 
         // Update fee to higher value
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 8e17); // 80% ratio - high fee
+        hook.poke(8e17); // 80% ratio - high fee
 
         uint24 newFee;
         (,,, newFee) = poolManager.getSlot0(poolId);
@@ -356,45 +354,13 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Test that traders pay the correct dynamic fee on swaps (STANDARD pool)
+     * @notice Test that traders pay the correct dynamic fee on swaps with different params
      * @dev Verifies fee amounts match the dynamic fee set by admin
      */
-    function test_traders_pay_correct_dynamic_fees_standard() public {
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
-
-        // Setup: Add large liquidity to minimize price impact
-        vm.startPrank(alice);
-        _addLiquidityForUser(
-            alice,
-            testKey,
-            TickMath.minUsableTick(testKey.tickSpacing),
-            TickMath.maxUsableTick(testKey.tickSpacing),
-            10000e18
-        );
-        vm.stopPrank();
-
-        _testDynamicFeesOnPool(testKey, testPoolId);
-    }
-
-    /**
-     * @notice Test that traders pay the correct dynamic fee on swaps (VOLATILE pool)
-     * @dev Verifies fee amounts match the dynamic fee set by admin
-     */
-    function test_traders_pay_correct_dynamic_fees_volatile() public {
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
-
-        // Setup: Add large liquidity to minimize price impact
-        vm.startPrank(alice);
-        _addLiquidityForUser(
-            alice,
-            testKey,
-            TickMath.minUsableTick(testKey.tickSpacing),
-            TickMath.maxUsableTick(testKey.tickSpacing),
-            10000e18
-        );
-        vm.stopPrank();
-
-        _testDynamicFeesOnPool(testKey, testPoolId);
+    function test_traders_pay_correct_dynamic_fees_with_different_params() public {
+        // With single-pool-per-hook architecture, we just test the default pool
+        // which already uses defaultPoolParams
+        _testDynamicFeesOnPool(key, poolId);
     }
 
     /**
@@ -449,12 +415,12 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 calculatedRatio = (totalVolume * 1e18) / totalLiquidity;
 
         // Apply the calculated ratio via poke
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, calculatedRatio);
+        hook.poke(calculatedRatio);
 
         uint24 feeAfterPoke;
         (,,, feeAfterPoke) = poolManager.getSlot0(poolId);
@@ -473,8 +439,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
      * @dev Simulates realistic LP behavior: early LPs vs late LPs, different amounts
      */
     function test_complex_LP_fee_distribution_different_timelines() public {
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // === Week 1: Alice enters as early LP ===
         vm.warp(block.timestamp + 1 days);
@@ -532,7 +498,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 ratio = 45e16;
 
         vm.prank(owner);
-        hook.poke(key, ratio);
+        hook.poke(ratio);
 
         uint24 finalFee;
         (,,, finalFee) = poolManager.getSlot0(poolId);
@@ -543,7 +509,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         assertLe(finalFee, params.maxFee, "Fee should be <= maxFee");
 
         // Verify all LPs have positions
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolId);
+        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
         assertTrue(config.isConfigured, "Pool should be configured");
     }
 
@@ -583,12 +549,12 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Ratio = 200/200 = 1.0 = 100% (but will be capped)
         uint256 ratio = 1e18; // 100%
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, ratio);
+        hook.poke(ratio);
 
         uint24 fee;
         (,,, fee) = poolManager.getSlot0(poolId);
@@ -626,8 +592,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Phase 3: First fee adjustment based on initial volume
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         // Calculate rough ratio (simplified): volume / initial liquidity
@@ -635,7 +601,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 calculatedRatio = 1e16; // 1%
 
         vm.prank(owner);
-        hook.poke(key, calculatedRatio);
+        hook.poke(calculatedRatio);
 
         uint24 fee1;
         (,,, fee1) = poolManager.getSlot0(poolId);
@@ -651,7 +617,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 newRatio = 5e16; // 5%
 
         vm.prank(owner);
-        hook.poke(key, newRatio);
+        hook.poke(newRatio);
 
         uint24 fee2;
         (,,, fee2) = poolManager.getSlot0(poolId);
@@ -694,15 +660,15 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Phase 3: Admin responds with higher fee due to volatility
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         // Calculate high volatility ratio: 200e18 volume / 500e18 liquidity = 40%
         uint256 highVolatilityRatio = 4e17; // 40%
 
         vm.prank(owner);
-        hook.poke(key, highVolatilityRatio);
+        hook.poke(highVolatilityRatio);
 
         uint24 volatilityFee;
         (,,, volatilityFee) = poolManager.getSlot0(poolId);
@@ -724,8 +690,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Week 1: Low activity (50% ratio)
         vm.warp(block.timestamp + 7 days);
@@ -733,7 +699,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 5e17); // 50%
+        hook.poke(5e17); // 50%
 
         uint24 week1Fee;
         (,,, week1Fee) = poolManager.getSlot0(poolId);
@@ -744,7 +710,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 7e17); // 70%
+        hook.poke(7e17); // 70%
 
         uint24 week2Fee;
         (,,, week2Fee) = poolManager.getSlot0(poolId);
@@ -755,7 +721,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 3e17); // 30%
+        hook.poke(3e17); // 30%
 
         uint24 week3Fee;
         (,,, week3Fee) = poolManager.getSlot0(poolId);
@@ -766,7 +732,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 5e17); // 50%
+        hook.poke(5e17); // 50%
 
         uint24 week4Fee;
         (,,, week4Fee) = poolManager.getSlot0(poolId);
@@ -777,147 +743,9 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         assertGe(week4Fee, params.minFee, "Week 4 fee should be within bounds");
     }
 
-    /**
-     * @notice Test periodic fee adjustments over a month (STANDARD pool)
-     * @dev Simulates monthly operations with weekly fee updates
-     */
-    function test_periodic_fee_adjustments_over_month_standard() public {
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
-
-        // Setup liquidity
-        vm.startPrank(alice);
-        _addLiquidityForUser(
-            alice,
-            testKey,
-            TickMath.minUsableTick(testKey.tickSpacing),
-            TickMath.maxUsableTick(testKey.tickSpacing),
-            200e18
-        );
-        vm.stopPrank();
-
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
-
-        // Week 1: Low activity (50% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 20e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 5e17); // 50%
-
-        uint24 week1Fee;
-        (,,, week1Fee) = poolManager.getSlot0(testPoolId);
-
-        // Week 2: High activity (70% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 40e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 7e17); // 70%
-
-        uint24 week2Fee;
-        (,,, week2Fee) = poolManager.getSlot0(testPoolId);
-
-        // Week 3: Moderate activity (30% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 15e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 3e17); // 30%
-
-        uint24 week3Fee;
-        (,,, week3Fee) = poolManager.getSlot0(testPoolId);
-
-        // Week 4: Return to normal (50% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 25e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 5e17); // 50%
-
-        uint24 week4Fee;
-        (,,, week4Fee) = poolManager.getSlot0(testPoolId);
-
-        // Verify fees responded to activity changes
-        assertGt(week2Fee, week1Fee, "Week 2 fee should be higher (increased activity)");
-        assertLt(week3Fee, week2Fee, "Week 3 fee should be lower (decreased activity)");
-        assertGe(week4Fee, params.minFee, "Week 4 fee should be within bounds");
-    }
-
-    /**
-     * @notice Test periodic fee adjustments over a month (VOLATILE pool)
-     * @dev Simulates monthly operations with weekly fee updates
-     */
-    function test_periodic_fee_adjustments_over_month_volatile() public {
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.VOLATILE);
-
-        // Setup liquidity
-        vm.startPrank(alice);
-        _addLiquidityForUser(
-            alice,
-            testKey,
-            TickMath.minUsableTick(testKey.tickSpacing),
-            TickMath.maxUsableTick(testKey.tickSpacing),
-            200e18
-        );
-        vm.stopPrank();
-
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
-
-        // Week 1: Low activity (50% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 20e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 5e17); // 50%
-
-        uint24 week1Fee;
-        (,,, week1Fee) = poolManager.getSlot0(testPoolId);
-
-        // Week 2: High activity (70% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 40e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 7e17); // 70%
-
-        uint24 week2Fee;
-        (,,, week2Fee) = poolManager.getSlot0(testPoolId);
-
-        // Week 3: Moderate activity (30% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 15e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 3e17); // 30%
-
-        uint24 week3Fee;
-        (,,, week3Fee) = poolManager.getSlot0(testPoolId);
-
-        // Week 4: Return to normal (50% ratio)
-        vm.warp(block.timestamp + 7 days);
-        _simulateWeekOfTradingForPool(testKey, 25e18);
-        vm.warp(block.timestamp + params.minPeriod + 1);
-
-        vm.prank(owner);
-        hook.poke(testKey, 5e17); // 50%
-
-        uint24 week4Fee;
-        (,,, week4Fee) = poolManager.getSlot0(testPoolId);
-
-        // Verify fees responded to activity changes
-        assertGt(week2Fee, week1Fee, "Week 2 fee should be higher (increased activity)");
-        assertLt(week3Fee, week2Fee, "Week 3 fee should be lower (decreased activity)");
-        assertGe(week4Fee, params.minFee, "Week 4 fee should be within bounds");
-    }
+    // NOTE: With the single-pool-per-hook architecture, tests for STANDARD and VOLATILE
+    // pool types have been consolidated into the default pool test (test_periodic_fee_adjustments_over_month)
+    // which tests the same fee adjustment behavior using defaultPoolParams.
 
     /* ========================================================================== */
     /*                    COMPREHENSIVE FULL-CYCLE TEST                           */
@@ -979,12 +807,12 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Total liquidity = 20e18, Total volume = 14e18
         // Realistic ratio = 14/20 = 0.7 = 70%
         vm.warp(block.timestamp + 2 days);
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 7e17); // 70% ratio calculated from volume/TVL
+        hook.poke(7e17); // 70% ratio calculated from volume/TVL
 
         uint24 week1Fee;
         (,,, week1Fee) = poolManager.getSlot0(poolId);
@@ -1020,7 +848,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 83e16); // 83% ratio - higher than Week 1
+        hook.poke(83e16); // 83% ratio - higher than Week 1
 
         uint24 week2Fee;
         (,,, week2Fee) = poolManager.getSlot0(poolId);
@@ -1034,12 +862,12 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + 1 days);
 
         // NOTE: Default pool is STABLE type, so we must modify STABLE params
-        DynamicFeeLib.PoolTypeParams memory newParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+        DynamicFeeLib.PoolParams memory newParams = logic.getPoolParams();
         newParams.minFee = 200; // Increase min fee
         newParams.maxFee = 4000; // Increase max fee for volatile conditions
 
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, newParams);
+        logic.setPoolParams(newParams);
 
         // Days 16-17: Dave doubles his liquidity position
         vm.warp(block.timestamp + 1 days);
@@ -1072,7 +900,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Verify hook operations are blocked during pause
         vm.startPrank(owner);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        hook.poke(key, 5e17);
+        hook.poke(5e17);
         vm.stopPrank();
 
         // Day 21: Resume operations and weekly fee adjustment
@@ -1085,7 +913,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Realistic ratio = 27/40 = 0.675 = 67.5%
         vm.warp(block.timestamp + newParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, 675e15); // 67.5% ratio
+        hook.poke(675e15); // 67.5% ratio
 
         uint24 week3Fee;
         (,,, week3Fee) = poolManager.getSlot0(poolId);
@@ -1125,52 +953,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
     /*                              HELPER FUNCTIONS                              */
     /* ========================================================================== */
 
-    /**
-     * @notice Helper to create a pool with a specific pool type
-     * @param poolType The pool type to create
-     * @return testKey The pool key
-     * @return testPoolId The pool ID
-     */
-    function _createPoolWithType(IAlphixLogic.PoolType poolType)
-        internal
-        returns (PoolKey memory testKey, PoolId testPoolId)
-    {
-        // Create new tokens
-        MockERC20 token0 = new MockERC20("Test Token 0", "TEST0", 18);
-        MockERC20 token1 = new MockERC20("Test Token 1", "TEST1", 18);
-
-        // Mint tokens to test users
-        vm.startPrank(owner);
-        token0.mint(alice, INITIAL_TOKEN_AMOUNT);
-        token0.mint(bob, INITIAL_TOKEN_AMOUNT);
-        token0.mint(charlie, INITIAL_TOKEN_AMOUNT);
-        token0.mint(dave, INITIAL_TOKEN_AMOUNT);
-        token1.mint(alice, INITIAL_TOKEN_AMOUNT);
-        token1.mint(bob, INITIAL_TOKEN_AMOUNT);
-        token1.mint(charlie, INITIAL_TOKEN_AMOUNT);
-        token1.mint(dave, INITIAL_TOKEN_AMOUNT);
-        vm.stopPrank();
-
-        Currency testCurrency0 = Currency.wrap(address(token0));
-        Currency testCurrency1 = Currency.wrap(address(token1));
-
-        // Create pool key
-        testKey = PoolKey({
-            currency0: testCurrency0 < testCurrency1 ? testCurrency0 : testCurrency1,
-            currency1: testCurrency0 < testCurrency1 ? testCurrency1 : testCurrency0,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: IHooks(address(hook))
-        });
-
-        // Initialize pool in PoolManager
-        poolManager.initialize(testKey, Constants.SQRT_PRICE_1_1);
-        testPoolId = testKey.toId();
-
-        // Initialize pool in Alphix with specified pool type
-        vm.prank(owner);
-        hook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, poolType);
-    }
+    // NOTE: _createPoolWithType helper was removed with the single-pool-per-hook architecture.
+    // Each pool now requires its own hook instance with its own pool params passed at initialization.
 
     /**
      * @notice Helper to add liquidity for a user
@@ -1263,12 +1047,12 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 bobOutput = _performSwapAndGetOutput(bob, testKey, swapAmount);
 
         // Update fee and perform second swap
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(testKey, 8e17);
+        hook.poke(8e17);
 
         uint24 newFee;
         (,,, newFee) = poolManager.getSlot0(testPoolId);
@@ -1319,7 +1103,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
     /**
      * @notice Helper for week 4 operations to avoid stack too deep
      */
-    function _executeWeek4Operations(uint24, DynamicFeeLib.PoolTypeParams memory newParams)
+    function _executeWeek4Operations(uint24, DynamicFeeLib.PoolParams memory newParams)
         internal
         returns (uint24 week4Fee)
     {
@@ -1327,11 +1111,11 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(owner);
-        hook.deactivatePool(key);
+        hook.deactivatePool();
 
         // Reactivate pool
         vm.prank(owner);
-        hook.activatePool(key);
+        hook.activatePool();
 
         // Verify operations work again
         vm.startPrank(charlie);
@@ -1345,7 +1129,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + newParams.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(key, 28e16); // 28% ratio
+        hook.poke(28e16); // 28% ratio
 
         (,,, week4Fee) = poolManager.getSlot0(poolId);
 
@@ -1367,7 +1151,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.warp(block.timestamp + 2 days);
 
         // Verify pool is healthy and operational
-        IAlphixLogic.PoolConfig memory finalConfig = logic.getPoolConfig(poolId);
+        IAlphixLogic.PoolConfig memory finalConfig = logic.getPoolConfig();
         assertTrue(finalConfig.isConfigured, "Pool should remain configured");
 
         // Verify all operations still work
@@ -1379,7 +1163,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Verify fee is set and within bounds
         uint24 finalFee;
         (,,, finalFee) = poolManager.getSlot0(poolId);
-        DynamicFeeLib.PoolTypeParams memory finalParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolParams memory finalParams = logic.getPoolParams();
         assertGe(finalFee, finalParams.minFee, "Fee should be >= minFee");
         assertLe(finalFee, finalParams.maxFee, "Fee should be <= maxFee");
 

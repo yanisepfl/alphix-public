@@ -9,7 +9,6 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
-import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 
@@ -18,15 +17,16 @@ import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 
 /**
- * @title PoolTypeParamsBehaviorChangeFuzzTest
+ * @title PoolParamsBehaviorChangeFuzzTest
  * @author Alphix
- * @notice Fuzz tests for setPoolTypeParams behavior changes
+ * @notice Fuzz tests for setPoolParams behavior changes
  * @dev Comprehensive fuzz tests to ensure that the dynamic fee algorithm adapts correctly to parameter changes
  *      across all possible valid parameter ranges, token configurations, market conditions, and edge cases.
  */
-contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
+contract PoolParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
@@ -45,6 +45,10 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 lowerSideFactor2;
         uint256 testRatio;
         bool testUpperSide;
+        Alphix freshHook1;
+        IAlphixLogic freshLogic1;
+        Alphix freshHook2;
+        IAlphixLogic freshLogic2;
     }
 
     struct ParameterComparisonTestData {
@@ -57,6 +61,10 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 testRatio;
         uint256 param1Value;
         uint256 param2Value;
+        Alphix freshHook1;
+        IAlphixLogic freshLogic1;
+        Alphix freshHook2;
+        IAlphixLogic freshLogic2;
     }
 
     /* FUZZING CONSTRAINTS */
@@ -105,7 +113,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         super.setUp();
 
         // Wait past initial cooldown for testing
-        vm.warp(block.timestamp + stableParams.minPeriod + 1);
+        vm.warp(block.timestamp + defaultPoolParams.minPeriod + 1);
     }
 
     /* ========================================================================== */
@@ -137,8 +145,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         baseMaxFeeDelta = uint24(bound(baseMaxFeeDelta, MIN_BASE_MAX_FEE_DELTA_FUZZ, MAX_BASE_MAX_FEE_DELTA_FUZZ));
         ratioDeviation = bound(ratioDeviation, MIN_RATIO_DEVIATION_FUZZ, MAX_RATIO_DEVIATION_FUZZ);
 
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Create parameters for baseline testing
-        DynamicFeeLib.PoolTypeParams memory baselineParams = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory baselineParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 10000,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -151,22 +162,23 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             lowerSideFactor: 2e18
         });
 
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, baselineParams);
-
-        // Create a new pool for this test to avoid PoolAlreadyConfigured error
+        // Create a new pool with fresh hook
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
         PoolKey memory testKey = PoolKey({
             currency0: c0,
             currency1: c1,
             fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: 120, // different from main test pool
-            hooks: hook
+            hooks: freshHook
         });
 
         poolManager.initialize(testKey, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        hook.initializePool(testKey, initialFee, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        freshHook.initializePool(testKey, initialFee, INITIAL_TARGET_RATIO, baselineParams);
+
+        // Set parameters after pool is configured
+        vm.prank(owner);
+        freshLogic.setPoolParams(baselineParams);
 
         uint24 feeBefore = initialFee;
 
@@ -174,7 +186,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 upperTestRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, ratioTolerance) + ratioDeviation;
         vm.warp(block.timestamp + baselineParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, upperTestRatio);
+        freshHook.poke(upperTestRatio);
 
         (,,, uint24 feeAfterUpper) = poolManager.getSlot0(testKey.toId());
 
@@ -188,7 +200,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         vm.warp(block.timestamp + baselineParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, lowerTestRatio);
+        freshHook.poke(lowerTestRatio);
 
         (,,, uint24 feeAfterLower) = poolManager.getSlot0(testKey.toId());
 
@@ -228,8 +240,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         ratioTolerance = bound(ratioTolerance, 5e15, 1e17); // 0.5% to 10% tolerance
         inBandOffset = bound(inBandOffset, 0, ratioTolerance / 3); // stay well within band
 
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Create parameters for in-band testing
-        DynamicFeeLib.PoolTypeParams memory inBandParams = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory inBandParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 10000,
             baseMaxFeeDelta: 50,
@@ -242,29 +257,30 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             lowerSideFactor: 2e18
         });
 
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, inBandParams);
-
-        // Create a new pool for this test to avoid PoolAlreadyConfigured error
+        // Create a new pool with fresh hook
         (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
         PoolKey memory testKey = PoolKey({
             currency0: c0,
             currency1: c1,
             fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: 140, // different from main test pool and first baseline test
-            hooks: hook
+            hooks: freshHook
         });
 
         poolManager.initialize(testKey, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        hook.initializePool(testKey, initialFee, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        freshHook.initializePool(testKey, initialFee, INITIAL_TARGET_RATIO, inBandParams);
+
+        // Set parameters after pool is configured
+        vm.prank(owner);
+        freshLogic.setPoolParams(inBandParams);
 
         uint24 feeBefore = initialFee;
 
         // Test exactly at target ratio (should stay same)
         vm.warp(block.timestamp + inBandParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
 
         (,,, uint24 feeAtTarget) = poolManager.getSlot0(testKey.toId());
 
@@ -272,7 +288,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 upperInBandRatio = INITIAL_TARGET_RATIO + (INITIAL_TARGET_RATIO * inBandOffset / 1e18);
         vm.warp(block.timestamp + inBandParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, upperInBandRatio);
+        freshHook.poke(upperInBandRatio);
 
         (,,, uint24 feeUpperInBand) = poolManager.getSlot0(testKey.toId());
 
@@ -281,7 +297,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 lowerInBandRatio = INITIAL_TARGET_RATIO - (INITIAL_TARGET_RATIO * inBandOffset / 1e18);
         vm.warp(block.timestamp + inBandParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, lowerInBandRatio);
+        freshHook.poke(lowerInBandRatio);
 
         (,,, uint24 feeLowerInBand) = poolManager.getSlot0(testKey.toId());
 
@@ -323,93 +339,90 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         // Ensure meaningful difference between parameters
         vm.assume(permissiveMaxFee > restrictiveMaxFee + 1000);
 
-        // Create restrictive and permissive parameter sets with different maxFee values.
-        // NOTE: For structs in memory, assignment copies values. (Aliasing concerns apply when
-        // the struct contains reference-typed members like arrays/bytes/strings, which this struct does not.)
-        DynamicFeeLib.PoolTypeParams memory restrictiveParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1,
-            maxFee: restrictiveMaxFee,
-            baseMaxFeeDelta: baseMaxFeeDelta,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
-            upperSideFactor: 1e18,
-            lowerSideFactor: 2e18
-        });
+        // Run helper to reduce stack depth
+        _runRestrictiveVsPermissiveTest(restrictiveMaxFee, permissiveMaxFee, baseMaxFeeDelta, ratioDeviation);
+    }
 
-        DynamicFeeLib.PoolTypeParams memory permissiveParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1,
-            maxFee: permissiveMaxFee,
-            baseMaxFeeDelta: baseMaxFeeDelta,
-            lookbackPeriod: 30,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
-            upperSideFactor: 1e18,
-            lowerSideFactor: 2e18
-        });
+    /**
+     * @notice Helper function for testFuzz_restrictiveParams_reducesMaximumFee to reduce stack depth
+     */
+    function _runRestrictiveVsPermissiveTest(
+        uint24 restrictiveMaxFee,
+        uint24 permissiveMaxFee,
+        uint24 baseMaxFeeDelta,
+        uint256 ratioDeviation
+    ) internal {
+        // Deploy fresh hook + logic stacks and get fees from both pools
+        (Alphix permHook, IAlphixLogic permLogic) = _deployFreshAlphixStack();
+        uint24 feeAfterPermissive =
+            _setupAndPokeSinglePool(permHook, permLogic, 60, permissiveMaxFee, baseMaxFeeDelta, ratioDeviation);
 
-        // Use a ratio above tolerance to trigger fee adjustment
-        uint256 testRatio =
-            _getAboveToleranceRatio(INITIAL_TARGET_RATIO, restrictiveParams.ratioTolerance) + ratioDeviation;
-
-        // Create two separate pools for clean comparison
-        (Currency c0Perm, Currency c1Perm) = deployCurrencyPairWithDecimals(18, 18);
-        (Currency c0Rest, Currency c1Rest) = deployCurrencyPairWithDecimals(18, 18);
-
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey memory permissiveKey = PoolKey(c0Perm, c1Perm, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey memory restrictiveKey = PoolKey(c0Rest, c1Rest, LPFeeLibrary.DYNAMIC_FEE_FLAG, 80, IHooks(hook));
-
-        // Initialize both pools
-        poolManager.initialize(permissiveKey, Constants.SQRT_PRICE_1_1);
-        poolManager.initialize(restrictiveKey, Constants.SQRT_PRICE_1_1);
-
-        vm.prank(owner);
-        hook.initializePool(permissiveKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
-        vm.prank(owner);
-        hook.initializePool(restrictiveKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
-
-        // Test with permissive parameters
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
-
-        vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(permissiveKey, testRatio);
-
-        (,,, uint24 feeAfterPermissive) = poolManager.getSlot0(permissiveKey.toId());
-
-        // Test with restrictive parameters on separate pool
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
-
-        vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(restrictiveKey, testRatio);
-
-        (,,, uint24 feeAfterRestrictive) = poolManager.getSlot0(restrictiveKey.toId());
+        (Alphix restHook, IAlphixLogic restLogic) = _deployFreshAlphixStack();
+        uint24 feeAfterRestrictive =
+            _setupAndPokeSinglePool(restHook, restLogic, 80, restrictiveMaxFee, baseMaxFeeDelta, ratioDeviation);
 
         // Verify fee bounds
         assertTrue(feeAfterPermissive <= permissiveMaxFee, "Should not exceed permissive max fee");
-
-        // DynamicFeeLib.clampFee() ensures the computed fee never exceeds the pool type's maxFee.
-        // This invariant holds even when params are modified mid-flight.
         assertTrue(feeAfterRestrictive <= restrictiveMaxFee, "Fee should be clamped to restrictive maxFee");
 
-        // Verify directional behavior: restrictive settings should produce smaller/equal fees when not hitting bounds
-        // Both pools started from same initial conditions, so this comparison is valid
+        // Verify directional behavior
         if (feeAfterRestrictive < restrictiveMaxFee && feeAfterPermissive < permissiveMaxFee) {
-            // Neither hit bounds, so restrictive should have constrained fee more
             assertTrue(
                 feeAfterRestrictive <= feeAfterPermissive,
                 "Restrictive maxFee should result in lower or equal fee when bounds not hit"
             );
         }
+    }
+
+    /**
+     * @notice Setup and poke a single pool for restrictive vs permissive test
+     */
+    function _setupAndPokeSinglePool(
+        Alphix freshHook,
+        IAlphixLogic freshLogic,
+        int24 tickSpacing,
+        uint24 maxFee,
+        uint24 baseMaxFeeDelta,
+        uint256 ratioDeviation
+    ) internal returns (uint24 feeAfter) {
+        DynamicFeeLib.PoolParams memory params = _createBaseParams(maxFee, baseMaxFeeDelta);
+        uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, 5e15) + ratioDeviation;
+
+        (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        PoolKey memory poolKey = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: tickSpacing, hooks: freshHook
+        });
+        poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
+        vm.prank(owner);
+        freshHook.initializePool(poolKey, INITIAL_FEE, INITIAL_TARGET_RATIO, params);
+        vm.prank(owner);
+        freshLogic.setPoolParams(params);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+        vm.prank(owner);
+        freshHook.poke(testRatio);
+        (,,, feeAfter) = poolManager.getSlot0(poolKey.toId());
+    }
+
+    /**
+     * @notice Creates base pool params with specified maxFee and baseMaxFeeDelta
+     */
+    function _createBaseParams(uint24 maxFee, uint24 baseMaxFeeDelta)
+        internal
+        pure
+        returns (DynamicFeeLib.PoolParams memory)
+    {
+        return DynamicFeeLib.PoolParams({
+            minFee: 1,
+            maxFee: maxFee,
+            baseMaxFeeDelta: baseMaxFeeDelta,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 5e15,
+            linearSlope: 2e18,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
+            upperSideFactor: 1e18,
+            lowerSideFactor: 2e18
+        });
     }
 
     /**
@@ -433,7 +446,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         linearSlope = bound(linearSlope, MIN_LINEAR_SLOPE_FUZZ, MAX_LINEAR_SLOPE_FUZZ);
         ratioDeviation = bound(ratioDeviation, MIN_RATIO_DEVIATION_FUZZ, 1e17);
 
-        DynamicFeeLib.PoolTypeParams memory permissiveParams = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory permissiveParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: higherMaxFee,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -451,11 +464,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             _getAboveToleranceRatio(INITIAL_TARGET_RATIO, permissiveParams.ratioTolerance) + ratioDeviation;
 
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolParams(permissiveParams);
 
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(testRatio);
 
         (,,, uint24 feeAfter) = poolManager.getSlot0(poolId);
 
@@ -619,23 +632,85 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         longLookback = uint24(bound(longLookback, shortLookback + 7, MAX_LOOKBACK_FUZZ));
         ratioDeviation = bound(ratioDeviation, MIN_RATIO_DEVIATION_FUZZ, 1e17);
 
-        // Create two different pools for comparison
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey memory shortKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey memory longKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 200, IHooks(hook));
+        // Run the test via helper to reduce stack depth
+        _runLookbackConvergenceTest(shortLookback, longLookback, ratioDeviation);
+    }
 
-        // Initialize both pools
-        poolManager.initialize(shortKey, Constants.SQRT_PRICE_1_1);
-        poolManager.initialize(longKey, Constants.SQRT_PRICE_1_1);
+    /**
+     * @notice Helper for lookback convergence test to reduce stack depth
+     */
+    function _runLookbackConvergenceTest(uint24 shortLookback, uint24 longLookback, uint256 ratioDeviation) internal {
+        // Deploy fresh stacks and setup pools
+        (Alphix shortHook, IAlphixLogic shortLogic) = _deployFreshAlphixStack();
+        (PoolKey memory shortKey,) = _setupLookbackPool(shortHook, 60);
+
+        (Alphix longHook, IAlphixLogic longLogic) = _deployFreshAlphixStack();
+        (PoolKey memory longKey,) = _setupLookbackPool(longHook, 200);
+
+        // Execute tests and verify
+        uint24 shortFirstFee = _pokeLookbackPool(shortKey, shortHook, shortLogic, shortLookback, ratioDeviation);
+        uint24 longFirstFee = _pokeLookbackPool(longKey, longHook, longLogic, longLookback, ratioDeviation);
+
+        assertTrue(shortFirstFee >= INITIAL_FEE, "Short lookback fees should increase for ratio above tolerance");
+        assertTrue(longFirstFee >= INITIAL_FEE, "Long lookback fees should increase for ratio above tolerance");
+        assertTrue(shortLookback < longLookback, "Setup verification");
+    }
+
+    /**
+     * @notice Setup a pool for lookback testing
+     */
+    function _setupLookbackPool(Alphix freshHook, int24 tickSpacing)
+        internal
+        returns (PoolKey memory poolKey, PoolId poolId)
+    {
+        (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
+        poolKey = PoolKey({
+            currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: tickSpacing, hooks: freshHook
+        });
+        poolId = poolKey.toId();
+        poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
+        vm.prank(owner);
+        freshHook.initializePool(poolKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+    }
+
+    /**
+     * @notice Poke a lookback pool and return the fee
+     */
+    function _pokeLookbackPool(
+        PoolKey memory poolKey,
+        Alphix freshHook,
+        IAlphixLogic freshLogic,
+        uint24 lookbackPeriod,
+        uint256 ratioDeviation
+    ) internal returns (uint24 fee) {
+        uint256 deviatedRatio =
+            _getAboveToleranceRatio(INITIAL_TARGET_RATIO, 5e15) + ratioDeviation;
+
+        DynamicFeeLib.PoolParams memory params = DynamicFeeLib.PoolParams({
+            minFee: 1,
+            maxFee: 5000,
+            baseMaxFeeDelta: 50,
+            lookbackPeriod: lookbackPeriod,
+            minPeriod: 1 days,
+            ratioTolerance: 5e15,
+            linearSlope: 2e18,
+            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
+            upperSideFactor: 2e18,
+            lowerSideFactor: 2e18
+        });
 
         vm.prank(owner);
-        hook.initializePool(shortKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
-        vm.prank(owner);
-        hook.initializePool(longKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        freshLogic.setPoolParams(params);
 
-        // Test with different lookback periods
-        _testLookbackConvergence(shortKey, longKey, shortLookback, longLookback, ratioDeviation);
+        vm.warp(block.timestamp + params.minPeriod + 1);
+        vm.prank(owner);
+        freshHook.poke(INITIAL_TARGET_RATIO);
+
+        vm.warp(block.timestamp + params.minPeriod + 1);
+        vm.prank(owner);
+        freshHook.poke(deviatedRatio);
+
+        (,,, fee) = poolManager.getSlot0(poolKey.toId());
     }
 
     /* ========================================================================== */
@@ -665,25 +740,14 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         baseMaxFeeDelta = uint24(bound(baseMaxFeeDelta, MIN_BASE_MAX_FEE_DELTA_FUZZ, MAX_BASE_MAX_FEE_DELTA_FUZZ));
         linearSlope = bound(linearSlope, MIN_LINEAR_SLOPE_FUZZ, MAX_LINEAR_SLOPE_FUZZ);
 
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Deploy new tokens with different decimals
         (Currency fuzzCurrency0, Currency fuzzCurrency1) = deployCurrencyPairWithDecimals(decimals0, decimals1);
 
-        // Create pool key with unique tick spacing
-        uint256 tickSpacingBounded = bound(uint256(decimals0 + decimals1), 20, 200);
-        // forge-lint: disable-next-line(unsafe-typecast)
-        int24 uniqueTickSpacing = int24(int256(tickSpacingBounded));
-        PoolKey memory fuzzKey =
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey(fuzzCurrency0, fuzzCurrency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, uniqueTickSpacing, IHooks(hook));
-        PoolId fuzzPoolId = PoolIdLibrary.toId(fuzzKey);
-
-        // Initialize the pool
-        poolManager.initialize(fuzzKey, Constants.SQRT_PRICE_1_1);
-        vm.prank(owner);
-        hook.initializePool(fuzzKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
-
         // Create test parameters
-        DynamicFeeLib.PoolTypeParams memory testParams = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory testParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 5000,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -696,15 +760,33 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             lowerSideFactor: 2e18
         });
 
+        // Create pool key with unique tick spacing
+        uint256 tickSpacingBounded = bound(uint256(decimals0 + decimals1), 20, 200);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int24 uniqueTickSpacing = int24(int256(tickSpacingBounded));
+        PoolKey memory fuzzKey = PoolKey({
+            currency0: fuzzCurrency0,
+            currency1: fuzzCurrency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: uniqueTickSpacing,
+            hooks: freshHook
+        });
+        PoolId fuzzPoolId = PoolIdLibrary.toId(fuzzKey);
+
+        // Initialize the pool
+        poolManager.initialize(fuzzKey, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, testParams);
+        freshHook.initializePool(fuzzKey, INITIAL_FEE, INITIAL_TARGET_RATIO, testParams);
+
+        vm.prank(owner);
+        freshLogic.setPoolParams(testParams);
 
         // Test fee calculation with different ratio
         uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, testParams.ratioTolerance) + ratioDeviation;
 
         vm.warp(block.timestamp + testParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(fuzzKey, testRatio);
+        freshHook.poke(testRatio);
 
         (,,, uint24 feeAfter) = poolManager.getSlot0(fuzzPoolId);
 
@@ -760,7 +842,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             shouldRevert = true;
         }
 
-        DynamicFeeLib.PoolTypeParams memory params = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory params = DynamicFeeLib.PoolParams({
             minFee: minFee,
             maxFee: maxFee,
             baseMaxFeeDelta: 50,
@@ -776,11 +858,11 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         vm.prank(owner);
         if (shouldRevert) {
             vm.expectRevert();
-            logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
+            logic.setPoolParams(params);
         } else {
-            logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params);
+            logic.setPoolParams(params);
             // Verify the parameters were set correctly
-            DynamicFeeLib.PoolTypeParams memory retrieved = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+            DynamicFeeLib.PoolParams memory retrieved = logic.getPoolParams();
             assertEq(retrieved.minFee, minFee, "minFee mismatch");
             assertEq(retrieved.maxFee, maxFee, "maxFee mismatch");
             assertEq(retrieved.lookbackPeriod, lookbackPeriod, "lookbackPeriod mismatch");
@@ -811,7 +893,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         linearSlope = bound(linearSlope, MIN_LINEAR_SLOPE_FUZZ, MAX_LINEAR_SLOPE_FUZZ);
 
         // Create parameters that can handle extreme ratios
-        DynamicFeeLib.PoolTypeParams memory extremeParams = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory extremeParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: maxFee,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -825,13 +907,13 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         });
 
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, extremeParams);
+        logic.setPoolParams(extremeParams);
 
         vm.warp(block.timestamp + extremeParams.minPeriod + 1);
 
         if (extremeRatio <= extremeParams.maxCurrentRatio) {
             vm.prank(owner);
-            hook.poke(key, extremeRatio);
+            hook.poke(extremeRatio);
 
             (,,, uint24 feeAfter) = poolManager.getSlot0(poolId);
 
@@ -840,7 +922,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             // Test EMA convergence with second poke
             vm.warp(block.timestamp + extremeParams.minPeriod + 1);
             vm.prank(owner);
-            hook.poke(key, extremeRatio);
+            hook.poke(extremeRatio);
 
             (,,, uint24 feeAfterSecond) = poolManager.getSlot0(poolId);
 
@@ -856,7 +938,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             // Should revert if ratio exceeds maxCurrentRatio
             vm.prank(owner);
             vm.expectRevert();
-            hook.poke(key, extremeRatio);
+            hook.poke(extremeRatio);
         }
     }
 
@@ -949,15 +1031,29 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     )
         internal
     {
+        // Deploy fresh hook stacks for single-pool-per-hook architecture
+        (testData.freshHook1, testData.freshLogic1) = _deployFreshAlphixStack();
+        (testData.freshHook2, testData.freshLogic2) = _deployFreshAlphixStack();
+
         // Create two separate pools with different currencies
         (Currency c01, Currency c11) = deployCurrencyPairWithDecimals(18, 18);
         (Currency c02, Currency c12) = deployCurrencyPairWithDecimals(18, 18);
 
-        testData.key1 =
-            PoolKey({currency0: c01, currency1: c11, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
+        testData.key1 = PoolKey({
+            currency0: c01,
+            currency1: c11,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 60,
+            hooks: testData.freshHook1
+        });
 
-        testData.key2 =
-            PoolKey({currency0: c02, currency1: c12, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
+        testData.key2 = PoolKey({
+            currency0: c02,
+            currency1: c12,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 60,
+            hooks: testData.freshHook2
+        });
 
         // Initialize both pools
         poolManager.initialize(testData.key1, Constants.SQRT_PRICE_1_1);
@@ -965,9 +1061,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Initialize both pools with identical starting conditions
         vm.prank(owner);
-        hook.initializePool(testData.key1, 500, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        testData.freshHook1.initializePool(testData.key1, 500, INITIAL_TARGET_RATIO, defaultPoolParams);
         vm.prank(owner);
-        hook.initializePool(testData.key2, 500, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        testData.freshHook2.initializePool(testData.key2, 500, INITIAL_TARGET_RATIO, defaultPoolParams);
 
         // Set test ratio
         if (testData.testUpperSide) {
@@ -990,7 +1086,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         internal
     {
         // Create parameters with different side factors
-        DynamicFeeLib.PoolTypeParams memory params1 = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory params1 = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 8000,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -1003,7 +1099,7 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
             lowerSideFactor: testData.lowerSideFactor1
         });
 
-        DynamicFeeLib.PoolTypeParams memory params2 = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory params2 = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 8000,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -1020,19 +1116,19 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         (,,, testData.fee1Before) = poolManager.getSlot0(testData.key1.toId());
         (,,, testData.fee2Before) = poolManager.getSlot0(testData.key2.toId());
 
-        // Poke pool1 with params1
+        // Poke pool1 with params1 using fresh hook/logic
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params1);
+        testData.freshLogic1.setPoolParams(params1);
         vm.warp(block.timestamp + params1.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testData.key1, testData.testRatio);
+        testData.freshHook1.poke(testData.testRatio);
 
-        // Poke pool2 with params2
+        // Poke pool2 with params2 using fresh hook/logic
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params2);
+        testData.freshLogic2.setPoolParams(params2);
         vm.warp(block.timestamp + params2.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testData.key2, testData.testRatio);
+        testData.freshHook2.poke(testData.testRatio);
 
         // Get final fees
         (,,, testData.fee1After) = poolManager.getSlot0(testData.key1.toId());
@@ -1051,8 +1147,8 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      */
     function _compareSideFactorResults(
         SideFactorTestData memory testData,
-        DynamicFeeLib.PoolTypeParams memory params1,
-        DynamicFeeLib.PoolTypeParams memory params2
+        DynamicFeeLib.PoolParams memory params1,
+        DynamicFeeLib.PoolParams memory params2
     ) internal pure {
         // Calculate deltas
         uint24 delta1 = testData.fee1After >= testData.fee1Before
@@ -1147,8 +1243,15 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         testData.param1Value = linearSlope1;
         testData.param2Value = linearSlope2;
 
-        // Create separate pools
-        (testData.key1, testData.key2) = _createParameterComparisonPools();
+        // Create separate pools with fresh hooks
+        (
+            testData.key1,
+            testData.key2,
+            testData.freshHook1,
+            testData.freshLogic1,
+            testData.freshHook2,
+            testData.freshLogic2
+        ) = _createParameterComparisonPools();
 
         // Calculate test ratio outside tolerance band
         testData.testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, ratioTolerance) + ratioDeviation;
@@ -1178,8 +1281,15 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         testData.param1Value = uint256(baseMaxFeeDelta1);
         testData.param2Value = uint256(baseMaxFeeDelta2);
 
-        // Create separate pools
-        (testData.key1, testData.key2) = _createParameterComparisonPools();
+        // Create separate pools with fresh hooks
+        (
+            testData.key1,
+            testData.key2,
+            testData.freshHook1,
+            testData.freshLogic1,
+            testData.freshHook2,
+            testData.freshLogic2
+        ) = _createParameterComparisonPools();
 
         // Calculate test ratio outside tolerance band
         testData.testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, ratioTolerance) + ratioDeviation;
@@ -1215,91 +1325,21 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         testData.param1Value = ratioTolerance1;
         testData.param2Value = ratioTolerance2;
 
-        // Create separate pools
-        (testData.key1, testData.key2) = _createParameterComparisonPools();
+        // Create separate pools with fresh hooks
+        (
+            testData.key1,
+            testData.key2,
+            testData.freshHook1,
+            testData.freshLogic1,
+            testData.freshHook2,
+            testData.freshLogic2
+        ) = _createParameterComparisonPools();
 
         // Use a fixed ratio that may be in-band for one tolerance but out-of-band for another
         testData.testRatio = INITIAL_TARGET_RATIO + (INITIAL_TARGET_RATIO * ratioDeviation / 1e18);
 
         // Execute test with different ratio tolerances - this is more complex as it affects the test ratio interpretation
         _executeRatioToleranceComparisonTest(testData, ratioTolerance1, ratioTolerance2, linearSlope, baseMaxFeeDelta);
-    }
-
-    /* ------------------------------ Convergence Helpers ------------------------------ */
-
-    /**
-     * @notice Tests lookback period convergence using separate pools
-     * @param shortKey Pool key with shorter lookback period
-     * @param longKey Pool key with longer lookback period
-     * @param shortLookback Shorter lookback period value
-     * @param longLookback Longer lookback period value
-     * @param ratioDeviation Sustained ratio deviation to test
-     */
-    function _testLookbackConvergence(
-        PoolKey memory shortKey,
-        PoolKey memory longKey,
-        uint24 shortLookback,
-        uint24 longLookback,
-        uint256 ratioDeviation
-    ) internal {
-        // Test convergence with sustained deviation
-        uint256 deviatedRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, 5e15) + ratioDeviation;
-
-        // === Run SHORT lookback pool sequence FIRST ===
-        DynamicFeeLib.PoolTypeParams memory shortParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1,
-            maxFee: 5000,
-            baseMaxFeeDelta: 50,
-            lookbackPeriod: shortLookback,
-            minPeriod: 1 days,
-            ratioTolerance: 5e15,
-            linearSlope: 2e18,
-            maxCurrentRatio: MAX_CURRENT_RATIO_FUZZ,
-            upperSideFactor: 2e18,
-            lowerSideFactor: 2e18
-        });
-
-        // Set short lookback params
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, shortParams);
-
-        // Initial poke
-        vm.warp(block.timestamp + shortParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(shortKey, INITIAL_TARGET_RATIO);
-
-        // Deviated poke with short lookback
-        vm.warp(block.timestamp + shortParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(shortKey, deviatedRatio);
-
-        (,,, uint24 shortFirstFee) = poolManager.getSlot0(PoolIdLibrary.toId(shortKey));
-
-        // === Now run LONG lookback pool sequence ===
-        DynamicFeeLib.PoolTypeParams memory longParams = shortParams;
-        longParams.lookbackPeriod = longLookback;
-
-        // Set long lookback params
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, longParams);
-
-        // Initial poke
-        vm.warp(block.timestamp + longParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(longKey, INITIAL_TARGET_RATIO);
-
-        // Deviated poke with long lookback
-        vm.warp(block.timestamp + longParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(longKey, deviatedRatio);
-
-        (,,, uint24 longFirstFee) = poolManager.getSlot0(PoolIdLibrary.toId(longKey));
-
-        // Verify convergence behavior - both pools should have increased fees
-        // But the comparison is no longer "identical" since they ran under different lookbacks
-        assertTrue(shortFirstFee >= INITIAL_FEE, "Short lookback fees should increase for ratio above tolerance");
-        assertTrue(longFirstFee >= INITIAL_FEE, "Long lookback fees should increase for ratio above tolerance");
-        assertTrue(shortLookback < longLookback, "Setup verification");
     }
 
     /* --------------------------- Ratio Calculation Helpers --------------------------- */
@@ -1376,19 +1416,39 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
     /**
      * @notice Creates two separate pools for parameter comparison testing
-     * @dev Returns pool keys for two identical pools with different currencies
+     * @dev Returns pool keys for two identical pools with different currencies and FRESH hooks
      * @return key1 First pool key
      * @return key2 Second pool key
+     * @return freshHook1 Fresh hook for first pool
+     * @return freshLogic1 Fresh logic for first pool
+     * @return freshHook2 Fresh hook for second pool
+     * @return freshLogic2 Fresh logic for second pool
      */
-    function _createParameterComparisonPools() internal returns (PoolKey memory key1, PoolKey memory key2) {
+    function _createParameterComparisonPools()
+        internal
+        returns (
+            PoolKey memory key1,
+            PoolKey memory key2,
+            Alphix freshHook1,
+            IAlphixLogic freshLogic1,
+            Alphix freshHook2,
+            IAlphixLogic freshLogic2
+        )
+    {
+        // Deploy fresh hook stacks for single-pool-per-hook architecture
+        (freshHook1, freshLogic1) = _deployFreshAlphixStack();
+        (freshHook2, freshLogic2) = _deployFreshAlphixStack();
+
         (Currency c01, Currency c11) = deployCurrencyPairWithDecimals(18, 18);
         (Currency c02, Currency c12) = deployCurrencyPairWithDecimals(18, 18);
 
-        key1 =
-            PoolKey({currency0: c01, currency1: c11, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
+        key1 = PoolKey({
+            currency0: c01, currency1: c11, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: freshHook1
+        });
 
-        key2 =
-            PoolKey({currency0: c02, currency1: c12, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: hook});
+        key2 = PoolKey({
+            currency0: c02, currency1: c12, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: freshHook2
+        });
 
         // Initialize both pools
         poolManager.initialize(key1, Constants.SQRT_PRICE_1_1);
@@ -1396,9 +1456,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
 
         // Initialize both pools with identical starting conditions
         vm.prank(owner);
-        hook.initializePool(key1, 500, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        freshHook1.initializePool(key1, 500, INITIAL_TARGET_RATIO, defaultPoolParams);
         vm.prank(owner);
-        hook.initializePool(key2, 500, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        freshHook2.initializePool(key2, 500, INITIAL_TARGET_RATIO, defaultPoolParams);
     }
 
     /**
@@ -1420,8 +1480,8 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 param2Value
     ) internal {
         // Create parameter sets - exact structure depends on which parameter we're testing
-        DynamicFeeLib.PoolTypeParams memory params1;
-        DynamicFeeLib.PoolTypeParams memory params2;
+        DynamicFeeLib.PoolParams memory params1;
+        DynamicFeeLib.PoolParams memory params2;
 
         if (keccak256(bytes(parameterName)) == keccak256("linearSlope")) {
             params1 = _createParameterSetWithLinearSlope(ratioTolerance, baseMaxFeeDelta, param1Value);
@@ -1454,10 +1514,10 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
         uint256 linearSlope,
         uint24 baseMaxFeeDelta
     ) internal {
-        DynamicFeeLib.PoolTypeParams memory params1 = _createParameterSetWithRatioTolerance(
+        DynamicFeeLib.PoolParams memory params1 = _createParameterSetWithRatioTolerance(
             ratioTolerance1, linearSlope, baseMaxFeeDelta
         );
-        DynamicFeeLib.PoolTypeParams memory params2 =
+        DynamicFeeLib.PoolParams memory params2 =
             _createParameterSetWithRatioTolerance(ratioTolerance2, linearSlope, baseMaxFeeDelta);
 
         // Execute pokes and compare results - this test is about in-band vs out-of-band behavior
@@ -1474,9 +1534,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     function _createParameterSetWithLinearSlope(uint256 ratioTolerance, uint24 baseMaxFeeDelta, uint256 linearSlope)
         internal
         pure
-        returns (DynamicFeeLib.PoolTypeParams memory)
+        returns (DynamicFeeLib.PoolParams memory)
     {
-        return DynamicFeeLib.PoolTypeParams({
+        return DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 8000,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -1500,9 +1560,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     function _createParameterSetWithBaseMaxFeeDelta(uint256 ratioTolerance, uint24 baseMaxFeeDelta, uint256 linearSlope)
         internal
         pure
-        returns (DynamicFeeLib.PoolTypeParams memory)
+        returns (DynamicFeeLib.PoolParams memory)
     {
-        return DynamicFeeLib.PoolTypeParams({
+        return DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 8000,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -1526,9 +1586,9 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
     function _createParameterSetWithRatioTolerance(uint256 ratioTolerance, uint256 linearSlope, uint24 baseMaxFeeDelta)
         internal
         pure
-        returns (DynamicFeeLib.PoolTypeParams memory)
+        returns (DynamicFeeLib.PoolParams memory)
     {
-        return DynamicFeeLib.PoolTypeParams({
+        return DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 8000,
             baseMaxFeeDelta: baseMaxFeeDelta,
@@ -1552,26 +1612,26 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      */
     function _executePokeAndCompare(
         ParameterComparisonTestData memory testData,
-        DynamicFeeLib.PoolTypeParams memory params1,
-        DynamicFeeLib.PoolTypeParams memory params2,
+        DynamicFeeLib.PoolParams memory params1,
+        DynamicFeeLib.PoolParams memory params2,
         string memory parameterName
     ) internal {
         // Get initial fees
         (,,, testData.fee1Before) = poolManager.getSlot0(testData.key1.toId());
         (,,, testData.fee2Before) = poolManager.getSlot0(testData.key2.toId());
 
-        // Set parameters and poke each pool
+        // Set parameters and poke each pool using their respective fresh hooks/logics
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params1);
+        testData.freshLogic1.setPoolParams(params1);
         vm.warp(block.timestamp + params1.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testData.key1, testData.testRatio);
+        testData.freshHook1.poke(testData.testRatio);
 
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, params2);
+        testData.freshLogic2.setPoolParams(params2);
         vm.warp(block.timestamp + params2.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testData.key2, testData.testRatio);
+        testData.freshHook2.poke(testData.testRatio);
 
         // Get final fees
         (,,, testData.fee1After) = poolManager.getSlot0(testData.key1.toId());
@@ -1591,8 +1651,8 @@ contract PoolTypeParamsBehaviorChangeFuzzTest is BaseAlphixTest {
      */
     function _validateParameterRelationship(
         ParameterComparisonTestData memory testData,
-        DynamicFeeLib.PoolTypeParams memory params1,
-        DynamicFeeLib.PoolTypeParams memory params2,
+        DynamicFeeLib.PoolParams memory params1,
+        DynamicFeeLib.PoolParams memory params2,
         string memory parameterName
     ) internal pure {
         // Calculate deltas

@@ -14,9 +14,9 @@ import {Constants} from "v4-core/test/utils/Constants.sol";
 /* OZ IMPORTS */
 import {Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IAccessManaged} from "@openzeppelin/contracts/access/manager/IAccessManaged.sol";
+import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
@@ -24,6 +24,7 @@ import {Alphix} from "../../../../src/Alphix.sol";
 import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {IRegistry} from "../../../../src/interfaces/IRegistry.sol";
+import {Registry} from "../../../../src/Registry.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 import {MockReenteringLogic} from "../../../utils/mocks/MockReenteringLogic.sol";
@@ -37,55 +38,48 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      * @notice initializePool should configure pool and register it.
      */
     function test_initializePool_success() public {
-        (PoolKey memory k, PoolId id) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
+        (PoolKey memory k, PoolId id, Alphix freshHook, IAlphixLogic freshLogic,, Registry freshReg) =
+            _newUninitializedPoolFreshFull(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
-        emit IAlphix.PoolConfigured(id, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
-        hook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        emit IAlphix.PoolConfigured(id, INITIAL_FEE, INITIAL_TARGET_RATIO);
+        freshHook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
 
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(id);
+        IAlphixLogic.PoolConfig memory cfg = freshLogic.getPoolConfig();
         assertEq(cfg.initialFee, INITIAL_FEE);
         assertEq(cfg.initialTargetRatio, INITIAL_TARGET_RATIO);
-        assertEq(uint8(cfg.poolType), uint8(IAlphixLogic.PoolType.STANDARD));
         assertTrue(cfg.isConfigured);
 
-        IRegistry.PoolInfo memory info = registry.getPoolInfo(id);
+        IRegistry.PoolInfo memory info = freshReg.getPoolInfo(id);
         assertEq(info.initialFee, INITIAL_FEE);
         assertEq(info.initialTargetRatio, INITIAL_TARGET_RATIO);
         assertTrue(info.timestamp > 0);
     }
 
     /**
-     * @notice initializePool should revert when fee is outside pool-type bounds.
+     * @notice initializePool should revert when fee is outside pool params bounds.
      */
     function test_initializePool_revertsOnInvalidFee() public {
-        (PoolKey memory k,) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
+        (PoolKey memory k,, Alphix freshHook, IAlphixLogic freshLogic,, Registry freshReg) =
+            _newUninitializedPoolFreshFull(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
 
-        // STANDARD bounds from Base: min=99, max=10001 -> pick invalids outside
-        uint24 invalidLow = 98;
+        // defaultPoolParams bounds: min=1, max=100001 -> pick invalids outside
+        uint24 invalidLow = 0;
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAlphixLogic.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidLow
-            )
-        );
-        hook.initializePool(k, invalidLow, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidFee.selector, invalidLow));
+        freshHook.initializePool(k, invalidLow, INITIAL_TARGET_RATIO, defaultPoolParams);
 
-        uint24 invalidHigh = 10002;
+        uint24 invalidHigh = 100002;
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAlphixLogic.InvalidFeeForPoolType.selector, IAlphixLogic.PoolType.STANDARD, invalidHigh
-            )
-        );
-        hook.initializePool(k, invalidHigh, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidFee.selector, invalidHigh));
+        freshHook.initializePool(k, invalidHigh, INITIAL_TARGET_RATIO, defaultPoolParams);
 
         // Valid fee
         uint24 validFee = 500;
         vm.prank(owner);
-        hook.initializePool(k, validFee, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(k.toId());
-        IRegistry.PoolInfo memory info = registry.getPoolInfo(k.toId());
+        freshHook.initializePool(k, validFee, INITIAL_TARGET_RATIO, defaultPoolParams);
+        IAlphixLogic.PoolConfig memory cfg = freshLogic.getPoolConfig();
+        IRegistry.PoolInfo memory info = freshReg.getPoolInfo(k.toId());
         assertTrue(cfg.isConfigured);
         assertTrue(info.timestamp > 0);
     }
@@ -94,34 +88,35 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      * @notice initializePool should revert on zero target ratio.
      */
     function test_initializePool_revertsOnZeroRatio() public {
-        (PoolKey memory k,) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
+        (PoolKey memory k,, Alphix freshHook,) =
+            _newUninitializedPoolFresh(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, IAlphixLogic.PoolType.STANDARD, 0)
-        );
-        hook.initializePool(k, INITIAL_FEE, 0, IAlphixLogic.PoolType.STANDARD);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatio.selector, 0));
+        freshHook.initializePool(k, INITIAL_FEE, 0, defaultPoolParams);
     }
 
     /**
      * @notice initializePool should revert when caller is not owner.
      */
     function test_initializePool_revertsOnNonOwner() public {
-        (PoolKey memory k,) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
+        (PoolKey memory k,, Alphix freshHook,) =
+            _newUninitializedPoolFresh(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, unauthorized));
-        hook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        freshHook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
     }
 
     /**
      * @notice initializePool should revert while the hook is paused.
      */
     function test_initializePool_revertsWhenPaused() public {
-        (PoolKey memory k,) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
+        (PoolKey memory k,, Alphix freshHook,) =
+            _newUninitializedPoolFresh(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        hook.pause();
+        freshHook.pause();
         vm.prank(owner);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        hook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        freshHook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
     }
 
     /**
@@ -143,12 +138,12 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         // Reverts because the contract is paused (initialize not called)
         vm.startPrank(owner);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        testHook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        testHook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
 
         // Manually unpause with owner, but the logic is still not valid (not set).
         testHook.unpause();
         vm.expectRevert(IAlphix.LogicNotSet.selector);
-        testHook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        testHook.initializePool(k, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
         vm.stopPrank();
     }
 
@@ -156,59 +151,38 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      * @notice activatePool should succeed from owner after a deactivate.
      */
     function test_activatePool_success() public {
-        (PoolKey memory k, PoolId id) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (, PoolId id, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        hook.deactivatePool(k);
+        freshHook.deactivatePool();
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
         emit IAlphix.PoolActivated(id);
-        hook.activatePool(k);
+        freshHook.activatePool();
     }
 
     /**
      * @notice activatePool should revert for non-owner.
      */
     function test_activatePool_revertsOnNonOwner() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, unauthorized));
-        hook.activatePool(k);
+        freshHook.activatePool();
     }
 
     /**
      * @notice activatePool should revert while paused.
      */
     function test_activatePool_revertsWhenPaused() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        hook.pause();
+        freshHook.pause();
         vm.startPrank(owner);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        hook.activatePool(k);
+        freshHook.activatePool();
     }
 
     /**
@@ -216,157 +190,119 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      * @dev Creates a Uniswap pool bound to the hook, but does not call hook.initializePool.
      */
     function test_activatePool_revertsWhenNotConfigured() public {
-        (PoolKey memory k,) = _newUninitializedPool(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
+        (,, Alphix freshHook,) = _newUninitializedPoolFresh(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
         vm.expectRevert(IAlphixLogic.PoolNotConfigured.selector);
-        hook.activatePool(k);
+        freshHook.activatePool();
     }
 
     /**
      * @notice deactivatePool should emit and succeed from owner.
      */
     function test_deactivatePool_success() public {
-        (PoolKey memory k, PoolId id) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (, PoolId id, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
         emit IAlphix.PoolDeactivated(id);
-        hook.deactivatePool(k);
+        freshHook.deactivatePool();
     }
 
     /**
      * @notice deactivatePool should revert for non-owner.
      */
     function test_deactivatePool_revertsOnNonOwner() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, unauthorized));
-        hook.deactivatePool(k);
+        freshHook.deactivatePool();
     }
 
     /**
      * @notice deactivatePool should revert while paused.
      */
     function test_deactivatePool_revertsWhenPaused() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        hook.pause();
+        freshHook.pause();
         vm.startPrank(owner);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        hook.deactivatePool(k);
+        freshHook.deactivatePool();
     }
 
     /**
-     * @notice setPoolTypeBounds should update bounds for the given pool type.
+     * @notice setPoolParams should update bounds for the pool.
      */
-    function test_setPoolTypeBounds_success() public {
-        // Adapted to PoolTypeParams
-        DynamicFeeLib.PoolTypeParams memory newParams = DynamicFeeLib.PoolTypeParams({
+    function test_setPoolParams_success() public {
+        DynamicFeeLib.PoolParams memory newParams = DynamicFeeLib.PoolParams({
             minFee: 1000,
             maxFee: 5000,
-            baseMaxFeeDelta: standardParams.baseMaxFeeDelta,
-            lookbackPeriod: standardParams.lookbackPeriod,
-            minPeriod: standardParams.minPeriod,
-            ratioTolerance: standardParams.ratioTolerance,
-            linearSlope: standardParams.linearSlope,
-            maxCurrentRatio: standardParams.maxCurrentRatio,
-            lowerSideFactor: standardParams.lowerSideFactor,
-            upperSideFactor: standardParams.upperSideFactor
+            baseMaxFeeDelta: defaultPoolParams.baseMaxFeeDelta,
+            lookbackPeriod: defaultPoolParams.lookbackPeriod,
+            minPeriod: defaultPoolParams.minPeriod,
+            ratioTolerance: defaultPoolParams.ratioTolerance,
+            linearSlope: defaultPoolParams.linearSlope,
+            maxCurrentRatio: defaultPoolParams.maxCurrentRatio,
+            lowerSideFactor: defaultPoolParams.lowerSideFactor,
+            upperSideFactor: defaultPoolParams.upperSideFactor
         });
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
-        DynamicFeeLib.PoolTypeParams memory got = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        logic.setPoolParams(newParams);
+        DynamicFeeLib.PoolParams memory got = logic.getPoolParams();
         assertEq(got.minFee, newParams.minFee);
         assertEq(got.maxFee, newParams.maxFee);
     }
 
     /**
-     * @notice setPoolTypeBounds should revert for non-owner.
+     * @notice setPoolParams should revert for non-owner.
      */
-    function test_setPoolTypeBounds_revertsOnNonOwner() public {
-        DynamicFeeLib.PoolTypeParams memory newParams = DynamicFeeLib.PoolTypeParams({
+    function test_setPoolParams_revertsOnNonOwner() public {
+        DynamicFeeLib.PoolParams memory newParams = DynamicFeeLib.PoolParams({
             minFee: 1000,
             maxFee: 5000,
-            baseMaxFeeDelta: standardParams.baseMaxFeeDelta,
-            lookbackPeriod: standardParams.lookbackPeriod,
-            minPeriod: standardParams.minPeriod,
-            ratioTolerance: standardParams.ratioTolerance,
-            linearSlope: standardParams.linearSlope,
-            maxCurrentRatio: standardParams.maxCurrentRatio,
-            lowerSideFactor: standardParams.lowerSideFactor,
-            upperSideFactor: standardParams.upperSideFactor
+            baseMaxFeeDelta: defaultPoolParams.baseMaxFeeDelta,
+            lookbackPeriod: defaultPoolParams.lookbackPeriod,
+            minPeriod: defaultPoolParams.minPeriod,
+            ratioTolerance: defaultPoolParams.ratioTolerance,
+            linearSlope: defaultPoolParams.linearSlope,
+            maxCurrentRatio: defaultPoolParams.maxCurrentRatio,
+            lowerSideFactor: defaultPoolParams.lowerSideFactor,
+            upperSideFactor: defaultPoolParams.upperSideFactor
         });
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, unauthorized));
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, newParams);
+        logic.setPoolParams(newParams);
     }
 
     /**
-     * @notice getPoolBounds should match the configured type bounds.
+     * @notice getPoolParams should match the configured bounds.
      */
-    function test_getPoolBounds() public {
-        (PoolKey memory k, PoolId id) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
-        IAlphixLogic.PoolType poolType = logic.getPoolConfig(id).poolType;
-        DynamicFeeLib.PoolTypeParams memory setParams = logic.getPoolTypeParams(poolType);
-        assertEq(setParams.minFee, standardParams.minFee);
-        assertEq(setParams.maxFee, standardParams.maxFee);
-        // silence k
-        k.fee = k.fee;
+    function test_getPoolParams() public {
+        // Use a fresh pool with fresh logic
+        (,,, IAlphixLogic freshLogic) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
+        DynamicFeeLib.PoolParams memory setParams = freshLogic.getPoolParams();
+        assertEq(setParams.minFee, defaultPoolParams.minFee);
+        assertEq(setParams.maxFee, defaultPoolParams.maxFee);
     }
 
     /**
-     * @notice getPoolTypeBounds returns the current bounds for a pool type.
+     * @notice getPoolParams returns the current bounds for the pool.
      */
-    function test_getPoolTypeBounds() public view {
-        DynamicFeeLib.PoolTypeParams memory current = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
-        assertEq(current.minFee, stableParams.minFee);
-        assertEq(current.maxFee, stableParams.maxFee);
+    function test_getPoolParams_view() public view {
+        DynamicFeeLib.PoolParams memory current = logic.getPoolParams();
+        assertEq(current.minFee, defaultPoolParams.minFee);
+        assertEq(current.maxFee, defaultPoolParams.maxFee);
     }
 
     /**
      * @notice poke should update LP fee when called by owner and emit FeeUpdated; state is verified via StateLibrary.getSlot0.
      */
     function test_poke_success() public {
-        (PoolKey memory k, PoolId id) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (, PoolId id, Alphix freshHook, IAlphixLogic freshLogic) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
 
         // Cooldown enforcement requires minPeriod elapsed (Base uses 1 day)
         vm.warp(block.timestamp + 1 days);
@@ -377,12 +313,12 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         vm.expectEmit(true, false, false, false);
         // Only check the indexed topic (poolId); data unchecked due to algorithmic computation
         emit IAlphix.FeeUpdated(id, 0, 0, 0, 0, 0);
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
 
         (,,, uint24 postLpFee) = poolManager.getSlot0(id);
 
-        // Verify within STANDARD bounds
-        DynamicFeeLib.PoolTypeParams memory pp = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        // Verify within bounds
+        DynamicFeeLib.PoolParams memory pp = freshLogic.getPoolParams();
         assertTrue(postLpFee >= pp.minFee && postLpFee <= pp.maxFee);
 
         // Either updated or remained the same depending on algorithm and inputs; both acceptable within bounds
@@ -393,84 +329,59 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      * @notice poke should revert when called by non-poker-role.
      */
     function test_poke_revertsOnNonOwner() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
 
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
-        hook.poke(k, INITIAL_TARGET_RATIO);
-
-        vm.prank(address(logic));
-        vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, address(logic)));
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
     }
 
     /**
      * @notice poke can be called by any address with FEE_POKER_ROLE.
      */
     function test_poke_success_withPokerRole() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,, AccessManager freshAm,) =
+            _initPoolFreshFull(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
 
         // user1 doesn't have FEE_POKER_ROLE, should fail
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
 
         // Grant FEE_POKER_ROLE to user1
         vm.prank(owner);
-        accessManager.grantRole(FEE_POKER_ROLE, user1, 0);
+        freshAm.grantRole(FEE_POKER_ROLE, user1, 0);
 
         // Wait for cooldown
         vm.warp(block.timestamp + 1 days + 1);
 
         // Now user1 can call poke
         vm.prank(user1);
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
     }
 
     /**
      * @notice poke should fail after FEE_POKER_ROLE is revoked.
      */
     function test_poke_revertsAfterPokerRoleRevoked() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,, AccessManager freshAm,) =
+            _initPoolFreshFull(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
 
         // Grant FEE_POKER_ROLE to user1
         vm.prank(owner);
-        accessManager.grantRole(FEE_POKER_ROLE, user1, 0);
+        freshAm.grantRole(FEE_POKER_ROLE, user1, 0);
 
         // Wait for cooldown
         vm.warp(block.timestamp + 1 days + 1);
 
         // user1 can call poke
         vm.prank(user1);
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
 
         // Revoke FEE_POKER_ROLE from user1
         vm.prank(owner);
-        accessManager.revokeRole(FEE_POKER_ROLE, user1);
+        freshAm.revokeRole(FEE_POKER_ROLE, user1);
 
         // Wait for cooldown again
         vm.warp(block.timestamp + 1 days + 1);
@@ -478,98 +389,62 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         // Now user1 cannot call poke
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
     }
 
     /**
      * @notice poke should revert while paused.
      */
     function test_poke_revertsWhenPaused() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.prank(owner);
-        hook.pause();
+        freshHook.pause();
 
         vm.prank(owner);
         vm.expectRevert(Pausable.EnforcedPause.selector);
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
     }
 
-    /**
-     * @notice poke should revert for invalid PoolKey.hooks (onlyValidPools).
-     * @dev Uses a PoolKey whose hooks field points to a different hook contract.
-     */
-    function test_poke_revertsOnInvalidHooks_onlyValidPools() public {
-        vm.startPrank(owner);
-        Alphix otherHook = _deployAlphixHook(poolManager, owner, accessManager, registry);
-        (,, IAlphixLogic otherLogic) = _deployAlphixLogic(owner, address(otherHook));
-        otherHook.initialize(address(otherLogic));
-        vm.stopPrank();
-
-        // Create a pool bound to the otherHook (not the default hook)
-        (Currency c0, Currency c1) = deployCurrencyPairWithDecimals(18, 18);
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey memory k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, defaultTickSpacing, IHooks(otherHook));
-        poolManager.initialize(k, Constants.SQRT_PRICE_1_1);
-
-        // Call poke on the default hook with the key attached to another hook
-        vm.prank(owner);
-        vm.expectRevert(BaseHook.InvalidPool.selector);
-        hook.poke(k, INITIAL_TARGET_RATIO);
-    }
+    // Note: test_poke_revertsOnInvalidHooks_onlyValidPools removed - single pool architecture stores pool key,
+    // so poke no longer takes a key parameter. Pool validation happens at initializePool instead.
 
     /**
      * @notice poke should not be re-entrant (nonReentrant).
      * @dev Deploys a MockReenteringLogic as the hook owner, advances past cooldown,
-     *      then calls poke via the hook. The mock’s getFee will attempt to re-enter poke,
-     *      triggering ReentrancyGuard’s reentrant call revert.
+     *      then calls poke via the hook. The mock's getFee will attempt to re-enter poke,
+     *      triggering ReentrancyGuard's reentrant call revert.
      */
     function test_poke_reentrancyGuard_blocksReentry() public {
         // Initialize a pool and allow initial fee update cooldown to expire
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,, AccessManager freshAm,) =
+            _initPoolFreshFull(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         vm.warp(block.timestamp + 1 days + 1);
 
         // Deploy the re-entering logic and set it as the hook owner
-        MockReenteringLogic reenterLogic = new MockReenteringLogic(address(hook));
+        MockReenteringLogic reenterLogic = new MockReenteringLogic(address(freshHook));
 
         // Grant FEE_POKER_ROLE to reenterLogic so it can call poke
         vm.prank(owner);
-        accessManager.grantRole(FEE_POKER_ROLE, address(reenterLogic), 0);
+        freshAm.grantRole(FEE_POKER_ROLE, address(reenterLogic), 0);
 
         vm.prank(owner);
         // Transfer hook ownership so getFee->poke happens as owner
-        hook.transferOwnership(address(reenterLogic));
+        freshHook.transferOwnership(address(reenterLogic));
 
         // Mock accepts ownership (complete the 2-step Ownable transfer)
         vm.prank(address(reenterLogic));
-        hook.acceptOwnership();
+        freshHook.acceptOwnership();
 
-        // Set hook logic to reentering one
+        // Set hook logic to reentering one (LogicUpdated event removed for bytecode savings)
         vm.startPrank(address(reenterLogic));
-        vm.expectEmit(true, true, false, true);
-        emit IAlphix.LogicUpdated(hook.getLogic(), address(reenterLogic));
-        hook.setLogic(address(reenterLogic));
+        freshHook.setLogic(address(reenterLogic));
         vm.stopPrank();
 
         // Expect reentrancy guard to block the nested call
         vm.prank(address(reenterLogic));
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
     }
 
     /**
@@ -595,37 +470,28 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
         vm.startPrank(owner);
         testHook.unpause();
         vm.expectRevert(IAlphix.LogicNotSet.selector);
-        testHook.poke(k, INITIAL_TARGET_RATIO);
+        testHook.poke(INITIAL_TARGET_RATIO);
         vm.stopPrank();
 
         // Any non-poker-role caller reverts with AccessManaged
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(IAccessManaged.AccessManagedUnauthorized.selector, user1));
-        testHook.poke(k, INITIAL_TARGET_RATIO);
+        testHook.poke(INITIAL_TARGET_RATIO);
     }
 
     /**
      * @notice Poke should revert if currentRatio is zero.
      */
     function test_poke_revertsOnZeroRatio() public {
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
 
         // Advance time past cooldown period
         vm.warp(block.timestamp + 2 days);
 
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, IAlphixLogic.PoolType.STANDARD, 0)
-        );
-        hook.poke(k, 0);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatio.selector, 0));
+        freshHook.poke(0);
     }
 
     /**
@@ -633,15 +499,8 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      */
     function test_poke_revertsOnCooldownNotElapsed() public {
         uint256 currentTimestamp = block.timestamp;
-        (PoolKey memory k,) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (PoolKey memory k,, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
 
         // Immediately poking should hit logic cooldown check
         vm.prank(owner);
@@ -650,7 +509,7 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
                 IAlphixLogic.CooldownNotElapsed.selector, k.toId(), currentTimestamp + 1 days, 1 days
             )
         );
-        hook.poke(k, INITIAL_TARGET_RATIO);
+        freshHook.poke(INITIAL_TARGET_RATIO);
     }
 
     /**
@@ -686,44 +545,94 @@ contract AlphixPoolManagementTest is BaseAlphixTest {
      * @notice getFee should return the fee stored in PoolManager slot0.
      */
     function test_getFee_view() public {
-        (PoolKey memory k, PoolId id) = _initPool(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1
-        );
+        (, PoolId id, Alphix freshHook,) =
+            _initPoolFresh(INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1);
         (,,, uint24 feeFromSlot) = poolManager.getSlot0(id);
-        uint24 feeFromView = hook.getFee(k);
+        uint24 feeFromView = freshHook.getFee();
         assertEq(feeFromView, feeFromSlot);
     }
 
     /* HELPERS */
 
     /**
-     * @notice Create a fresh Uniswap pool bound to the current hook without configuring Alphix.
+     * @notice Create a fresh Uniswap pool bound to a fresh hook without configuring Alphix.
+     * @dev Creates a new hook+logic pair to support single-pool-per-hook architecture.
+     * @return k The pool key
+     * @return id The pool ID
+     * @return freshHook The fresh hook instance
+     * @return freshLogic The fresh logic instance
      */
-    function _newUninitializedPool(uint8 d0, uint8 d1, int24 spacing, uint160 initialPrice)
+    function _newUninitializedPoolFresh(uint8 d0, uint8 d1, int24 spacing, uint160 initialPrice)
         internal
-        returns (PoolKey memory k, PoolId id)
+        returns (PoolKey memory k, PoolId id, Alphix freshHook, IAlphixLogic freshLogic)
     {
-        return _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, hook);
+        (freshHook, freshLogic) = _deployFreshAlphixStack();
+        (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, freshHook);
     }
 
     /**
-     * @notice Create and initialize a pool in Alphix with given params.
+     * @notice Create a fresh Uniswap pool bound to a fresh hook without configuring Alphix, with full returns.
+     * @dev Creates a new hook+logic pair to support single-pool-per-hook architecture.
+     * @return k The pool key
+     * @return id The pool ID
+     * @return freshHook The fresh hook instance
+     * @return freshLogic The fresh logic instance
+     * @return freshAm The fresh AccessManager instance
+     * @return freshReg The fresh Registry instance
      */
-    function _initPool(
-        IAlphixLogic.PoolType ptype,
-        uint24 fee,
-        uint256 ratio,
-        uint8 d0,
-        uint8 d1,
-        int24 spacing,
-        uint160 initialPrice
-    ) internal returns (PoolKey memory k, PoolId id) {
-        return _initPoolWithHook(ptype, fee, ratio, d0, d1, spacing, initialPrice, hook);
+    function _newUninitializedPoolFreshFull(uint8 d0, uint8 d1, int24 spacing, uint160 initialPrice)
+        internal
+        returns (
+            PoolKey memory k,
+            PoolId id,
+            Alphix freshHook,
+            IAlphixLogic freshLogic,
+            AccessManager freshAm,
+            Registry freshReg
+        )
+    {
+        (freshHook, freshLogic, freshAm, freshReg) = _deployFreshAlphixStackFull();
+        (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, freshHook);
+    }
+
+    /**
+     * @notice Create and initialize a pool in Alphix with given params using a fresh hook.
+     * @dev Creates a new hook+logic pair to support single-pool-per-hook architecture.
+     * @return k The pool key
+     * @return id The pool ID
+     * @return freshHook The fresh hook instance
+     * @return freshLogic The fresh logic instance
+     */
+    function _initPoolFresh(uint24 fee, uint256 ratio, uint8 d0, uint8 d1, int24 spacing, uint160 initialPrice)
+        internal
+        returns (PoolKey memory k, PoolId id, Alphix freshHook, IAlphixLogic freshLogic)
+    {
+        (freshHook, freshLogic) = _deployFreshAlphixStack();
+        (k, id) = _initPoolWithHook(fee, ratio, d0, d1, spacing, initialPrice, freshHook);
+    }
+
+    /**
+     * @notice Create and initialize a pool in Alphix with given params using a fresh hook, returning AccessManager.
+     * @dev Creates a new hook+logic pair to support single-pool-per-hook architecture.
+     * @return k The pool key
+     * @return id The pool ID
+     * @return freshHook The fresh hook instance
+     * @return freshLogic The fresh logic instance
+     * @return freshAm The fresh AccessManager instance
+     * @return freshReg The fresh Registry instance
+     */
+    function _initPoolFreshFull(uint24 fee, uint256 ratio, uint8 d0, uint8 d1, int24 spacing, uint160 initialPrice)
+        internal
+        returns (
+            PoolKey memory k,
+            PoolId id,
+            Alphix freshHook,
+            IAlphixLogic freshLogic,
+            AccessManager freshAm,
+            Registry freshReg
+        )
+    {
+        (freshHook, freshLogic, freshAm, freshReg) = _deployFreshAlphixStackFull();
+        (k, id) = _initPoolWithHook(fee, ratio, d0, d1, spacing, initialPrice, freshHook);
     }
 }

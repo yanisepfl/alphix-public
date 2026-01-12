@@ -12,7 +12,7 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
@@ -25,6 +25,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 /* LOCAL IMPORTS */
 import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
@@ -44,19 +45,21 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      * @notice Owner can initialize a new pool on Alphix Hook, config stored in Logic
      */
     function test_owner_can_initialize_new_pool_on_hook() public {
-        // Make a brand-new pool bound to this hook, not configured on Alphix yet
-        (PoolKey memory freshKey, PoolId freshId) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+        // Deploy a fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Make a brand-new pool bound to this fresh hook, not configured on Alphix yet
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         // Only owner should initialize the pool on Alphix
         vm.prank(owner);
-        hook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        freshHook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
 
         // Verify logic stored the configuration
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(freshId);
+        IAlphixLogic.PoolConfig memory cfg = freshLogic.getPoolConfig();
         assertEq(cfg.initialFee, INITIAL_FEE, "initial fee mismatch");
         assertEq(cfg.initialTargetRatio, INITIAL_TARGET_RATIO, "initial target ratio mismatch");
-        assertEq(uint8(cfg.poolType), uint8(IAlphixLogic.PoolType.STANDARD), "pool type mismatch");
         assertTrue(cfg.isConfigured, "pool should be configured");
     }
 
@@ -64,16 +67,12 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      * @notice addLiquidity via positionManager succeeds on an active pool (hook routes into logic guards)
      */
     function test_user_add_liquidity_success_via_positionManager() public {
+        // Deploy a fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // New configured pool (active)
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         // Choose a full-range LP and compute required amounts
@@ -106,8 +105,8 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         // Verify pool active by calling a guarded path through the hook->logic
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e15)), salt: 0});
-        vm.prank(address(hook));
-        bytes4 sel = logic.beforeAddLiquidity(user1, kFresh, params, "");
+        vm.prank(address(freshHook));
+        bytes4 sel = freshLogic.beforeAddLiquidity(user1, kFresh, params, "");
         assertEq(sel, BaseHook.beforeAddLiquidity.selector, "selector mismatch");
     }
 
@@ -115,16 +114,13 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      * @notice addLiquidity reverts when pool deactivated via logic, observed through positionManager mint
      */
     function test_user_add_liquidity_reverts_when_pauseOrDeactivated() public {
+        // Deploy a fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        address freshLogicProxy = freshHook.getLogic();
+
         // New configured pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         // Try minting liquidity, hook.beforeAddLiquidity should revert with PoolPaused
@@ -145,17 +141,17 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         permit2.approve(Currency.unwrap(kFresh.currency1), address(positionManager), uint160(amt1 + 1), expiry);
 
         // Pause logic proxy -> delegatecalls, toggles the paused state in proxy storage, and emits the event.
-        AlphixLogic(address(logicProxy)).pause();
+        AlphixLogic(freshLogicProxy).pause();
 
         // Expect revert on the exact next external call (because of PausableUpgradeable.EnforcedPause.selector)
         _expectRevertOnModifyLiquiditiesMint(kFresh, tl, tu, liquidityAmount, amt0 + 1, amt1 + 1, owner);
 
         vm.stopPrank();
 
-        // Call the logic’s beforeAddLiquidity entrypoint and expect the EnforcedPause selector
-        vm.prank(address(hook));
+        // Call the logic's beforeAddLiquidity entrypoint and expect the EnforcedPause selector
+        vm.prank(address(freshHook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-        logic.beforeAddLiquidity(
+        freshLogic.beforeAddLiquidity(
             owner,
             kFresh,
             ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
@@ -164,19 +160,19 @@ contract AlphixHookCallsTest is BaseAlphixTest {
 
         // Unpause pool logic
         vm.startPrank(owner);
-        AlphixLogic(address(logicProxy)).unpause();
+        AlphixLogic(freshLogicProxy).unpause();
 
         // Deactivate pool
-        hook.deactivatePool(kFresh);
+        freshHook.deactivatePool();
 
         // Expect revert on the exact next external call (because of IAlphixLogic.PoolPaused.selector)
         _expectRevertOnModifyLiquiditiesMint(kFresh, tl, tu, liquidityAmount, amt0 + 1, amt1 + 1, owner);
         vm.stopPrank();
 
-        // Now call the logic’s beforeAddLiquidity entrypoint and expect the PoolPaused selector
-        vm.prank(address(hook));
+        // Now call the logic's beforeAddLiquidity entrypoint and expect the PoolPaused selector
+        vm.prank(address(freshHook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        logic.beforeAddLiquidity(
+        freshLogic.beforeAddLiquidity(
             owner,
             kFresh,
             ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
@@ -188,16 +184,13 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      * @notice removeLiquidity via positionManager succeeds on an active pool (after mint), and reverts when paused or deactivated
      */
     function test_user_remove_liquidity_success_and_reverts_when_pausedOrDeactivated() public {
+        // Deploy a fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        address freshLogicProxy = freshHook.getLogic();
+
         // Fresh configured pool and seed a position for this contract
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         vm.startPrank(owner);
@@ -221,7 +214,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         );
 
         // Pause logic at the proxy (all hook calls should revert)
-        AlphixLogic(address(logicProxy)).pause();
+        AlphixLogic(freshLogicProxy).pause();
 
         // Expect revert on the exact next external call (because of PausableUpgradeable.EnforcedPause.selector)
         _expectRevertOnModifyLiquiditiesDecrease(posId, liqToRemove, 0, 0, owner);
@@ -231,9 +224,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         int24 tl = TickMath.minUsableTick(kFresh.tickSpacing);
         int24 tu = TickMath.maxUsableTick(kFresh.tickSpacing);
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-        logic.beforeRemoveLiquidity(
+        freshLogic.beforeRemoveLiquidity(
             owner,
             kFresh,
             ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
@@ -243,10 +236,10 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.startPrank(owner);
 
         // Unpause logic at the proxy
-        AlphixLogic(address(logicProxy)).unpause();
+        AlphixLogic(freshLogicProxy).unpause();
 
         // Deactivate pool
-        hook.deactivatePool(kFresh);
+        freshHook.deactivatePool();
 
         // Expect revert on the exact next external call (because of IAlphixLogic.PoolPaused.selector)
         _expectRevertOnModifyLiquiditiesDecrease(posId, liqToRemove, 0, 0, owner);
@@ -254,9 +247,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.stopPrank();
 
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        logic.beforeRemoveLiquidity(
+        freshLogic.beforeRemoveLiquidity(
             owner,
             kFresh,
             ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(1e18)), salt: 0}),
@@ -268,16 +261,13 @@ contract AlphixHookCallsTest is BaseAlphixTest {
      * @notice swap succeeds on an active pool and increments hook path; also reverts when deactivated or paused
      */
     function test_user_swaps_success_and_reverts_on_deactivate_or_pause() public {
+        // Deploy a fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        address freshLogicProxy = freshHook.getLogic();
+
         // Fresh configured pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         vm.startPrank(owner);
@@ -306,7 +296,7 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         assertTrue(int256(swapDelta.amount1()) > 0, "amount1 received mismatch");
 
         // Deactivate pool then expect swap to revert with PoolPaused
-        hook.deactivatePool(kFresh);
+        freshHook.deactivatePool();
 
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(swapRouter), amountIn);
 
@@ -325,9 +315,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.stopPrank();
 
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        logic.beforeSwap(
+        freshLogic.beforeSwap(
             owner,
             kFresh,
             SwapParams({
@@ -342,9 +332,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
 
         vm.startPrank(owner);
         // Re-activate, then pause the logic globally and expect enforced pause
-        hook.activatePool(kFresh);
+        freshHook.activatePool();
 
-        AlphixLogic(address(logicProxy)).pause();
+        AlphixLogic(freshLogicProxy).pause();
 
         // Expect revert on the exact next external call (because of PausableUpgradeable.EnforcedPause.selector)
         vm.expectRevert();
@@ -361,9 +351,9 @@ contract AlphixHookCallsTest is BaseAlphixTest {
         vm.stopPrank();
 
         // For the direct logic entrypoint, use selector-based expectRevert (no wrapper layering here)
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-        logic.beforeSwap(
+        freshLogic.beforeSwap(
             owner,
             kFresh,
             SwapParams({

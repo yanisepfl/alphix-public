@@ -13,7 +13,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {PoolDonateTest} from "v4-core/src/test/PoolDonateTest.sol";
 
 /**
@@ -112,14 +112,17 @@ contract AlphixDonateHooksTest is BaseAlphixTest {
      * @notice Test that donate hooks respect pool activation state
      */
     function test_donate_respects_pool_activation() public {
-        // Create a new pool but don't activate it
+        // Deploy a fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
+
+        // Create a new pool
         (PoolKey memory inactiveKey,) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         vm.startPrank(owner);
         // Initialize on hook but then deactivate
-        hook.initializePool(inactiveKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
-        hook.deactivatePool(inactiveKey);
+        freshHook.initializePool(inactiveKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.deactivatePool();
         vm.stopPrank();
 
         // Try to donate - should revert because pool is deactivated
@@ -191,12 +194,15 @@ contract AlphixDonateHooksTest is BaseAlphixTest {
      * @dev Uniswap V4 reverts donations to pools with no liquidity since there are no recipients
      */
     function test_donate_to_pool_without_liquidity_reverts() public {
+        // Deploy a fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
+
         // Create and initialize a new pool without adding liquidity
         (PoolKey memory emptyKey,) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         vm.prank(owner);
-        hook.initializePool(emptyKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        freshHook.initializePool(emptyKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
 
         // Donate to empty pool - should revert with NoLiquidityToReceiveFees
         uint256 donateAmount0 = 10e18;

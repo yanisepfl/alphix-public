@@ -12,7 +12,7 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Alphix} from "../../src/Alphix.sol";
-import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
+import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
 
 /**
  * @title Create Pool (without liquidity)
@@ -35,7 +35,7 @@ import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
  * - POOL_START_PRICE_{NETWORK}: Starting sqrtPriceX96
  * - POOL_INITIAL_FEE_{NETWORK}: Initial dynamic fee
  * - POOL_INITIAL_TARGET_RATIO_{NETWORK}: Initial target ratio
- * - POOL_TYPE_{NETWORK}: Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+ * Note: Pool parameters (PoolParams) are now set with sensible defaults in this script.
  *
  * After Execution:
  * - Pool is created and initialized in Uniswap V4
@@ -58,7 +58,7 @@ contract CreatePoolScript is Script {
         uint160 startPrice;
         uint24 initialFee;
         uint256 initialTargetRatio;
-        uint8 poolTypeRaw;
+        DynamicFeeLib.PoolParams poolParams;
     }
 
     function run() public {
@@ -102,9 +102,19 @@ contract CreatePoolScript is Script {
         envVar = string.concat("POOL_INITIAL_TARGET_RATIO_", config.network);
         config.initialTargetRatio = vm.envUint(envVar);
 
-        envVar = string.concat("POOL_TYPE_", config.network);
-        config.poolTypeRaw = uint8(vm.envUint(envVar));
-        require(config.poolTypeRaw <= 2, "Invalid pool type (must be 0, 1, or 2)");
+        // Load pool params with sensible defaults
+        config.poolParams = DynamicFeeLib.PoolParams({
+            minFee: 1,
+            maxFee: 100001, // Wide range
+            baseMaxFeeDelta: 50,
+            lookbackPeriod: 30,
+            minPeriod: 1 days,
+            ratioTolerance: 5e15,
+            linearSlope: 1e18,
+            maxCurrentRatio: 1e21,
+            upperSideFactor: 1e18,
+            lowerSideFactor: 2e18
+        });
 
         // Create currencies
         Currency currency0 = Currency.wrap(config.token0Addr);
@@ -133,7 +143,8 @@ contract CreatePoolScript is Script {
         console.log("Alphix Configuration:");
         console.log("  - Initial Fee: %s bps", config.initialFee);
         console.log("  - Initial Target Ratio: %s", config.initialTargetRatio);
-        console.log("  - Pool Type: %s", config.poolTypeRaw);
+        console.log("  - Min Fee: %s bps", config.poolParams.minFee);
+        console.log("  - Max Fee: %s bps", config.poolParams.maxFee);
         console.log("");
 
         // Create contract instances
@@ -163,9 +174,7 @@ contract CreatePoolScript is Script {
 
         // STEP 2: Initialize Alphix dynamic fee system for this pool
         console.log("Step 2: Initializing Alphix dynamic fee system...");
-        alphix.initializePool(
-            poolKey, config.initialFee, config.initialTargetRatio, IAlphixLogic.PoolType(config.poolTypeRaw)
-        );
+        alphix.initializePool(poolKey, config.initialFee, config.initialTargetRatio, config.poolParams);
         console.log("  - Pool initialized successfully (Alphix)");
         console.log("");
 

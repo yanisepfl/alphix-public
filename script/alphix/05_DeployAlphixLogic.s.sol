@@ -5,7 +5,6 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {AlphixLogic} from "../../src/AlphixLogic.sol";
-import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
 
 /**
  * @title Deploy AlphixLogic (Implementation + Proxy)
@@ -14,6 +13,15 @@ import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
  *
  * DEPLOYMENT ORDER: 5/11
  *
+ * ARCHITECTURE: Single-Pool-Per-Hook Design
+ * Each AlphixLogic proxy is paired with exactly ONE Alphix Hook and manages ONE pool.
+ * AlphixLogic is an ERC20 token - LP shares are transferable tokens.
+ *
+ * To deploy multiple pools, you need to:
+ * 1. Deploy a new Alphix Hook (script 04) - requires CREATE2 mining
+ * 2. Deploy a new AlphixLogic proxy (this script)
+ * 3. Configure the new hook+logic pair (script 06)
+ *
  * SENDER REQUIREMENTS: Any address can run this script.
  * The ALPHIX_MANAGER address will become the AlphixLogic owner (not necessarily the sender).
  *
@@ -21,12 +29,14 @@ import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
  * - DEPLOYMENT_NETWORK: Network identifier
  * - ALPHIX_MANAGER_{NETWORK}: Initial owner address (will own AlphixLogic)
  * - ALPHIX_HOOK_{NETWORK}: Alphix Hook address (deployed in script 04)
+ * - ACCESS_MANAGER_{NETWORK}: Access manager address
  *
  * Prerequisites:
  * - Script 04 (DeployAlphix) must be completed first
  * - ALPHIX_HOOK address must be set in .env
  *
- * /!\ Don't forget to configure default parameters (and the global max adjustment rate if needed)
+ * Note: Pool parameters (PoolParams) are now passed at pool activation via initializePool(),
+ * not at AlphixLogic deployment. This allows fine-tuning per pool.
  *
  * After Deployment:
  * - Copy implementation address to ALPHIX_LOGIC_IMPL_{NETWORK} in .env
@@ -50,53 +60,19 @@ contract DeployAlphixLogicScript is Script {
         address alphixHook = vm.envAddress(alphixHookEnvVar);
         require(alphixHook != address(0), string.concat(alphixHookEnvVar, " not set or invalid"));
 
+        // Get Access Manager address
+        string memory accessManagerEnvVar = string.concat("ACCESS_MANAGER_", network);
+        address accessManager = vm.envAddress(accessManagerEnvVar);
+        require(accessManager != address(0), string.concat(accessManagerEnvVar, " not set or invalid"));
+
         console.log("===========================================");
         console.log("DEPLOYING ALPHIX LOGIC");
         console.log("===========================================");
         console.log("Network:", network);
         console.log("Owner:", owner);
         console.log("Alphix Hook:", alphixHook);
+        console.log("Access Manager:", accessManager);
         console.log("");
-
-        // Define pool type parameters (STABLE, STANDARD, VOLATILE)
-        DynamicFeeLib.PoolTypeParams memory stableParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 1, // 0.0001%
-            maxFee: 1001, // 0.1001%
-            baseMaxFeeDelta: 10, // 0.001%
-            lookbackPeriod: 30, // 30 days
-            minPeriod: 172_800, // 2 days
-            ratioTolerance: 5e15, // 0.5%
-            linearSlope: 5e17, // 0.5x
-            maxCurrentRatio: 1e21, // 1000x
-            upperSideFactor: 1e18, // 1.0x
-            lowerSideFactor: 2e18 // 2.0x
-        });
-
-        DynamicFeeLib.PoolTypeParams memory standardParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 99, // 0.0099%
-            maxFee: 10001, // 1.0001%
-            baseMaxFeeDelta: 25, // 0.0025%
-            lookbackPeriod: 15, // 15 days
-            minPeriod: 86_400, // 1 day
-            ratioTolerance: 1e16, // 1%
-            linearSlope: 1e18, // 1.0x
-            maxCurrentRatio: 1e21, // 1000x
-            upperSideFactor: 1e18, // 1.0x
-            lowerSideFactor: 15e17 // 1.5x
-        });
-
-        DynamicFeeLib.PoolTypeParams memory volatileParams = DynamicFeeLib.PoolTypeParams({
-            minFee: 249, // 0.0249%
-            maxFee: 200001, // 20.0001%
-            baseMaxFeeDelta: 100, // 0.01%
-            lookbackPeriod: 7, // 7 days
-            minPeriod: 43_200, // 0.5 day
-            ratioTolerance: 5e16, // 5%
-            linearSlope: 2e18, // 2.0x
-            maxCurrentRatio: 1e21, // 1000x
-            upperSideFactor: 1e18, // 1.0x
-            lowerSideFactor: 1e18 // 1.0x
-        });
 
         // Deploy implementation
         vm.startBroadcast();
@@ -104,8 +80,14 @@ contract DeployAlphixLogicScript is Script {
         console.log("Implementation deployed at:", address(implementation));
 
         // Prepare initialization data
+        // Note: Pool parameters (PoolParams) are passed at pool activation via initializePool()
         bytes memory initData = abi.encodeWithSelector(
-            AlphixLogic.initialize.selector, owner, alphixHook, stableParams, standardParams, volatileParams
+            AlphixLogic.initialize.selector,
+            owner,
+            alphixHook,
+            accessManager,
+            "Alphix LP Shares", // Share token name
+            "aLP" // Share token symbol
         );
 
         // Deploy proxy

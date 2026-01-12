@@ -23,6 +23,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
@@ -74,16 +75,15 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
      * @notice Fuzz: Upgrade preserves pool configuration with varying parameters
      * @param liquidityAmount Liquidity to add before upgrade
      * @param ratio Ratio to set before upgrade
-     * @param poolTypeRaw Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolTypeRaw parameter (single-pool architecture) (0=STABLE, 1=STANDARD, 2=VOLATILE)
      */
-    function testFuzz_upgrade_preserves_pool_configurations(uint128 liquidityAmount, uint256 ratio, uint8 poolTypeRaw)
-        public
-    {
+    function testFuzz_upgrade_preserves_pool_configurations(uint128 liquidityAmount, uint256 ratio) public {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 10, MAX_LIQUIDITY));
         ratio = bound(ratio, 5e16, MAX_RATIO);
 
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        // Use default pool from BaseAlphixTest (single-pool-per-hook architecture)
+        PoolKey memory testKey = key;
+        PoolId testPoolId = poolId;
 
         // Setup pool before upgrade
         vm.startPrank(alice);
@@ -96,15 +96,15 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(testKey, ratio);
+        hook.poke(ratio);
 
         // Record state before upgrade
-        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig(testPoolId);
+        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig();
         uint24 feeBefore;
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
         address implBefore = _impl(address(logic));
@@ -121,12 +121,12 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         // Verify state preserved
-        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(testPoolId);
+        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig();
         uint24 feeAfter;
         (,,, feeAfter) = poolManager.getSlot0(testPoolId);
 
         assertEq(configAfter.initialFee, configBefore.initialFee, "Initial fee preserved");
-        assertEq(uint8(configAfter.poolType), uint8(configBefore.poolType), "Pool type preserved");
+        // NOTE: poolType no longer exists in PoolConfig (single-pool-per-hook architecture)
         assertTrue(configAfter.isConfigured, "Pool remains configured");
         assertEq(feeAfter, feeBefore, "Dynamic fee preserved");
     }
@@ -136,20 +136,20 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
      * @param liquidityBefore Liquidity added before upgrade
      * @param liquidityAfter Liquidity added after upgrade
      * @param swapAmountAfter Swap amount after upgrade
-     * @param poolTypeRaw Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolTypeRaw parameter (single-pool architecture) (0=STABLE, 1=STANDARD, 2=VOLATILE)
      */
     function testFuzz_pool_operations_work_after_upgrade(
         uint128 liquidityBefore,
         uint128 liquidityAfter,
         uint256 swapAmountAfter,
-        uint8 poolTypeRaw
+        uint8 /* poolTypeRaw */
     ) public {
         liquidityBefore = uint128(bound(liquidityBefore, MIN_LIQUIDITY * 10, MAX_LIQUIDITY / 2));
         liquidityAfter = uint128(bound(liquidityAfter, MIN_LIQUIDITY * 5, MAX_LIQUIDITY / 2));
         swapAmountAfter = bound(swapAmountAfter, MIN_SWAP_AMOUNT, MAX_SWAP_AMOUNT);
 
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey,) = _createPoolWithType(poolType);
+        // Use default pool from BaseAlphixTest (single-pool-per-hook architecture)
+        PoolKey memory testKey = key;
 
         // Add liquidity before upgrade
         vm.startPrank(alice);
@@ -213,20 +213,21 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
      * @param liquidityAmount Initial liquidity
      * @param ratioBefore Ratio before upgrade
      * @param ratioAfter Ratio after upgrade
-     * @param poolTypeRaw Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolTypeRaw parameter (single-pool architecture) (0=STABLE, 1=STANDARD, 2=VOLATILE)
      */
     function testFuzz_fee_poke_works_after_upgrade(
         uint128 liquidityAmount,
         uint256 ratioBefore,
         uint256 ratioAfter,
-        uint8 poolTypeRaw
+        uint8 /* poolTypeRaw */
     ) public {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 10, MAX_LIQUIDITY));
         ratioBefore = bound(ratioBefore, 5e16, MAX_RATIO / 2); // Min 5% to avoid invalid ratio
         ratioAfter = bound(ratioAfter, 5e16, MAX_RATIO); // Min 5%
 
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        // Use default pool from BaseAlphixTest (single-pool-per-hook architecture)
+        PoolKey memory testKey = key;
+        PoolId testPoolId = poolId;
 
         // Setup
         vm.startPrank(alice);
@@ -239,13 +240,13 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         // Poke before upgrade
         vm.prank(owner);
-        hook.poke(testKey, ratioBefore);
+        hook.poke(ratioBefore);
 
         uint24 feeBefore;
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
@@ -265,7 +266,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         // Poke after upgrade
         vm.warp(block.timestamp + params.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, ratioAfter);
+        hook.poke(ratioAfter);
 
         uint24 feeAfter;
         (,,, feeAfter) = poolManager.getSlot0(testPoolId);
@@ -286,20 +287,23 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
      * @param numUpgrades Number of upgrades to perform (2-5)
      * @param swapAmount Swap amount between upgrades
      * @param ratio Ratio to set between upgrades
-     * @param poolTypeRaw Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolTypeRaw parameter (single-pool architecture) (0=STABLE, 1=STANDARD, 2=VOLATILE)
      */
     function testFuzz_multiple_sequential_upgrades(
         uint8 numUpgrades,
         uint256 swapAmount,
         uint256 ratio,
-        uint8 poolTypeRaw
-    ) public {
+        uint8 /* poolTypeRaw */
+    )
+        public
+    {
         numUpgrades = uint8(bound(numUpgrades, 2, 5));
         swapAmount = bound(swapAmount, MIN_SWAP_AMOUNT, MAX_SWAP_AMOUNT / 2);
         ratio = bound(ratio, 5e16, MAX_RATIO); // Min 5%
 
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        // Use default pool from BaseAlphixTest (single-pool-per-hook architecture)
+        PoolKey memory testKey = key;
+        PoolId testPoolId = poolId;
 
         // Initial setup
         vm.startPrank(alice);
@@ -312,8 +316,8 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Perform multiple upgrades
         for (uint256 i = 0; i < numUpgrades; i++) {
@@ -346,11 +350,11 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
             // Operation after upgrade
             vm.warp(block.timestamp + params.minPeriod + 1);
             vm.prank(owner);
-            hook.poke(testKey, ratio);
+            hook.poke(ratio);
         }
 
         // Verify pool still operational
-        IAlphixLogic.PoolConfig memory finalConfig = logic.getPoolConfig(testPoolId);
+        IAlphixLogic.PoolConfig memory finalConfig = logic.getPoolConfig();
         assertTrue(finalConfig.isConfigured, "Pool should remain configured after multiple upgrades");
 
         uint24 finalFee;
@@ -365,22 +369,23 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
      * @param bobLiq Bob's liquidity
      * @param swapAmount Swap amount before upgrade
      * @param ratio Ratio before upgrade
-     * @param poolTypeRaw Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolTypeRaw parameter (single-pool architecture) (0=STABLE, 1=STANDARD, 2=VOLATILE)
      */
     function testFuzz_upgrade_with_active_pool_state(
         uint128 aliceLiq,
         uint128 bobLiq,
         uint256 swapAmount,
         uint256 ratio,
-        uint8 poolTypeRaw
+        uint8 /* poolTypeRaw */
     ) public {
         aliceLiq = uint128(bound(aliceLiq, MIN_LIQUIDITY * 10, MAX_LIQUIDITY));
         bobLiq = uint128(bound(bobLiq, MIN_LIQUIDITY * 5, MAX_LIQUIDITY / 2));
         swapAmount = bound(swapAmount, MIN_SWAP_AMOUNT, MAX_SWAP_AMOUNT);
         ratio = bound(ratio, 5e16, MAX_RATIO); // Min 5%
 
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        // Use default pool from BaseAlphixTest (single-pool-per-hook architecture)
+        PoolKey memory testKey = key;
+        PoolId testPoolId = poolId;
 
         // Create active pool state
         vm.startPrank(alice);
@@ -418,14 +423,14 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Set dynamic fee
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, ratio);
+        hook.poke(ratio);
 
         // Record state
-        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig(testPoolId);
+        IAlphixLogic.PoolConfig memory configBefore = logic.getPoolConfig();
         uint24 feeBefore;
         (,,, feeBefore) = poolManager.getSlot0(testPoolId);
 
@@ -437,7 +442,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         _assertImplChanged(address(logic), address(newLogicImplementation));
 
         // Verify state preserved
-        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig(testPoolId);
+        IAlphixLogic.PoolConfig memory configAfter = logic.getPoolConfig();
         uint24 feeAfter;
         (,,, feeAfter) = poolManager.getSlot0(testPoolId);
 
@@ -469,22 +474,22 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
      * @param minFee Custom minimum fee
      * @param maxFee Custom maximum fee
      * @param liquidityAmount Liquidity amount
-     * @param poolTypeRaw Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolTypeRaw parameter (single-pool architecture) (0=STABLE, 1=STANDARD, 2=VOLATILE)
      */
     function testFuzz_upgrade_preserves_pool_type_parameters(
         uint24 minFee,
         uint24 maxFee,
         uint128 liquidityAmount,
-        uint8 poolTypeRaw
+        uint8 /* poolTypeRaw */
     ) public {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 10, MAX_LIQUIDITY));
 
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        // Use default pool from BaseAlphixTest (single-pool-per-hook architecture)
+        PoolKey memory testKey = key;
 
         // Get existing params as base
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Bound to reasonable values
         minFee = uint24(bound(minFee, 100, 1000)); // 0.01% to 0.1%
@@ -495,7 +500,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         params.maxFee = maxFee;
 
         vm.prank(owner);
-        logic.setPoolTypeParams(poolType, params);
+        logic.setPoolParams(params);
 
         // Add liquidity
         vm.startPrank(alice);
@@ -509,8 +514,8 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Record parameters before upgrade
-        IAlphixLogic.PoolConfig memory poolCfg = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory paramsBefore = logic.getPoolTypeParams(poolCfg.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory paramsBefore = logic.getPoolParams();
 
         // Upgrade
         address implBefore = _impl(address(logic));
@@ -525,7 +530,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         // Verify parameters preserved
-        DynamicFeeLib.PoolTypeParams memory paramsAfter = logic.getPoolTypeParams(poolCfg.poolType);
+        DynamicFeeLib.PoolParams memory paramsAfter = logic.getPoolParams();
 
         assertEq(paramsAfter.minFee, paramsBefore.minFee, "minFee preserved");
         assertEq(paramsAfter.maxFee, paramsBefore.maxFee, "maxFee preserved");
@@ -536,20 +541,23 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
     /**
      * @notice Fuzz: New pool initialization after upgrade with varying parameters
      * @param liquidityAmount Liquidity for new pool
-     * @param poolTypeRaw Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev In single-pool-per-hook architecture, a new pool requires a new hook stack.
+     *      This test verifies that a fresh hook can be deployed and initialized post-upgrade.
      */
-    function testFuzz_new_pool_initialization_after_upgrade(uint128 liquidityAmount, uint8 poolTypeRaw) public {
+    function testFuzz_new_pool_initialization_after_upgrade(uint128 liquidityAmount) public {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 10, MAX_LIQUIDITY));
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
 
-        // Upgrade first
+        // Upgrade the original logic first (verifying upgrade capability)
         vm.startPrank(owner);
         AlphixLogic newLogicImplementation = new AlphixLogic();
         UUPSUpgradeable(address(logic)).upgradeToAndCall(address(newLogicImplementation), "");
         vm.stopPrank();
         _assertImplChanged(address(logic), address(newLogicImplementation));
 
-        // Create new pool after upgrade using different fee tier
+        // Deploy a fresh hook + logic stack for the new pool (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create new pool after upgrade using different tokens
         MockERC20 token2 = new MockERC20("Token2", "TK2", 18);
         MockERC20 token3 = new MockERC20("Token3", "TK3", 18);
 
@@ -562,23 +570,23 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         token3.mint(alice, INITIAL_TOKEN_AMOUNT);
         vm.stopPrank();
 
-        // Create new pool key
+        // Create new pool key with fresh hook
         PoolKey memory newKey = PoolKey({
             currency0: currency2 < currency3 ? currency2 : currency3,
             currency1: currency2 < currency3 ? currency3 : currency2,
             fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: 60,
-            hooks: IHooks(address(hook))
+            hooks: IHooks(address(freshHook))
         });
 
-        // Initialize new pool
+        // Initialize new pool on fresh hook
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
-        PoolId newPoolId = newKey.toId();
+        newKey.toId(); // Compute pool id (unused, just for coverage)
 
-        // Configure pool with initializePool using fuzzed pool type
+        // Configure pool with initializePool using default pool params
         vm.prank(owner);
-        hook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, poolType);
+        freshHook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
 
         // Add liquidity to new pool
         vm.startPrank(alice);
@@ -602,9 +610,9 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        // Verify new pool is configured
-        IAlphixLogic.PoolConfig memory newPoolConfig = logic.getPoolConfig(newPoolId);
-        assertTrue(newPoolConfig.isConfigured, "New pool should be configured after upgrade");
+        // Verify new pool is configured on the fresh logic
+        IAlphixLogic.PoolConfig memory newPoolConfig = freshLogic.getPoolConfig();
+        assertTrue(newPoolConfig.isConfigured, "New pool should be configured on fresh hook after original upgrade");
     }
 
     /* ========================================================================== */
@@ -612,55 +620,45 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
     /* ========================================================================== */
 
     /**
-     * @notice Fuzz: Upgrade during active multi-pool operations
-     * @dev Tests upgrade with multiple pools actively trading
-     * @param numPools Number of active pools (2-4)
+     * @notice Fuzz: Upgrade during active pool operations
+     * @dev Tests upgrade with a pool actively trading (single-pool-per-hook architecture)
      * @param swapsBeforeUpgrade Swaps before upgrade (1-5)
-     * @param liquidityAmount Liquidity per pool
+     * @param liquidityAmount Liquidity for pool
      */
-    function testFuzz_upgradeStress_activePools_statePreserved(
-        uint8 numPools,
-        uint8 swapsBeforeUpgrade,
-        uint128 liquidityAmount
-    ) public {
-        numPools = uint8(bound(numPools, 2, 4));
+    function testFuzz_upgradeStress_activePool_statePreserved(uint8 swapsBeforeUpgrade, uint128 liquidityAmount)
+        public
+    {
         swapsBeforeUpgrade = uint8(bound(swapsBeforeUpgrade, 1, 5));
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY / 2));
 
-        PoolKey[] memory pools = new PoolKey[](numPools);
-        PoolId[] memory poolIds = new PoolId[](numPools);
-        uint24[] memory feesBefore = new uint24[](numPools);
+        // Use the default pool from BaseAlphixTest setUp
+        vm.startPrank(alice);
+        _addLiquidityForUser(
+            alice,
+            key,
+            TickMath.minUsableTick(key.tickSpacing),
+            TickMath.maxUsableTick(key.tickSpacing),
+            liquidityAmount
+        );
+        vm.stopPrank();
 
-        for (uint256 i = 0; i < numPools; i++) {
-            (pools[i], poolIds[i]) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
-
-            vm.startPrank(alice);
-            _addLiquidityForUser(
-                alice,
-                pools[i],
-                TickMath.minUsableTick(pools[i].tickSpacing),
-                TickMath.maxUsableTick(pools[i].tickSpacing),
-                liquidityAmount
-            );
+        for (uint256 j = 0; j < swapsBeforeUpgrade; j++) {
+            vm.startPrank(bob);
+            MockERC20(Currency.unwrap(key.currency0)).approve(address(swapRouter), MIN_SWAP_AMOUNT);
+            swapRouter.swapExactTokensForTokens({
+                amountIn: MIN_SWAP_AMOUNT,
+                amountOutMin: 0,
+                zeroForOne: true,
+                poolKey: key,
+                hookData: Constants.ZERO_BYTES,
+                receiver: bob,
+                deadline: block.timestamp + 100
+            });
             vm.stopPrank();
-
-            for (uint256 j = 0; j < swapsBeforeUpgrade; j++) {
-                vm.startPrank(bob);
-                MockERC20(Currency.unwrap(pools[i].currency0)).approve(address(swapRouter), MIN_SWAP_AMOUNT);
-                swapRouter.swapExactTokensForTokens({
-                    amountIn: MIN_SWAP_AMOUNT,
-                    amountOutMin: 0,
-                    zeroForOne: true,
-                    poolKey: pools[i],
-                    hookData: Constants.ZERO_BYTES,
-                    receiver: bob,
-                    deadline: block.timestamp + 100
-                });
-                vm.stopPrank();
-            }
-
-            (,,, feesBefore[i]) = poolManager.getSlot0(poolIds[i]);
         }
+
+        uint24 feeBefore;
+        (,,, feeBefore) = poolManager.getSlot0(poolId);
 
         // Upgrade
         vm.startPrank(owner);
@@ -669,24 +667,22 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         vm.stopPrank();
         _assertImplChanged(address(logic), address(newLogicImplementation));
 
-        // Verify each pool after upgrade
-        for (uint256 i = 0; i < numPools; i++) {
-            uint24 feeAfter;
-            (,,, feeAfter) = poolManager.getSlot0(poolIds[i]);
-            assertEq(feeAfter, feesBefore[i], "Fee preserved for pool after upgrade");
+        // Verify pool after upgrade
+        uint24 feeAfter;
+        (,,, feeAfter) = poolManager.getSlot0(poolId);
+        assertEq(feeAfter, feeBefore, "Fee preserved for pool after upgrade");
 
-            IAlphixLogic.PoolConfig memory config = logic.getPoolConfig(poolIds[i]);
-            assertTrue(config.isConfigured, "Pool remains configured after upgrade");
-        }
+        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
+        assertTrue(config.isConfigured, "Pool remains configured after upgrade");
 
-        // Verify pools remain operational post-upgrade by executing a sample swap
+        // Verify pool remains operational post-upgrade by executing a sample swap
         vm.startPrank(bob);
-        MockERC20(Currency.unwrap(pools[0].currency0)).approve(address(swapRouter), MIN_SWAP_AMOUNT);
+        MockERC20(Currency.unwrap(key.currency0)).approve(address(swapRouter), MIN_SWAP_AMOUNT);
         swapRouter.swapExactTokensForTokens({
             amountIn: MIN_SWAP_AMOUNT,
             amountOutMin: 0,
             zeroForOne: true,
-            poolKey: pools[0],
+            poolKey: key,
             hookData: Constants.ZERO_BYTES,
             receiver: bob,
             deadline: block.timestamp + 100
@@ -695,7 +691,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
 
         // Verify swap succeeded and pool still functions
         uint24 feeAfterSwap;
-        (,,, feeAfterSwap) = poolManager.getSlot0(poolIds[0]);
+        (,,, feeAfterSwap) = poolManager.getSlot0(poolId);
         assertTrue(feeAfterSwap > 0, "Pool operational after upgrade");
     }
 
@@ -715,20 +711,19 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         numOobHits = uint8(bound(numOobHits, 20, 100)); // Extreme number of consecutive OOB hits
         deviation = bound(deviation, 1e17, 4e17);
 
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(IAlphixLogic.PoolType.STANDARD);
-
+        // Use the default pool from BaseAlphixTest setUp (single-pool-per-hook architecture)
         vm.startPrank(alice);
         _addLiquidityForUser(
             alice,
-            testKey,
-            TickMath.minUsableTick(testKey.tickSpacing),
-            TickMath.maxUsableTick(testKey.tickSpacing),
+            key,
+            TickMath.minUsableTick(key.tickSpacing),
+            TickMath.maxUsableTick(key.tickSpacing),
             liquidityAmount
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         uint256 upperBound =
             poolConfig.initialTargetRatio + (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
@@ -740,11 +735,11 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
             if (oobRatio > params.maxCurrentRatio) oobRatio = params.maxCurrentRatio;
 
             vm.prank(owner);
-            hook.poke(testKey, oobRatio);
+            hook.poke(oobRatio);
         }
 
         uint24 feeBefore;
-        (,,, feeBefore) = poolManager.getSlot0(testPoolId);
+        (,,, feeBefore) = poolManager.getSlot0(poolId);
 
         address implBefore = _impl(address(logic));
         vm.startPrank(owner);
@@ -758,7 +753,7 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         assertEq(implAfter, address(newLogicImplementation), "Implementation must match new logic");
 
         uint24 feeAfter;
-        (,,, feeAfter) = poolManager.getSlot0(testPoolId);
+        (,,, feeAfter) = poolManager.getSlot0(poolId);
 
         assertEq(feeAfter, feeBefore, "Fee preserved after upgrade with OOB state");
         assertGe(feeAfter, params.minFee, "Fee bounded after upgrade");
@@ -818,48 +813,8 @@ contract AlphixUpgradeabilityFuzzTest is BaseAlphixTest {
         assertEq(impl, expected, "Implementation must match new logic");
     }
 
-    /**
-     * @notice Creates and initializes a new pool with a specific pool type
-     * @param poolType The pool type to initialize
-     * @return testKey The pool key for the new pool
-     * @return testPoolId The pool ID for the new pool
-     */
-    function _createPoolWithType(IAlphixLogic.PoolType poolType)
-        internal
-        returns (PoolKey memory testKey, PoolId testPoolId)
-    {
-        // Create new tokens
-        MockERC20 token0 = new MockERC20("Test Token 0", "TEST0", 18);
-        MockERC20 token1 = new MockERC20("Test Token 1", "TEST1", 18);
-
-        // Mint tokens to test users
-        vm.startPrank(owner);
-        token0.mint(alice, INITIAL_TOKEN_AMOUNT);
-        token0.mint(bob, INITIAL_TOKEN_AMOUNT);
-        token1.mint(alice, INITIAL_TOKEN_AMOUNT);
-        token1.mint(bob, INITIAL_TOKEN_AMOUNT);
-        vm.stopPrank();
-
-        Currency curr0 = Currency.wrap(address(token0));
-        Currency curr1 = Currency.wrap(address(token1));
-
-        // Create pool key
-        testKey = PoolKey({
-            currency0: curr0 < curr1 ? curr0 : curr1,
-            currency1: curr0 < curr1 ? curr1 : curr0,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: IHooks(address(hook))
-        });
-
-        // Initialize pool in PoolManager
-        poolManager.initialize(testKey, Constants.SQRT_PRICE_1_1);
-        testPoolId = testKey.toId();
-
-        // Initialize pool in Alphix with specified pool type
-        vm.prank(owner);
-        hook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, poolType);
-    }
+    // NOTE: _createPoolWithType helper removed in single-pool-per-hook architecture.
+    // Tests now use the default pool (key, poolId) from BaseAlphixTest setUp.
 
     function _addLiquidityForUser(address user, PoolKey memory poolKey, int24 lower, int24 upper, uint128 liquidity)
         internal

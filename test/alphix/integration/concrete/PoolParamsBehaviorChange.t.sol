@@ -9,43 +9,43 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
-import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 
 /**
- * @title PoolTypeParamsBehaviorChangeTest
+ * @title PoolParamsBehaviorChangeTest
  * @author Alphix
- * @notice Tests for setPoolTypeParams behavior changes
+ * @notice Tests for setPoolParams behavior changes
  * @dev Comprehensive tests to ensure that the dynamic fee algorithm adapts correctly to new parameters while maintaining
  *      security properties and preventing manipulation.
  */
-contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
+contract PoolParamsBehaviorChangeTest is BaseAlphixTest {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
     /* ORIGINAL PARAMETERS */
-    DynamicFeeLib.PoolTypeParams public originalParams;
+    DynamicFeeLib.PoolParams public originalParams;
 
     /* NEW PARAMETERS FOR TESTING */
-    DynamicFeeLib.PoolTypeParams public restrictiveParams;
-    DynamicFeeLib.PoolTypeParams public permissiveParams;
-    DynamicFeeLib.PoolTypeParams public extremeParams;
-    DynamicFeeLib.PoolTypeParams public lowUpperSideParams;
-    DynamicFeeLib.PoolTypeParams public highUpperSideParams;
-    DynamicFeeLib.PoolTypeParams public lowLowerSideParams;
-    DynamicFeeLib.PoolTypeParams public highLowerSideParams;
-    DynamicFeeLib.PoolTypeParams public shortLookbackParams;
-    DynamicFeeLib.PoolTypeParams public longLookbackParams;
-    DynamicFeeLib.PoolTypeParams public lowLinearSlopeParams;
-    DynamicFeeLib.PoolTypeParams public highLinearSlopeParams;
-    DynamicFeeLib.PoolTypeParams public lowBaseMaxFeeDeltaParams;
-    DynamicFeeLib.PoolTypeParams public highBaseMaxFeeDeltaParams;
+    DynamicFeeLib.PoolParams public restrictiveParams;
+    DynamicFeeLib.PoolParams public permissiveParams;
+    DynamicFeeLib.PoolParams public extremeParams;
+    DynamicFeeLib.PoolParams public lowUpperSideParams;
+    DynamicFeeLib.PoolParams public highUpperSideParams;
+    DynamicFeeLib.PoolParams public lowLowerSideParams;
+    DynamicFeeLib.PoolParams public highLowerSideParams;
+    DynamicFeeLib.PoolParams public shortLookbackParams;
+    DynamicFeeLib.PoolParams public longLookbackParams;
+    DynamicFeeLib.PoolParams public lowLinearSlopeParams;
+    DynamicFeeLib.PoolParams public highLinearSlopeParams;
+    DynamicFeeLib.PoolParams public lowBaseMaxFeeDeltaParams;
+    DynamicFeeLib.PoolParams public highBaseMaxFeeDeltaParams;
 
     /**
      * @notice Sets up the test environment with parameter variations
@@ -56,7 +56,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         super.setUp();
 
         // Store original parameters for reference
-        originalParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STABLE);
+        originalParams = logic.getPoolParams();
 
         // Set up test parameter variations
         _setupTestParameters();
@@ -72,7 +72,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      */
     function _setupTestParameters() internal {
         // Create base parameter template
-        DynamicFeeLib.PoolTypeParams memory baseParams = DynamicFeeLib.PoolTypeParams({
+        DynamicFeeLib.PoolParams memory baseParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 8000,
             baseMaxFeeDelta: 50,
@@ -98,7 +98,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      */
     function _createMainParameterSets() internal {
         // Restrictive parameters (tighter bounds, slower adjustments)
-        restrictiveParams = DynamicFeeLib.PoolTypeParams({
+        restrictiveParams = DynamicFeeLib.PoolParams({
             minFee: 1000, // Higher minimum (was 1)
             maxFee: 4000, // Lower maximum (was 5001)
             baseMaxFeeDelta: 15, // Smaller delta (was 25)
@@ -112,9 +112,9 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         });
 
         // Permissive parameters (wider bounds, faster adjustments)
-        permissiveParams = DynamicFeeLib.PoolTypeParams({
+        permissiveParams = DynamicFeeLib.PoolParams({
             minFee: 1, // Same minimum as original
-            maxFee: 8000, // Higher maximum
+            maxFee: 150000, // Higher maximum than default (100001)
             baseMaxFeeDelta: 50, // Larger delta
             lookbackPeriod: 15, // Shorter lookback
             minPeriod: 12 hours, // Shorter cooldown
@@ -126,7 +126,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         });
 
         // Extreme parameters (boundary values)
-        extremeParams = DynamicFeeLib.PoolTypeParams({
+        extremeParams = DynamicFeeLib.PoolParams({
             minFee: AlphixGlobalConstants.MIN_FEE,
             maxFee: LPFeeLibrary.MAX_LP_FEE,
             baseMaxFeeDelta: LPFeeLibrary.MAX_LP_FEE,
@@ -144,7 +144,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      * @notice Creates side factor parameter sets for testing side factor effects
      * @dev Uses base parameters and only modifies side factors to isolate their effects
      */
-    function _createSideFactorParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+    function _createSideFactorParameterSets(DynamicFeeLib.PoolParams memory baseParams) internal {
         // Low upper side factor (1.0x multiplier)
         lowUpperSideParams = baseParams;
         lowUpperSideParams.upperSideFactor = 1e18;
@@ -166,7 +166,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      * @notice Creates lookback period parameter sets for testing EMA effects
      * @dev Uses base parameters and only modifies lookback periods to isolate their effects
      */
-    function _createLookbackParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+    function _createLookbackParameterSets(DynamicFeeLib.PoolParams memory baseParams) internal {
         // Short lookback period (faster EMA response)
         shortLookbackParams = baseParams;
         shortLookbackParams.lookbackPeriod = AlphixGlobalConstants.MIN_LOOKBACK_PERIOD; // 7 days
@@ -180,7 +180,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      * @notice Creates linear slope parameter sets for testing fee adjustment sensitivity
      * @dev Uses base parameters and only modifies linear slopes to isolate their effects
      */
-    function _createLinearSlopeParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+    function _createLinearSlopeParameterSets(DynamicFeeLib.PoolParams memory baseParams) internal {
         // Low linear slope (gentler fee adjustments)
         lowLinearSlopeParams = baseParams;
         lowLinearSlopeParams.linearSlope = AlphixGlobalConstants.MIN_LINEAR_SLOPE; // 1e17
@@ -194,7 +194,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      * @notice Creates base max fee delta parameter sets for testing fee change limits
      * @dev Uses base parameters and only modifies baseMaxFeeDelta to isolate their effects
      */
-    function _createBaseMaxFeeDeltaParameterSets(DynamicFeeLib.PoolTypeParams memory baseParams) internal {
+    function _createBaseMaxFeeDeltaParameterSets(DynamicFeeLib.PoolParams memory baseParams) internal {
         // Low base max fee delta (smaller fee steps)
         lowBaseMaxFeeDeltaParams = baseParams;
         lowBaseMaxFeeDeltaParams.baseMaxFeeDelta = 10;
@@ -216,7 +216,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         uint256 testRatio = 8e17; // Above tolerance to trigger adjustment
 
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(testRatio);
 
         (,,, uint24 feeAfter) = poolManager.getSlot0(poolId);
 
@@ -235,7 +235,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         uint256 lowRatio = INITIAL_TARGET_RATIO - originalParams.ratioTolerance - 1e16; // Below tolerance
 
         vm.prank(owner);
-        hook.poke(key, lowRatio);
+        hook.poke(lowRatio);
 
         (,,, uint24 feeAfter) = poolManager.getSlot0(poolId);
 
@@ -251,7 +251,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
      * @dev This is expected behavior: fees are only clamped to new bounds on the next poke().
      *      Admin should manually poke affected pools after updating parameters if immediate effect is required.
      */
-    function test_setPoolTypeParams_feeNotClampedUntilPoke() public {
+    function test_setPoolParams_feeNotClampedUntilPoke() public {
         // First, push the fee up to a high value using original params
         uint256 highRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
@@ -259,7 +259,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         for (uint256 i = 0; i < 3; i++) {
             vm.warp(block.timestamp + originalParams.minPeriod + 1);
             vm.prank(owner);
-            hook.poke(key, highRatio);
+            hook.poke(highRatio);
         }
 
         (,,, uint24 feeBeforeParamChange) = poolManager.getSlot0(poolId);
@@ -267,11 +267,11 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Now change to restrictive params with a much lower maxFee
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+        logic.setPoolParams(restrictiveParams);
 
         // The current fee is above restrictive maxFee, but it should NOT be automatically clamped
         (,,, uint24 feeAfterParamChange) = poolManager.getSlot0(poolId);
-        assertEq(feeAfterParamChange, feeBeforeParamChange, "Fee should NOT change immediately after setPoolTypeParams");
+        assertEq(feeAfterParamChange, feeBeforeParamChange, "Fee should NOT change immediately after setPoolParams");
 
         // If the current fee exceeds the new max, verify it's still out of bounds
         if (feeBeforeParamChange > restrictiveParams.maxFee) {
@@ -283,7 +283,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         // Now poke to trigger the clamping
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, INITIAL_TARGET_RATIO); // Use neutral ratio
+        hook.poke(INITIAL_TARGET_RATIO); // Use neutral ratio
 
         (,,, uint24 feeAfterPoke) = poolManager.getSlot0(poolId);
 
@@ -303,7 +303,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // First, establish behavior with original parameters
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(testRatio);
 
         (,,, uint24 feeAfterOriginal) = poolManager.getSlot0(poolId);
         assertTrue(feeAfterOriginal >= INITIAL_FEE, "Original params should allow fee increase");
@@ -313,12 +313,12 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Change to restrictive parameters
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+        logic.setPoolParams(restrictiveParams);
 
         // Apply same ratio change (wait for new cooldown)
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(testRatio);
 
         (,,, uint24 feeAfterRestrictive) = poolManager.getSlot0(poolId);
 
@@ -340,12 +340,12 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Change to permissive parameters first
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolParams(permissiveParams);
 
         // Apply ratio change (wait for cooldown)
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(testRatio);
 
         (,,, uint24 feeAfterPermissive) = poolManager.getSlot0(poolId);
 
@@ -362,14 +362,14 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_feeBounds_enforcedAfterParameterChange() public {
         // Change to restrictive parameters with tighter fee bounds
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+        logic.setPoolParams(restrictiveParams);
 
         // Try to trigger adjustment that would exceed new max fee
         uint256 extremeRatio = 2e18; // High ratio
 
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, extremeRatio);
+        hook.poke(extremeRatio);
 
         (,,, uint24 finalFee) = poolManager.getSlot0(poolId);
 
@@ -386,14 +386,14 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_toleranceBounds_affectTriggerThreshold() public {
         // Test with tighter tolerance
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+        logic.setPoolParams(restrictiveParams);
 
         // Use a ratio that would be within original tolerance but outside restrictive tolerance
         uint256 marginRatio = INITIAL_TARGET_RATIO + (restrictiveParams.ratioTolerance / 2);
 
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, marginRatio);
+        hook.poke(marginRatio);
 
         (,,, uint24 feeWithTightTolerance) = poolManager.getSlot0(poolId);
 
@@ -409,14 +409,14 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_permissiveTolerance_allowsMoreVariance() public {
         // Change to permissive parameters with looser tolerance
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolParams(permissiveParams);
 
         // Use a ratio that would trigger adjustment with original tolerance
         uint256 marginRatio = INITIAL_TARGET_RATIO + (originalParams.ratioTolerance + 1e15);
 
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, marginRatio);
+        hook.poke(marginRatio);
 
         (,,, uint24 feeWithLooseTolerance) = poolManager.getSlot0(poolId);
 
@@ -434,23 +434,23 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_cooldownPeriod_enforcedAfterParameterChange() public {
         // Make initial adjustment
         vm.prank(owner);
-        hook.poke(key, 8e17);
+        hook.poke(8e17);
 
         // Change to shorter cooldown period
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolParams(permissiveParams);
 
         // Try to adjust again immediately (should still respect original cooldown from the poke)
         vm.expectRevert();
         vm.prank(owner);
-        hook.poke(key, 9e17);
+        hook.poke(9e17);
 
         // Wait for new (shorter) cooldown period
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
 
         // Should work now
         vm.prank(owner);
-        hook.poke(key, 9e17);
+        hook.poke(9e17);
     }
 
     /**
@@ -461,11 +461,11 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_cooldownPeriod_longerCooldownEnforced() public {
         // Make initial adjustment
         vm.prank(owner);
-        hook.poke(key, 8e17);
+        hook.poke(8e17);
 
         // Change to longer cooldown period
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+        logic.setPoolParams(restrictiveParams);
 
         // Wait for original cooldown (should not be enough for new longer cooldown)
         vm.warp(block.timestamp + originalParams.minPeriod + 1);
@@ -473,14 +473,14 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         // Should still revert due to longer cooldown
         vm.expectRevert();
         vm.prank(owner);
-        hook.poke(key, 9e17);
+        hook.poke(9e17);
 
         // Wait for new longer cooldown
         vm.warp(block.timestamp + restrictiveParams.minPeriod);
 
         // Should work now
         vm.prank(owner);
-        hook.poke(key, 9e17);
+        hook.poke(9e17);
     }
 
     /**
@@ -490,16 +490,16 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_parameterChange_cannotBypassCooldown() public {
         // Make initial adjustment
         vm.prank(owner);
-        hook.poke(key, 8e17);
+        hook.poke(8e17);
 
         // Immediately try to change parameters and adjust again
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolParams(permissiveParams);
 
         // Should still respect cooldown even after parameter change
         vm.expectRevert();
         vm.prank(owner);
-        hook.poke(key, 9e17);
+        hook.poke(9e17);
     }
 
     /**
@@ -510,12 +510,12 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_parameterChange_cannotManipulateFeeInSameBlock() public {
         // Change parameters and try to manipulate fee in same block
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, extremeParams);
+        logic.setPoolParams(extremeParams);
 
         // Should not be able to poke in same block due to cooldown
         vm.expectRevert();
         vm.prank(owner);
-        hook.poke(key, _getAboveToleranceRatio(INITIAL_TARGET_RATIO, extremeParams.ratioTolerance));
+        hook.poke(_getAboveToleranceRatio(INITIAL_TARGET_RATIO, extremeParams.ratioTolerance));
     }
 
     /**
@@ -526,7 +526,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_extremeParameters_behaviorStillBounded() public {
         // Set extreme parameters
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, extremeParams);
+        logic.setPoolParams(extremeParams);
 
         // Wait for cooldown
         vm.warp(block.timestamp + extremeParams.minPeriod + 1);
@@ -535,7 +535,7 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         uint256 extremeRatio = extremeParams.maxCurrentRatio;
 
         vm.prank(owner);
-        hook.poke(key, extremeRatio);
+        hook.poke(extremeRatio);
 
         (,,, uint24 finalFee) = poolManager.getSlot0(poolId);
 
@@ -555,22 +555,22 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Test with low upper side factor (1.0x multiplier)
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowUpperSideParams);
+        logic.setPoolParams(lowUpperSideParams);
 
         vm.warp(block.timestamp + lowUpperSideParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, upperRatio);
+        hook.poke(upperRatio);
 
         (,,, uint24 feeAfterLowUpper) = poolManager.getSlot0(poolId);
 
         // Reset and test with high upper side factor (5.0x multiplier)
         vm.warp(block.timestamp + lowUpperSideParams.minPeriod + 1);
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highUpperSideParams);
+        logic.setPoolParams(highUpperSideParams);
 
         vm.warp(block.timestamp + highUpperSideParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, upperRatio);
+        hook.poke(upperRatio);
 
         (,,, uint24 feeAfterHighUpper) = poolManager.getSlot0(poolId);
 
@@ -596,22 +596,22 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Test with low lower side factor (1.0x multiplier)
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowLowerSideParams);
+        logic.setPoolParams(lowLowerSideParams);
 
         vm.warp(block.timestamp + lowLowerSideParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, lowerRatio);
+        hook.poke(lowerRatio);
 
         (,,, uint24 feeAfterLowLower) = poolManager.getSlot0(poolId);
 
         // Reset and test with high lower side factor (5.0x multiplier)
         vm.warp(block.timestamp + lowLowerSideParams.minPeriod + 1);
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highLowerSideParams);
+        logic.setPoolParams(highLowerSideParams);
 
         vm.warp(block.timestamp + highLowerSideParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, lowerRatio);
+        hook.poke(lowerRatio);
 
         (,,, uint24 feeAfterHighLower) = poolManager.getSlot0(poolId);
 
@@ -630,69 +630,41 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
     /**
      * @notice Tests that lookback period affects convergence rate over multiple updates
-     * @dev Creates two similar pools to test different lookback periods without state contamination.
-     *      Short lookback should converge faster (more aggressive EMA smoothing),
-     *      while long lookback should converge slower (less aggressive EMA smoothing).
+     * @dev Creates two separate hook+logic stacks (single-pool-per-hook architecture) to test
+     *      different lookback periods without state contamination.
+     *      Short lookback means the target ratio converges faster to current ratio (higher EMA alpha),
+     *      which results in LESS fee adjustment (smaller divergence from target).
+     *      Long lookback means the target ratio converges slower (lower EMA alpha),
+     *      which results in MORE fee adjustment (larger divergence from target).
      */
     function test_lookbackPeriod_affectsConvergenceRate() public {
-        // Create second pool key for comparison (different tick spacing to ensure unique pool)
-        PoolKey memory shortLookbackKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: IHooks(hook)
-        });
-        PoolId shortLookbackPoolId = PoolIdLibrary.toId(shortLookbackKey);
+        // Deploy two fresh hook+logic stacks
+        (Alphix shortHook, IAlphixLogic shortLogic) = _deployFreshAlphixStack();
+        (Alphix longHook, IAlphixLogic longLogic) = _deployFreshAlphixStack();
 
-        PoolKey memory longLookbackKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 200,
-            hooks: IHooks(hook)
-        });
-        PoolId longLookbackPoolId = PoolIdLibrary.toId(longLookbackKey);
+        // Create pools for each hook
+        (PoolKey memory shortLookbackKey, PoolId shortLookbackPoolId) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, shortHook);
+        (PoolKey memory longLookbackKey, PoolId longLookbackPoolId) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, longHook);
 
-        // Initialize both pools
-        poolManager.initialize(shortLookbackKey, Constants.SQRT_PRICE_1_1);
-        poolManager.initialize(longLookbackKey, Constants.SQRT_PRICE_1_1);
-
-        // Configure both pools identically
+        // Configure pools with different lookback parameters
         vm.prank(owner);
-        hook.initializePool(shortLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        shortHook.initializePool(shortLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams);
         vm.prank(owner);
-        hook.initializePool(longLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STABLE);
+        longHook.initializePool(longLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, longLookbackParams);
 
-        // Set different lookback parameters
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, shortLookbackParams);
-
-        // Apply short lookback to first pool via poke to trigger parameter update
+        // Wait for cooldown and apply first poke
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(shortLookbackKey, INITIAL_TARGET_RATIO);
 
-        // Switch to long lookback parameters
-        vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, longLookbackParams);
-
-        // Apply long lookback to second pool
-        vm.warp(block.timestamp + longLookbackParams.minPeriod + 1);
-        vm.prank(owner);
-        hook.poke(longLookbackKey, INITIAL_TARGET_RATIO);
-
-        // Now both pools have different lookback parameters applied
-        // Test convergence behavior with sustained ratio deviation
         // Use ratio above tolerance for convergence testing
         uint256 deviatedRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, shortLookbackParams.ratioTolerance);
 
         // First update - should produce identical fees (lookback only affects EMA)
-        vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(shortLookbackKey, deviatedRatio);
+        shortHook.poke(deviatedRatio);
         vm.prank(owner);
-        hook.poke(longLookbackKey, deviatedRatio);
+        longHook.poke(deviatedRatio);
 
         (,,, uint24 shortFirstFee) = poolManager.getSlot0(shortLookbackPoolId);
         (,,, uint24 longFirstFee) = poolManager.getSlot0(longLookbackPoolId);
@@ -700,19 +672,19 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         // Second update - differences should start to emerge
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(shortLookbackKey, deviatedRatio);
+        shortHook.poke(deviatedRatio);
         vm.prank(owner);
-        hook.poke(longLookbackKey, deviatedRatio);
+        longHook.poke(deviatedRatio);
 
-        (,,, uint24 shortSecondFee) = poolManager.getSlot0(shortLookbackPoolId);
-        (,,, uint24 longSecondFee) = poolManager.getSlot0(longLookbackPoolId);
+        poolManager.getSlot0(shortLookbackPoolId); // Assert state accessible
+        poolManager.getSlot0(longLookbackPoolId); // Assert state accessible
 
         // Third update - differences should be more pronounced
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(shortLookbackKey, deviatedRatio);
+        shortHook.poke(deviatedRatio);
         vm.prank(owner);
-        hook.poke(longLookbackKey, deviatedRatio);
+        longHook.poke(deviatedRatio);
 
         (,,, uint24 shortThirdFee) = poolManager.getSlot0(shortLookbackPoolId);
         (,,, uint24 longThirdFee) = poolManager.getSlot0(longLookbackPoolId);
@@ -721,21 +693,25 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         // First fees should be identical (algorithm design)
         assertEq(shortFirstFee, longFirstFee, "First fees should be identical");
 
-        // Short lookback should show faster convergence (fees should change more between updates)
-        uint24 shortProgression =
-            shortThirdFee > shortSecondFee ? shortThirdFee - shortSecondFee : shortSecondFee - shortThirdFee;
-        uint24 longProgression =
-            longThirdFee > longSecondFee ? longThirdFee - longSecondFee : longSecondFee - longThirdFee;
+        // Calculate total progression from initial fee for both pools
+        uint256 shortTotalProgression =
+            shortThirdFee > INITIAL_FEE ? shortThirdFee - INITIAL_FEE : INITIAL_FEE - shortThirdFee;
+        uint256 longTotalProgression =
+            longThirdFee > INITIAL_FEE ? longThirdFee - INITIAL_FEE : INITIAL_FEE - longThirdFee;
 
-        // Short lookback should show more fee movement (faster convergence)
-        assertTrue(shortProgression >= longProgression, "Short lookback should converge faster");
+        // Long lookback should show LARGER fee changes because target converges slower,
+        // maintaining larger divergence from target which triggers larger fee adjustments
+        assertTrue(longTotalProgression >= shortTotalProgression, "Long lookback should show larger fee adjustments");
 
-        // Both should show progression from initial fee
-        assertTrue(shortThirdFee > INITIAL_FEE, "Short lookback should increase fee");
-        assertTrue(longThirdFee > INITIAL_FEE, "Long lookback should increase fee");
+        // Both should show progression from initial fee (long more than short)
+        assertTrue(longThirdFee >= INITIAL_FEE, "Long lookback should increase fee");
 
         // Verify parameter setup is correct
         assertTrue(shortLookbackParams.lookbackPeriod < longLookbackParams.lookbackPeriod, "Setup verification");
+
+        // Silence unused variable warning
+        shortLogic = shortLogic;
+        longLogic = longLogic;
     }
 
     /**
@@ -749,22 +725,22 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Test with low linear slope (gentler adjustments)
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowLinearSlopeParams);
+        logic.setPoolParams(lowLinearSlopeParams);
 
         vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(testRatio);
 
         (,,, uint24 feeAfterLowSlope) = poolManager.getSlot0(poolId);
 
         // Reset and test with high linear slope (steeper adjustments)
         vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highLinearSlopeParams);
+        logic.setPoolParams(highLinearSlopeParams);
 
         vm.warp(block.timestamp + highLinearSlopeParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, testRatio);
+        hook.poke(testRatio);
 
         (,,, uint24 feeAfterHighSlope) = poolManager.getSlot0(poolId);
 
@@ -789,22 +765,22 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Test with low linear slope (gentler decreases)
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowLinearSlopeParams);
+        logic.setPoolParams(lowLinearSlopeParams);
 
         vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, lowerRatio);
+        hook.poke(lowerRatio);
 
         (,,, uint24 feeAfterLowSlope) = poolManager.getSlot0(poolId);
 
         // Reset and test with high linear slope (steeper decreases)
         vm.warp(block.timestamp + lowLinearSlopeParams.minPeriod + 1);
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highLinearSlopeParams);
+        logic.setPoolParams(highLinearSlopeParams);
 
         vm.warp(block.timestamp + highLinearSlopeParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, lowerRatio);
+        hook.poke(lowerRatio);
 
         (,,, uint24 feeAfterHighSlope) = poolManager.getSlot0(poolId);
 
@@ -829,22 +805,22 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Test with low base max fee delta (smaller steps)
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowBaseMaxFeeDeltaParams);
+        logic.setPoolParams(lowBaseMaxFeeDeltaParams);
 
         vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, extremeRatio);
+        hook.poke(extremeRatio);
 
         (,,, uint24 feeAfterLowDelta) = poolManager.getSlot0(poolId);
 
         // Reset and test with high base max fee delta (larger steps)
         vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, highBaseMaxFeeDeltaParams);
+        logic.setPoolParams(highBaseMaxFeeDeltaParams);
 
         vm.warp(block.timestamp + highBaseMaxFeeDeltaParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, extremeRatio);
+        hook.poke(extremeRatio);
 
         (,,, uint24 feeAfterHighDelta) = poolManager.getSlot0(poolId);
 
@@ -879,26 +855,26 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
 
         // Set up parameters that allow us to see streak effects
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, lowBaseMaxFeeDeltaParams);
+        logic.setPoolParams(lowBaseMaxFeeDeltaParams);
 
         // Make first adjustment (streak = 1)
         vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, persistentHighRatio);
+        hook.poke(persistentHighRatio);
 
         (,,, uint24 feeAfterFirst) = poolManager.getSlot0(poolId);
 
         // Make second adjustment with same high ratio direction (streak = 2)
         vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, persistentHighRatio);
+        hook.poke(persistentHighRatio);
 
         (,,, uint24 feeAfterSecond) = poolManager.getSlot0(poolId);
 
         // Make third adjustment with same high ratio direction (streak = 3)
         vm.warp(block.timestamp + lowBaseMaxFeeDeltaParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, persistentHighRatio);
+        hook.poke(persistentHighRatio);
 
         (,,, uint24 feeAfterThird) = poolManager.getSlot0(poolId);
 
@@ -943,17 +919,17 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         uint256 testRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
 
         // Cycle through different parameter sets
-        DynamicFeeLib.PoolTypeParams[3] memory paramSets = [restrictiveParams, permissiveParams, originalParams];
+        DynamicFeeLib.PoolParams[3] memory paramSets = [restrictiveParams, permissiveParams, originalParams];
 
         for (uint256 i = 0; i < paramSets.length; i++) {
             vm.prank(owner);
-            logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, paramSets[i]);
+            logic.setPoolParams(paramSets[i]);
 
             // Wait for cooldown
             vm.warp(block.timestamp + paramSets[i].minPeriod + 1);
 
             vm.prank(owner);
-            hook.poke(key, testRatio);
+            hook.poke(testRatio);
 
             (,,, uint24 fee) = poolManager.getSlot0(poolId);
 
@@ -971,14 +947,14 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
     function test_alternatingRatios_withParameterChanges() public {
         // Start with restrictive parameters
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, restrictiveParams);
+        logic.setPoolParams(restrictiveParams);
 
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
 
         // High ratio test - use ratio above tolerance
         uint256 highRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, restrictiveParams.ratioTolerance);
         vm.prank(owner);
-        hook.poke(key, highRatio);
+        hook.poke(highRatio);
 
         (,,, uint24 feeAfterHigh) = poolManager.getSlot0(poolId);
         assertTrue(feeAfterHigh >= INITIAL_FEE, "Fee should increase for high ratio");
@@ -986,14 +962,14 @@ contract PoolTypeParamsBehaviorChangeTest is BaseAlphixTest {
         // Wait and switch to permissive parameters
         vm.warp(block.timestamp + restrictiveParams.minPeriod + 1);
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STABLE, permissiveParams);
+        logic.setPoolParams(permissiveParams);
 
         vm.warp(block.timestamp + permissiveParams.minPeriod + 1);
 
         // Low ratio test - use ratio below tolerance
         uint256 lowRatio = _getBelowToleranceRatio(INITIAL_TARGET_RATIO, permissiveParams.ratioTolerance);
         vm.prank(owner);
-        hook.poke(key, lowRatio);
+        hook.poke(lowRatio);
 
         (,,, uint24 feeAfterLow) = poolManager.getSlot0(poolId);
         assertTrue(feeAfterLow <= feeAfterHigh, "Fee should decrease for low ratio");

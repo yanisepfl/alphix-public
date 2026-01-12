@@ -18,7 +18,6 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {IRegistry} from "../../../../src/Registry.sol";
 
 /**
@@ -214,23 +213,14 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
     /**
      * @notice Fuzz test that pools can be registered with various parameters
      * @dev Tests pool registration with fuzzed pool types and fees
-     * @param poolTypeIndex Pool type index (0-2)
+     * @dev Removed: poolType parameter (single-pool architecture)
      * @param initialFee Initial fee for pool
      * @param targetRatio Target ratio for pool
      */
-    function testFuzz_pool_registration_with_various_params(uint8 poolTypeIndex, uint24 initialFee, uint256 targetRatio)
-        public
-    {
-        // Bound parameters
-        poolTypeIndex = uint8(bound(poolTypeIndex, 0, 2));
+    function testFuzz_pool_registration_with_various_params(uint24 initialFee, uint256 targetRatio) public {
+        // Bound parameters (single-pool-per-hook architecture - no PoolType)
         initialFee = uint24(bound(initialFee, 100, 10000));
         targetRatio = bound(targetRatio, 1e17, 2e18);
-
-        // Map to pool type
-        IAlphixLogic.PoolType poolType;
-        if (poolTypeIndex == 0) poolType = IAlphixLogic.PoolType.STABLE;
-        else if (poolTypeIndex == 1) poolType = IAlphixLogic.PoolType.STANDARD;
-        else poolType = IAlphixLogic.PoolType.VOLATILE;
 
         // Grant role
         vm.prank(owner);
@@ -244,12 +234,11 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
 
         // Register pool
         vm.prank(owner);
-        registry.registerPool(freshKey, poolType, initialFee, targetRatio);
+        registry.registerPool(freshKey, initialFee, targetRatio);
 
         // Verify registration
         IRegistry.PoolInfo memory info = registry.getPoolInfo(freshKey.toId());
         assertEq(info.hooks, address(hook), "hooks mismatch");
-        assertEq(uint8(info.poolType), uint8(poolType), "pool type mismatch");
         assertEq(info.initialFee, initialFee, "fee mismatch");
         assertEq(info.initialTargetRatio, targetRatio, "ratio mismatch");
     }
@@ -321,6 +310,6 @@ contract AccessAndOwnershipFuzzTest is BaseAlphixTest {
         // Unauthorized cannot initialize pool
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, unauthorized));
-        hook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+        hook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
     }
 }

@@ -14,6 +14,7 @@ import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 
 /**
  * @title AlphixPokeFuzzTest
@@ -52,15 +53,15 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         super.setUp();
 
         // Check if key is already configured, if so use it, otherwise initialize it
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig();
         if (!cfg.isConfigured) {
             // Initialize the main test pool for poke testing
             vm.prank(owner);
-            hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, IAlphixLogic.PoolType.STANDARD);
+            hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
         }
 
         // Wait past initial cooldown
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
     }
 
@@ -75,8 +76,8 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      */
     function testFuzz_poke_success_validRatio(uint256 currentRatio) public {
         // Get pool configuration and params
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Bound to valid range for the pool type
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
@@ -86,7 +87,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         // Poke with the ratio
         vm.prank(owner);
-        hook.poke(key, currentRatio);
+        hook.poke(currentRatio);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(poolId);
@@ -122,14 +123,12 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @dev Zero ratio should always be invalid
      */
     function testFuzz_poke_reverts_zeroRatio() public {
-        // Get the actual pool type for the key
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        IAlphixLogic.PoolType actualPoolType = cfg.poolType;
+        logic.getPoolConfig(); // Assert pool is configured
 
         // Poke with zero ratio should revert
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, actualPoolType, 0));
-        hook.poke(key, 0);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatio.selector, 0));
+        hook.poke(0);
     }
 
     /**
@@ -138,22 +137,18 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param excessiveRatio Ratio value above the maximum allowed
      */
     function testFuzz_poke_reverts_excessiveRatio(uint256 excessiveRatio) public {
-        // Get the actual pool type for the key
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        IAlphixLogic.PoolType actualPoolType = cfg.poolType;
+        logic.getPoolConfig(); // Assert pool is configured
 
         // Get pool type params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(actualPoolType);
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Bound to values above the maximum
         excessiveRatio = bound(excessiveRatio, params.maxCurrentRatio + 1, type(uint256).max / 2);
 
         // Should revert with InvalidRatioForPoolType
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, actualPoolType, excessiveRatio)
-        );
-        hook.poke(key, excessiveRatio);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatio.selector, excessiveRatio));
+        hook.poke(excessiveRatio);
     }
 
     /* ========================================================================== */
@@ -168,7 +163,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      */
     function testFuzz_poke_success_afterCooldownElapsed(uint256 timeAdvance, uint256 newRatio) public {
         // Get pool params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Bound inputs
         timeAdvance = bound(timeAdvance, params.minPeriod + 1, MAX_TIME_ADVANCE_FUZZ);
@@ -176,14 +171,14 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         // Do a first poke
         vm.prank(owner);
-        hook.poke(key, INITIAL_TARGET_RATIO);
+        hook.poke(INITIAL_TARGET_RATIO);
 
         // Advance time past cooldown
         vm.warp(block.timestamp + timeAdvance);
 
         // Second poke should succeed
         vm.prank(owner);
-        hook.poke(key, newRatio);
+        hook.poke(newRatio);
 
         // Verify the poke succeeded by checking fee was updated
         (,,, uint24 feeAfter) = poolManager.getSlot0(poolId);
@@ -197,18 +192,17 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      */
     function testFuzz_poke_reverts_duringCooldown(uint256 timeAdvance) public {
         // Get the actual pool type for the key
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        IAlphixLogic.PoolType actualPoolType = cfg.poolType;
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig();
 
         // Get pool params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(actualPoolType);
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Use target ratio to avoid ratio validation errors
         uint256 newRatio = cfg.initialTargetRatio;
 
         // Do a first poke
         vm.prank(owner);
-        hook.poke(key, newRatio);
+        hook.poke(newRatio);
 
         // Bound time advance to be within cooldown period (but non-zero)
         if (params.minPeriod > 1) {
@@ -221,7 +215,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             // (using expectRevert() without selector since ratio validation might happen first)
             vm.prank(owner);
             vm.expectRevert();
-            hook.poke(key, newRatio);
+            hook.poke(newRatio);
         }
     }
 
@@ -236,8 +230,11 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param initialFee Starting fee for the test
      */
     function testFuzz_poke_increaseFee_ratioAboveTolerance(uint256 ratioDeviation, uint24 initialFee) public {
-        // Get pool params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
+
+        // Get pool params from defaultPoolParams (fresh logic not yet configured)
+        DynamicFeeLib.PoolParams memory params = defaultPoolParams;
 
         // Bound initial fee to valid range
         initialFee = uint24(bound(initialFee, params.minFee, params.maxFee / 2)); // Use half max to allow room for increase
@@ -246,15 +243,14 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         ratioDeviation = bound(ratioDeviation, 1e15, 5e17); // 0.1% to 50% above tolerance
 
         // Create a fresh pool with the initial fee
-        (PoolKey memory freshKey, PoolId freshPoolId) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
+        (, PoolId freshPoolId) = _initPoolWithHook(
             initialFee,
             INITIAL_TARGET_RATIO,
             18,
             18,
             _safeAddToTickSpacing(defaultTickSpacing, 20), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         // Wait past cooldown
@@ -271,7 +267,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         // Poke with ratio above tolerance
         vm.prank(owner);
-        hook.poke(freshKey, aboveToleranceRatio);
+        freshHook.poke(aboveToleranceRatio);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(freshPoolId);
@@ -290,8 +286,11 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param initialFee Starting fee for the test
      */
     function testFuzz_poke_decreaseFee_ratioBelowTolerance(uint256 ratioDeviation, uint24 initialFee) public {
-        // Get pool params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
+
+        // Get pool params from defaultPoolParams (fresh logic not yet configured)
+        DynamicFeeLib.PoolParams memory params = defaultPoolParams;
 
         // Bound initial fee to valid range (use upper half to allow room for decrease)
         initialFee = uint24(bound(initialFee, params.minFee + (params.maxFee - params.minFee) / 2, params.maxFee));
@@ -300,15 +299,14 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         ratioDeviation = bound(ratioDeviation, 1e15, INITIAL_TARGET_RATIO / 2); // Don't go too low
 
         // Create a fresh pool with the initial fee
-        (PoolKey memory freshKey, PoolId freshPoolId) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
+        (, PoolId freshPoolId) = _initPoolWithHook(
             initialFee,
             INITIAL_TARGET_RATIO,
             18,
             18,
             _safeAddToTickSpacing(defaultTickSpacing, 40), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         // Wait past cooldown
@@ -331,7 +329,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         // Poke with ratio below tolerance
         vm.prank(owner);
-        hook.poke(freshKey, belowToleranceRatio);
+        freshHook.poke(belowToleranceRatio);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(freshPoolId);
@@ -350,8 +348,11 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param initialFee Starting fee for the test
      */
     function testFuzz_poke_noChange_ratioWithinTolerance(uint256 inBandOffset, uint24 initialFee) public {
-        // Get pool params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
+
+        // Get pool params from defaultPoolParams (fresh logic not yet configured)
+        DynamicFeeLib.PoolParams memory params = defaultPoolParams;
 
         // Bound initial fee to valid range
         initialFee = uint24(bound(initialFee, params.minFee, params.maxFee));
@@ -361,15 +362,14 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         inBandOffset = bound(inBandOffset, 0, maxOffset);
 
         // Create a fresh pool with the initial fee
-        (PoolKey memory freshKey, PoolId freshPoolId) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
+        (, PoolId freshPoolId) = _initPoolWithHook(
             initialFee,
             INITIAL_TARGET_RATIO,
             18,
             18,
             _safeAddToTickSpacing(defaultTickSpacing, 60), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         // Wait past cooldown
@@ -391,7 +391,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         // Poke with in-band ratio
         vm.prank(owner);
-        hook.poke(freshKey, inBandRatio);
+        freshHook.poke(inBandRatio);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(freshPoolId);
@@ -411,23 +411,25 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param numPokes Number of pokes to perform (2-5)
      */
     function testFuzz_poke_multiplePokes_convergeBehavior(uint256 targetRatio, uint8 numPokes) public {
-        // Get pool params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
+
+        // Get pool params from defaultPoolParams (fresh logic not yet configured)
+        DynamicFeeLib.PoolParams memory params = defaultPoolParams;
 
         // Bound inputs
         targetRatio = bound(targetRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
         numPokes = uint8(bound(numPokes, 2, 5));
 
         // Create a fresh pool
-        (PoolKey memory freshKey, PoolId freshPoolId) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
+        (, PoolId freshPoolId) = _initPoolWithHook(
             INITIAL_FEE,
             INITIAL_TARGET_RATIO,
             18,
             18,
             _safeAddToTickSpacing(defaultTickSpacing, 80), // Unique tick spacing
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         // Wait past initial cooldown
@@ -438,7 +440,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         // Perform multiple pokes with same ratio
         for (uint256 i = 0; i < numPokes; i++) {
             vm.prank(owner);
-            hook.poke(freshKey, targetRatio);
+            freshHook.poke(targetRatio);
 
             (,,, uint24 currentFee) = poolManager.getSlot0(freshPoolId);
 
@@ -471,36 +473,29 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
     /**
      * @notice Fuzz test that poke behaves correctly across different pool types
      * @dev Tests that STABLE, STANDARD, and VOLATILE pools respond appropriately to same ratio
-     * @param poolTypeIndex Index to select pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolType parameter (single-pool architecture)
      * @param testRatio Ratio to test across all pool types
      */
-    function testFuzz_poke_success_acrossPoolTypes(uint8 poolTypeIndex, uint256 testRatio) public {
-        // Bound pool type index
-        poolTypeIndex = uint8(bound(poolTypeIndex, 0, 2));
+    function testFuzz_poke_success_acrossPoolTypes(uint256 testRatio) public {
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook,) = _deployFreshAlphixStack();
 
-        // Map to pool type
-        IAlphixLogic.PoolType poolType;
-        if (poolTypeIndex == 0) poolType = IAlphixLogic.PoolType.STABLE;
-        else if (poolTypeIndex == 1) poolType = IAlphixLogic.PoolType.STANDARD;
-        else poolType = IAlphixLogic.PoolType.VOLATILE;
-
-        // Get pool type params and bound ratio
-        DynamicFeeLib.PoolTypeParams memory poolParams = logic.getPoolTypeParams(poolType);
+        // Get pool params from defaultPoolParams (fresh logic not yet configured)
+        DynamicFeeLib.PoolParams memory poolParams = defaultPoolParams;
         testRatio = bound(testRatio, MIN_RATIO_FUZZ, poolParams.maxCurrentRatio);
 
-        // Get valid initial fee for pool type
+        // Get valid initial fee
         uint24 validFee = uint24(bound(INITIAL_FEE, poolParams.minFee, poolParams.maxFee));
 
-        // Create pool with specific type
-        (PoolKey memory freshKey, PoolId freshPoolId) = _initPoolWithHook(
-            poolType,
+        // Create pool
+        (, PoolId freshPoolId) = _initPoolWithHook(
             validFee,
             INITIAL_TARGET_RATIO,
             18,
             18,
-            _safeAddToTickSpacing(defaultTickSpacing, int24(100) + int24(uint24(poolTypeIndex)) * int24(20)), // Unique tick spacing per pool type
+            _safeAddToTickSpacing(defaultTickSpacing, int24(100)),
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         // Wait past cooldown
@@ -508,7 +503,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         // Poke with test ratio
         vm.prank(owner);
-        hook.poke(freshKey, testRatio);
+        freshHook.poke(testRatio);
 
         // Verify fee is within pool type bounds
         (,,, uint24 feeAfter) = poolManager.getSlot0(freshPoolId);
@@ -527,14 +522,14 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      */
     function testFuzz_poke_extremeRatios_safeHandling(bool useMinimum) public {
         // Get pool params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Use either minimum or maximum valid ratio
         uint256 extremeRatio = useMinimum ? MIN_RATIO_FUZZ : params.maxCurrentRatio;
 
         // Poke with extreme ratio
         vm.prank(owner);
-        hook.poke(key, extremeRatio);
+        hook.poke(extremeRatio);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(poolId);
@@ -546,7 +541,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         // Verify we can poke again after cooldown
         vm.warp(block.timestamp + params.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(key, INITIAL_TARGET_RATIO);
+        hook.poke(INITIAL_TARGET_RATIO);
 
         (,,, uint24 feeAfterSecond) = poolManager.getSlot0(poolId);
         assertTrue(feeAfterSecond >= params.minFee && feeAfterSecond <= params.maxFee, "Second poke should also work");
@@ -562,9 +557,9 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param currentRatio The ratio to test
      */
     function testFuzz_computeFeeUpdate_matchesPoke(uint256 currentRatio) public {
-        // Get pool configuration and params
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+        // Get pool params
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Bound to valid range for the pool type
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
@@ -575,11 +570,11 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
             uint24 computedOldFee,
             uint256 computedOldTargetRatio,
             uint256 computedNewTargetRatio,
-        ) = logic.computeFeeUpdate(key, currentRatio);
+        ) = logic.computeFeeUpdate(currentRatio);
 
         // Now execute the actual poke
         vm.prank(owner);
-        hook.poke(key, currentRatio);
+        hook.poke(currentRatio);
 
         // Get actual new fee from pool
         (,,, uint24 actualNewFee) = poolManager.getSlot0(poolId);
@@ -601,8 +596,8 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      */
     function testFuzz_computeFeeUpdate_noStateChange(uint256 currentRatio, uint8 numCalls) public view {
         // Get pool configuration and params
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Bound inputs
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
@@ -613,7 +608,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
 
         // Call computeFeeUpdate multiple times
         for (uint256 i = 0; i < numCalls; i++) {
-            (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio,,) = logic.computeFeeUpdate(key, currentRatio);
+            (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio,,) = logic.computeFeeUpdate(currentRatio);
 
             // All calls should return the same values (since no state changed)
             if (i == 0) {
@@ -639,22 +634,22 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param currentRatio The ratio to test
      */
     function testFuzz_computeFeeUpdate_succeedsDuringCooldown(uint256 currentRatio) public {
-        // Get pool configuration and params
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+        // Get pool params
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Bound to valid range
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio);
 
         // Execute a poke first
         vm.prank(owner);
-        hook.poke(key, currentRatio);
+        hook.poke(currentRatio);
 
         // DON'T advance time - we're still in cooldown
 
         // computeFeeUpdate should still work (no cooldown check)
         (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio, uint256 newTargetRatio,) =
-            logic.computeFeeUpdate(key, currentRatio);
+            logic.computeFeeUpdate(currentRatio);
 
         // Verify it returned valid results
         assertTrue(newFee >= params.minFee && newFee <= params.maxFee, "Fee should be in bounds");
@@ -665,7 +660,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         // But poke should still revert during cooldown
         vm.prank(owner);
         vm.expectRevert();
-        hook.poke(key, currentRatio);
+        hook.poke(currentRatio);
     }
 
     /**
@@ -674,67 +669,58 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param invalidRatio A ratio outside valid bounds
      */
     function testFuzz_computeFeeUpdate_revertsOnInvalidRatio(uint256 invalidRatio) public {
-        // Get pool configuration
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(poolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(cfg.poolType);
+        // Get pool params
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Test with ratio above max
         invalidRatio = bound(invalidRatio, params.maxCurrentRatio + 1, type(uint256).max / 2);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, cfg.poolType, invalidRatio)
-        );
-        logic.computeFeeUpdate(key, invalidRatio);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatio.selector, invalidRatio));
+        logic.computeFeeUpdate(invalidRatio);
 
         // Test with zero ratio
-        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatioForPoolType.selector, cfg.poolType, 0));
-        logic.computeFeeUpdate(key, 0);
+        vm.expectRevert(abi.encodeWithSelector(IAlphixLogic.InvalidRatio.selector, 0));
+        logic.computeFeeUpdate(0);
     }
 
     /**
      * @notice Fuzz test computeFeeUpdate across pool types
      * @dev Verifies computeFeeUpdate works correctly for all pool types
-     * @param poolTypeIndex Index to select pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolType parameter (single-pool architecture)
      * @param testRatio Ratio to test
      */
-    function testFuzz_computeFeeUpdate_acrossPoolTypes(uint8 poolTypeIndex, uint256 testRatio) public {
-        // Bound pool type index
-        poolTypeIndex = uint8(bound(poolTypeIndex, 0, 2));
+    function testFuzz_computeFeeUpdate_acrossPoolTypes(uint256 testRatio) public {
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
 
-        // Map to pool type
-        IAlphixLogic.PoolType poolType;
-        if (poolTypeIndex == 0) poolType = IAlphixLogic.PoolType.STABLE;
-        else if (poolTypeIndex == 1) poolType = IAlphixLogic.PoolType.STANDARD;
-        else poolType = IAlphixLogic.PoolType.VOLATILE;
-
-        // Get pool type params and bound ratio
-        DynamicFeeLib.PoolTypeParams memory poolParams = logic.getPoolTypeParams(poolType);
+        // Get pool params from defaultPoolParams (fresh logic not yet configured)
+        DynamicFeeLib.PoolParams memory poolParams = defaultPoolParams;
         testRatio = bound(testRatio, MIN_RATIO_FUZZ, poolParams.maxCurrentRatio);
 
-        // Get valid initial fee for pool type
+        // Get valid initial fee
         uint24 validFee = uint24(bound(INITIAL_FEE, poolParams.minFee, poolParams.maxFee));
 
-        // Create pool with specific type
-        (PoolKey memory freshKey, PoolId freshPoolId) = _initPoolWithHook(
-            poolType,
+        // Create pool
+        (, PoolId freshPoolId) = _initPoolWithHook(
             validFee,
             INITIAL_TARGET_RATIO,
             18,
             18,
-            _safeAddToTickSpacing(defaultTickSpacing, int24(200) + int24(uint24(poolTypeIndex)) * int24(20)),
+            _safeAddToTickSpacing(defaultTickSpacing, int24(200)),
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         // Wait past cooldown for poke comparison
         vm.warp(block.timestamp + poolParams.minPeriod + 1);
 
         // Call computeFeeUpdate
-        (uint24 computedNewFee, uint24 computedOldFee,,,) = logic.computeFeeUpdate(freshKey, testRatio);
+        (uint24 computedNewFee, uint24 computedOldFee,,,) = freshLogic.computeFeeUpdate(testRatio);
 
         // Execute actual poke
         vm.prank(owner);
-        hook.poke(freshKey, testRatio);
+        freshHook.poke(testRatio);
 
         // Get actual fee
         (,,, uint24 actualNewFee) = poolManager.getSlot0(freshPoolId);
@@ -751,24 +737,24 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      */
     function testFuzz_computeFeeUpdate_clampsNewTargetRatioToMax(uint256 highRatio) public {
         // Create a pool with a lower maxCurrentRatio to make clamping easier to trigger
-        DynamicFeeLib.PoolTypeParams memory customParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolParams memory customParams = logic.getPoolParams();
 
         // Set maxCurrentRatio to a moderate value so we can exceed it with EMA
         uint256 lowerMax = 5e20; // 500:1 ratio
         customParams.maxCurrentRatio = lowerMax;
 
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.STANDARD, customParams);
+        logic.setPoolParams(customParams);
 
         // Get updated params
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         // Use a ratio at the max - EMA should produce newTargetRatio that gets clamped
         // Start with initial target ratio lower, then push with max current ratio
         highRatio = bound(highRatio, params.maxCurrentRatio - 1e19, params.maxCurrentRatio);
 
         // Call computeFeeUpdate
-        (,,, uint256 newTargetRatio,) = logic.computeFeeUpdate(key, highRatio);
+        (,,, uint256 newTargetRatio,) = logic.computeFeeUpdate(highRatio);
 
         // The newTargetRatio should be clamped to maxCurrentRatio
         assertTrue(newTargetRatio <= params.maxCurrentRatio, "newTargetRatio should be clamped to maxCurrentRatio");
@@ -780,33 +766,35 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @dev This is a concrete test to ensure the clamping branch is hit
      */
     function test_computeFeeUpdate_clampsNewTargetRatioExplicit() public {
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Setup: Create a fresh pool with high initial target ratio
         (PoolKey memory freshKey,) = _newUninitializedPoolWithHook(
-            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(300)), Constants.SQRT_PRICE_1_1, hook
+            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(300)), Constants.SQRT_PRICE_1_1, freshHook
         );
 
-        // Get params for VOLATILE (has highest default maxCurrentRatio)
-        DynamicFeeLib.PoolTypeParams memory volParams = logic.getPoolTypeParams(IAlphixLogic.PoolType.VOLATILE);
+        // Get params from defaultPoolParams (fresh logic not yet configured)
+        DynamicFeeLib.PoolParams memory volParams = defaultPoolParams;
 
         // Activate pool with target ratio at 90% of max
         uint256 highInitialTarget = (volParams.maxCurrentRatio * 90) / 100;
-        vm.prank(address(hook));
-        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, highInitialTarget, IAlphixLogic.PoolType.VOLATILE);
+        vm.prank(address(freshHook));
+        freshLogic.activateAndConfigurePool(freshKey, INITIAL_FEE, highInitialTarget, defaultPoolParams);
 
         // Now lower the maxCurrentRatio to force clamping
-        DynamicFeeLib.PoolTypeParams memory newParams = volParams;
+        DynamicFeeLib.PoolParams memory newParams = volParams;
         newParams.maxCurrentRatio = (highInitialTarget * 80) / 100; // 80% of initial target
 
         vm.prank(owner);
-        logic.setPoolTypeParams(IAlphixLogic.PoolType.VOLATILE, newParams);
+        freshLogic.setPoolParams(newParams);
 
         // Wait for cooldown
         vm.warp(block.timestamp + newParams.minPeriod + 1);
 
         // Call computeFeeUpdate with currentRatio at new max
         // EMA will try to blend highInitialTarget with currentRatio, but both will be clamped
-        (,, uint256 oldTargetRatio, uint256 newTargetRatio,) =
-            logic.computeFeeUpdate(freshKey, newParams.maxCurrentRatio);
+        (,, uint256 oldTargetRatio, uint256 newTargetRatio,) = freshLogic.computeFeeUpdate(newParams.maxCurrentRatio);
 
         // oldTargetRatio should be clamped (it was highInitialTarget > newParams.maxCurrentRatio)
         assertEq(oldTargetRatio, newParams.maxCurrentRatio, "oldTargetRatio should be clamped to new maxCurrentRatio");
@@ -822,17 +810,20 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
      * @param currentRatio The current ratio (will be bounded to valid range)
      */
     function testFuzz_computeFeeUpdate_extremeRatioDifference(uint256 currentRatio) public {
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Create pool with high initial target
         (PoolKey memory freshKey,) = _newUninitializedPoolWithHook(
-            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(400)), Constants.SQRT_PRICE_1_1, hook
+            18, 18, _safeAddToTickSpacing(defaultTickSpacing, int24(400)), Constants.SQRT_PRICE_1_1, freshHook
         );
 
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(IAlphixLogic.PoolType.STANDARD);
+        DynamicFeeLib.PoolParams memory params = defaultPoolParams;
 
         // Set high initial target ratio (90% of max)
         uint256 highTarget = (params.maxCurrentRatio * 90) / 100;
-        vm.prank(address(hook));
-        logic.activateAndConfigurePool(freshKey, INITIAL_FEE, highTarget, IAlphixLogic.PoolType.STANDARD);
+        vm.prank(address(freshHook));
+        freshLogic.activateAndConfigurePool(freshKey, INITIAL_FEE, highTarget, defaultPoolParams);
 
         // Wait for cooldown
         vm.warp(block.timestamp + params.minPeriod + 1);
@@ -841,8 +832,7 @@ contract AlphixPokeFuzzTest is BaseAlphixTest {
         currentRatio = bound(currentRatio, MIN_RATIO_FUZZ, params.maxCurrentRatio / 100);
 
         // computeFeeUpdate should handle this gracefully
-        (uint24 newFee,, uint256 oldTargetRatio, uint256 newTargetRatio,) =
-            logic.computeFeeUpdate(freshKey, currentRatio);
+        (uint24 newFee,, uint256 oldTargetRatio, uint256 newTargetRatio,) = freshLogic.computeFeeUpdate(currentRatio);
 
         // Verify constraints
         assertTrue(newFee >= params.minFee && newFee <= params.maxFee, "Fee should be in bounds");

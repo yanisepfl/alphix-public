@@ -22,6 +22,9 @@ import {Roles} from "./libraries/Roles.sol";
  * NOTE: The Alphix Hook already has REGISTRAR role (granted in script 04).
  * This script is only for granting ADDITIONAL roles to OTHER addresses.
  *
+ * NOTE: For YIELD_MANAGER_ROLE configuration, use script 06d_ConfigureReHypothecation.s.sol
+ * which handles both the role grant and the rehypothecation settings (yield sources, treasury, etc.)
+ *
  * Environment Variables:
  * Required:
  * - DEPLOYMENT_NETWORK: Network identifier (e.g., BASE_SEPOLIA)
@@ -36,6 +39,8 @@ import {Roles} from "./libraries/Roles.sol";
  * Optional Roles:
  * 1. FEE_POKER (optional) - Can call Alphix.poke() to manually update dynamic fees
  * 2. REGISTRAR (additional, optional) - Additional address for pool/contract registration
+ *
+ * For YIELD_MANAGER role, see: 06d_ConfigureReHypothecation.s.sol
  */
 contract ConfigureRolesScript is Script {
     function run() public {

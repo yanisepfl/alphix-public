@@ -7,10 +7,6 @@ import {Test} from "forge-std/Test.sol";
 /* OZ IMPORTS */
 
 /* UNISWAP V4 IMPORTS */
-import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
-import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* LOCAL IMPORTS */
 import {MockERC165} from "./MockERC165.sol";
@@ -75,21 +71,12 @@ contract MockAlphixLogicTest is Test {
     }
 
     function test_mockReenteringLogic_poke_attemptsReentry() public {
-        // Create a mock pool key
-        PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(address(0)),
-            currency1: Currency.wrap(address(0)),
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: IHooks(address(0))
-        });
-
         // This should revert when it tries to call poke on the mock hook address (0x1234)
         // because that address has no code. Since poke() returns values, calling an address
         // without code will fail during ABI decoding of the empty return data. We use
         // generic expectRevert since the specific error type may vary across EVM versions.
         vm.expectRevert();
-        mockReenteringLogic.poke(key, 5e17);
+        mockReenteringLogic.poke(5e17);
     }
 
     function test_mockReenteringLogic_poke_withMockHook() public {
@@ -97,16 +84,8 @@ contract MockAlphixLogicTest is Test {
         MockHookWithPoke mockHookWithPoke = new MockHookWithPoke();
         MockReenteringLogic reenteringLogic = new MockReenteringLogic(address(mockHookWithPoke));
 
-        PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(address(0)),
-            currency1: Currency.wrap(address(0)),
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: IHooks(address(0))
-        });
-
         // This should succeed and call the mock hook's poke function
-        (uint24 newFee, uint24 oldFee, uint256 oldRatio, uint256 newRatio) = reenteringLogic.poke(key, 5e17);
+        (uint24 newFee, uint24 oldFee, uint256 oldRatio, uint256 newRatio) = reenteringLogic.poke(5e17);
 
         // Verify the returned values match the mock implementation
         assertEq(newFee, 3000, "Should return mock new fee");
@@ -121,8 +100,8 @@ contract MockAlphixLogicTest is Test {
     /* DATA STRUCTURE TESTS (for interface validation) */
 
     function test_poolTypeParams_struct() public pure {
-        // Test that we can create PoolTypeParams structs
-        DynamicFeeLib.PoolTypeParams memory stableParams = DynamicFeeLib.PoolTypeParams({
+        // Test that we can create PoolParams structs
+        DynamicFeeLib.PoolParams memory stableParams = DynamicFeeLib.PoolParams({
             minFee: 1,
             maxFee: 5001,
             baseMaxFeeDelta: 25,
@@ -141,22 +120,13 @@ contract MockAlphixLogicTest is Test {
     }
 
     function test_poolConfig_struct() public pure {
-        // Test that we can create PoolConfig structs
-        IAlphixLogic.PoolConfig memory config = IAlphixLogic.PoolConfig({
-            initialFee: 500, initialTargetRatio: 5e17, poolType: IAlphixLogic.PoolType.STABLE, isConfigured: true
-        });
+        // Test that we can create PoolConfig structs (single-pool architecture - no poolType)
+        IAlphixLogic.PoolConfig memory config =
+            IAlphixLogic.PoolConfig({initialFee: 500, isConfigured: true, initialTargetRatio: 5e17});
 
         assertEq(config.initialFee, 500, "Initial fee should be set correctly");
         assertEq(config.initialTargetRatio, 5e17, "Initial target ratio should be set correctly");
-        assertEq(uint8(config.poolType), uint8(IAlphixLogic.PoolType.STABLE), "Pool type should be set correctly");
         assertTrue(config.isConfigured, "Should be configured");
-    }
-
-    function test_poolType_enum() public pure {
-        // Test pool type enumeration
-        assertEq(uint8(IAlphixLogic.PoolType.STABLE), 0, "STABLE should be 0");
-        assertEq(uint8(IAlphixLogic.PoolType.STANDARD), 1, "STANDARD should be 1");
-        assertEq(uint8(IAlphixLogic.PoolType.VOLATILE), 2, "VOLATILE should be 2");
     }
 
     function test_oobState_struct() public pure {
@@ -185,7 +155,7 @@ contract MockAlphixLogicTest is Test {
 contract MockHookWithPoke {
     bool public pokeCalled = false;
 
-    function poke(PoolKey calldata, uint256) external {
+    function poke(uint256) external {
         pokeCalled = true;
     }
 }

@@ -19,6 +19,7 @@ import {Constants} from "v4-core/test/utils/Constants.sol";
 /* LOCAL IMPORTS */
 import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 
@@ -94,16 +95,12 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
     /* before/after Add/Remove Liquidity */
 
     function test_beforeAddLiquidity_success_onFreshConfiguredPool() public {
-        // Fresh configured/active pool
+        // Deploy fresh hook + logic stack for this test (single-pool-per-hook architecture)
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
@@ -112,26 +109,22 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
-        vm.prank(address(hook));
-        bytes4 result = logic.beforeAddLiquidity(user1, kFresh, params, "");
+        vm.prank(address(freshHook));
+        bytes4 result = freshLogic.beforeAddLiquidity(user1, kFresh, params, "");
         assertEq(result, BaseHook.beforeAddLiquidity.selector, "selector mismatch");
     }
 
     function test_beforeAddLiquidity_revertsOnInactivePool() public {
-        // Fresh configured pool then deactivate
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook then deactivate
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
-        vm.prank(address(hook));
-        logic.deactivatePool(kFresh);
+        vm.prank(address(freshHook));
+        freshLogic.deactivatePool();
 
         int24 lower = -int24(3 * defaultTickSpacing);
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -139,22 +132,18 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        logic.beforeAddLiquidity(user1, kFresh, params, "");
+        freshLogic.beforeAddLiquidity(user1, kFresh, params, "");
     }
 
     function test_beforeRemoveLiquidity_success_onFreshConfiguredPool() public {
-        // Fresh configured/active pool
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
@@ -163,22 +152,18 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 1000, salt: 0});
 
-        vm.prank(address(hook));
-        bytes4 result = logic.beforeRemoveLiquidity(user1, kFresh, params, "");
+        vm.prank(address(freshHook));
+        bytes4 result = freshLogic.beforeRemoveLiquidity(user1, kFresh, params, "");
         assertEq(result, BaseHook.beforeRemoveLiquidity.selector, "selector mismatch");
     }
 
     function test_afterAddLiquidity_success_onFreshConfiguredPool() public {
-        // Fresh configured/active pool
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
@@ -189,23 +174,19 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
 
         BalanceDelta zero = BalanceDelta.wrap(0);
 
-        vm.prank(address(hook));
-        (bytes4 selector, BalanceDelta hookDelta) = logic.afterAddLiquidity(user1, kFresh, params, zero, zero, "");
+        vm.prank(address(freshHook));
+        (bytes4 selector, BalanceDelta hookDelta) = freshLogic.afterAddLiquidity(user1, kFresh, params, zero, zero, "");
         assertEq(selector, BaseHook.afterAddLiquidity.selector, "selector mismatch");
         assertEq(BalanceDelta.unwrap(hookDelta), 0, "hook delta should be zero");
     }
 
     function test_afterRemoveLiquidity_success_onFreshConfiguredPool() public {
-        // Fresh configured/active pool
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
@@ -216,8 +197,9 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
 
         BalanceDelta zero = BalanceDelta.wrap(0);
 
-        vm.prank(address(hook));
-        (bytes4 selector, BalanceDelta hookDelta) = logic.afterRemoveLiquidity(user1, kFresh, params, zero, zero, "");
+        vm.prank(address(freshHook));
+        (bytes4 selector, BalanceDelta hookDelta) =
+            freshLogic.afterRemoveLiquidity(user1, kFresh, params, zero, zero, "");
         assertEq(selector, BaseHook.afterRemoveLiquidity.selector, "selector mismatch");
         assertEq(BalanceDelta.unwrap(hookDelta), 0, "hook delta should be zero");
     }
@@ -225,63 +207,51 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
     /* before/after Swap */
 
     function test_beforeSwap_success_onFreshConfiguredPool() public {
-        // Fresh configured/active pool
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         SwapParams memory params =
             SwapParams({zeroForOne: true, amountSpecified: -1000, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
 
-        vm.prank(address(hook));
-        (bytes4 selector, BeforeSwapDelta delta, uint24 fee) = logic.beforeSwap(user1, kFresh, params, "");
+        vm.prank(address(freshHook));
+        (bytes4 selector, BeforeSwapDelta delta, uint24 fee,) = freshLogic.beforeSwap(user1, kFresh, params, "");
         assertEq(selector, BaseHook.beforeSwap.selector, "selector mismatch");
         assertEq(BeforeSwapDelta.unwrap(delta), 0, "delta should be zero");
         assertEq(fee, 0, "fee override should be zero");
     }
 
     function test_beforeSwap_revertsOnInactivePool() public {
-        // Fresh configured pool then deactivate
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook then deactivate
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
-        vm.prank(address(hook));
-        logic.deactivatePool(kFresh);
+        vm.prank(address(freshHook));
+        freshLogic.deactivatePool();
 
         SwapParams memory params =
             SwapParams({zeroForOne: true, amountSpecified: -1000, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
 
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        logic.beforeSwap(user1, kFresh, params, "");
+        freshLogic.beforeSwap(user1, kFresh, params, "");
     }
 
     function test_afterSwap_success_onFreshConfiguredPool() public {
-        // Fresh configured/active pool
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         SwapParams memory params =
@@ -289,51 +259,43 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
 
         BalanceDelta zero = BalanceDelta.wrap(0);
 
-        vm.prank(address(hook));
-        (bytes4 selector, int128 hookDelta) = logic.afterSwap(user1, kFresh, params, zero, "");
+        vm.prank(address(freshHook));
+        (bytes4 selector, int128 hookDelta,) = freshLogic.afterSwap(user1, kFresh, params, zero, "");
         assertEq(selector, BaseHook.afterSwap.selector, "selector mismatch");
         assertEq(hookDelta, 0, "hook delta should be zero");
     }
 
     function test_afterSwap_revertsOnInactivePool() public {
-        // Fresh configured pool then deactivate
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook then deactivate
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
-        vm.prank(address(hook));
-        logic.deactivatePool(kFresh);
+        vm.prank(address(freshHook));
+        freshLogic.deactivatePool();
 
         SwapParams memory params =
             SwapParams({zeroForOne: true, amountSpecified: -1000, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
 
         BalanceDelta zero = BalanceDelta.wrap(0);
 
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-        logic.afterSwap(user1, kFresh, params, zero, "");
+        freshLogic.afterSwap(user1, kFresh, params, zero, "");
     }
 
     /* All onlyHook entrypoints revert on non-hook */
 
     function test_allHookCalls_revertOnNonHook() public {
-        // Fresh configured/active pool to exercise all paths uniformly
+        // Deploy fresh hook + logic stack for this test
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
+        // Create and initialize a pool on the fresh hook
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         int24 lower = -int24(3 * defaultTickSpacing);
@@ -350,28 +312,28 @@ contract AlphixLogicHookCallsTest is BaseAlphixTest {
         vm.startPrank(user1);
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.beforeInitialize(user1, kFresh, Constants.SQRT_PRICE_1_1);
+        freshLogic.beforeInitialize(user1, kFresh, Constants.SQRT_PRICE_1_1);
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.afterInitialize(user1, kFresh, Constants.SQRT_PRICE_1_1, 0);
+        freshLogic.afterInitialize(user1, kFresh, Constants.SQRT_PRICE_1_1, 0);
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.beforeAddLiquidity(user1, kFresh, lpParams, "");
+        freshLogic.beforeAddLiquidity(user1, kFresh, lpParams, "");
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.beforeRemoveLiquidity(user1, kFresh, lpParams, "");
+        freshLogic.beforeRemoveLiquidity(user1, kFresh, lpParams, "");
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.afterAddLiquidity(user1, kFresh, lpParams, zero, zero, "");
+        freshLogic.afterAddLiquidity(user1, kFresh, lpParams, zero, zero, "");
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.afterRemoveLiquidity(user1, kFresh, lpParams, zero, zero, "");
+        freshLogic.afterRemoveLiquidity(user1, kFresh, lpParams, zero, zero, "");
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.beforeSwap(user1, kFresh, swapParams, "");
+        freshLogic.beforeSwap(user1, kFresh, swapParams, "");
 
         vm.expectRevert(IAlphixLogic.InvalidCaller.selector);
-        logic.afterSwap(user1, kFresh, swapParams, zero, "");
+        freshLogic.afterSwap(user1, kFresh, swapParams, zero, "");
 
         vm.stopPrank();
     }

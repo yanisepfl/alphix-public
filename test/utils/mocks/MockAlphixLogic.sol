@@ -11,20 +11,23 @@ import {
     ERC165Upgradeable,
     IERC165
 } from "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {BaseDynamicFee} from "../../../src/BaseDynamicFee.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId} from "v4-core/src/types/PoolId.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
 
 /* LOCAL IMPORTS */
 import {IAlphixLogic} from "../../../src/interfaces/IAlphixLogic.sol";
+import {IReHypothecation} from "../../../src/interfaces/IReHypothecation.sol";
 import {DynamicFeeLib} from "../../../src/libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "../../../src/libraries/AlphixGlobalConstants.sol";
 
@@ -33,6 +36,7 @@ import {AlphixGlobalConstants} from "../../../src/libraries/AlphixGlobalConstant
  * @author Alphix
  * @notice Layout-compatible mock for AlphixLogic that appends a new storage var and uses it in compute paths
  * @dev Mirrors v1 storage order, appends `mockFee`, and shrinks the gap to keep alignment for UUPS upgrade tests
+ *      Updated for single-pool architecture with ERC20 shares and no PoolType.
  */
 contract MockAlphixLogic is
     Initializable,
@@ -41,65 +45,85 @@ contract MockAlphixLogic is
     ReentrancyGuardUpgradeable,
     PausableUpgradeable,
     ERC165Upgradeable,
+    ERC20Upgradeable,
     IAlphixLogic
 {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
 
-    /* MATCHING STORAGE (must mirror AlphixLogic order) */
+    /* MATCHING STORAGE (must mirror AlphixLogic order EXACTLY) */
 
     // 1. Global cap for adjustment rate
-    uint256 private globalMaxAdjRate;
+    uint256 private _globalMaxAdjRate;
 
     // 2. Alphix Hook address
-    address private alphixHook;
+    address private _alphixHook;
 
-    // 3. Pool active flag
-    mapping(PoolId => bool) private poolActive;
+    // 3. Pool key (single pool)
+    PoolKey private _poolKey;
 
-    // 4. Pool config
-    mapping(PoolId => PoolConfig) private poolConfig;
+    // 4. Pool activated flag
+    bool private _poolActivated;
 
-    // 5. OOB state
-    mapping(PoolId => DynamicFeeLib.OobState) private oobState;
+    // 5. Pool config (single pool - no poolType)
+    PoolConfig private _poolConfig;
 
-    // 6. Target ratio
-    mapping(PoolId => uint256) private targetRatio;
+    // 6. OOB state (single pool)
+    DynamicFeeLib.OobState private _oobState;
 
-    // 7. Last fee update timestamp
-    mapping(PoolId => uint256) private lastFeeUpdate;
+    // 7. Target ratio (single pool)
+    uint256 private _targetRatio;
 
-    // 8. Per-type parameters
-    mapping(PoolType => DynamicFeeLib.PoolTypeParams) private poolTypeParams;
+    // 8. Last fee update timestamp (single pool)
+    uint256 private _lastFeeUpdate;
+
+    // 9. Pool ID (cached)
+    PoolId private _poolId;
+
+    // 10. Pool params (single pool - replaces per-type mapping)
+    DynamicFeeLib.PoolParams private _poolParams;
+
+    // 11. ReHypothecation config (single pool)
+    IReHypothecation.ReHypothecationConfig private _reHypothecationConfig;
+
+    // 12. Yield source state (single pool)
+    mapping(Currency => IReHypothecation.YieldSourceState) private _yieldSourceState;
+
+    // 13. Yield treasury
+    address private _yieldTreasury;
 
     /* NEW APPENDED STORAGE (v2) */
     uint24 private mockFee;
 
-    /* GAP SHRUNK BY ONE SLOT (from 50 to 49) */
-    uint256[49] private __gap;
+    /* GAP SHRUNK BY ONE SLOT (from 50 to 49) to account for mockFee */
+    uint256[49] private _gap;
 
     /* MODIFIERS */
 
     modifier onlyAlphixHook() {
-        if (msg.sender != alphixHook) revert InvalidCaller();
+        if (msg.sender != _alphixHook) revert InvalidCaller();
         _;
     }
 
-    modifier poolActivated(PoolKey calldata key) {
-        PoolId id = key.toId();
-        if (!poolActive[id]) revert PoolPaused();
+    modifier poolActivated() {
+        if (!_poolActivated || !_poolConfig.isConfigured) revert PoolPaused();
         _;
     }
 
-    modifier poolUnconfigured(PoolKey calldata key) {
-        PoolId id = key.toId();
-        if (poolConfig[id].isConfigured) revert PoolAlreadyConfigured();
+    modifier poolActivatedKey(PoolKey calldata key) {
+        if (PoolId.unwrap(key.toId()) != PoolId.unwrap(_poolId)) revert PoolNotConfigured();
+        if (!_poolActivated || !_poolConfig.isConfigured) revert PoolPaused();
         _;
     }
 
-    modifier poolConfigured(PoolKey calldata key) {
-        PoolId id = key.toId();
-        if (!poolConfig[id].isConfigured) revert PoolNotConfigured();
+    modifier poolUnconfigured() {
+        if (_poolConfig.isConfigured) revert PoolAlreadyConfigured();
+        _;
+    }
+
+    modifier poolConfigured() {
+        if (!_poolConfig.isConfigured) revert PoolNotConfigured();
         _;
     }
 
@@ -110,37 +134,33 @@ contract MockAlphixLogic is
         _disableInitializers();
     }
 
-    /* INITIALIZER (aligned with current logic) */
+    /* INITIALIZER (aligned with current logic - no PoolType params) */
 
     /**
-     * @notice Initialize the logic with owner, hook, and per-type params
-     * @dev Sets default globalMaxAdjRate and seeds per-type params, mirroring production logic’s behavior
+     * @notice Initialize the logic with owner, hook, accessManager
+     * @dev Pool params are now passed at activateAndConfigurePool, not at initialization
      */
     function initialize(
-        address _owner,
-        address _alphixHook,
-        DynamicFeeLib.PoolTypeParams memory _stableParams,
-        DynamicFeeLib.PoolTypeParams memory _standardParams,
-        DynamicFeeLib.PoolTypeParams memory _volatileParams
+        address owner_,
+        address alphixHook_,
+        address accessManager_,
+        string memory name_,
+        string memory symbol_
     ) public initializer {
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Pausable_init();
         __ERC165_init();
+        __ERC20_init(name_, symbol_);
 
-        if (_owner == address(0) || _alphixHook == address(0)) revert InvalidAddress();
+        if (owner_ == address(0) || alphixHook_ == address(0) || accessManager_ == address(0)) revert InvalidAddress();
 
-        _transferOwnership(_owner);
-        alphixHook = _alphixHook;
+        _transferOwnership(owner_);
+        _alphixHook = alphixHook_;
 
         // Set default global cap (same as logic)
         _setGlobalMaxAdjRate(AlphixGlobalConstants.TEN_WAD);
-
-        // Initialize params for each pool type
-        _setPoolTypeParams(PoolType.STABLE, _stableParams);
-        _setPoolTypeParams(PoolType.STANDARD, _standardParams);
-        _setPoolTypeParams(PoolType.VOLATILE, _volatileParams);
     }
 
     /* ERC165 */
@@ -151,7 +171,7 @@ contract MockAlphixLogic is
 
     /* CORE HOOK LOGIC (stubs) */
 
-    function beforeInitialize(address, PoolKey calldata, uint160)
+    function beforeInitialize(address, PoolKey calldata key, uint160)
         external
         view
         override
@@ -159,18 +179,24 @@ contract MockAlphixLogic is
         whenNotPaused
         returns (bytes4)
     {
+        // Reject if pool already initialized
+        if (_poolActivated) revert PoolAlreadyConfigured();
+        // Reject ETH pools (mock only supports ERC20)
+        if (Currency.unwrap(key.currency0) == address(0)) revert IReHypothecation.UnsupportedNativeCurrency();
         return this.beforeInitialize.selector;
     }
 
     function afterInitialize(address, PoolKey calldata key, uint160, int24)
         external
-        view
         override
         onlyAlphixHook
         whenNotPaused
         returns (bytes4)
     {
         if (!key.fee.isDynamicFee()) revert BaseDynamicFee.NotDynamicFee();
+        // Store the pool key
+        _poolKey = key;
+        _poolActivated = true;
         return this.afterInitialize.selector;
     }
 
@@ -179,7 +205,7 @@ contract MockAlphixLogic is
         view
         override
         onlyAlphixHook
-        poolActivated(key)
+        poolActivatedKey(key)
         whenNotPaused
         returns (bytes4)
     {
@@ -191,7 +217,7 @@ contract MockAlphixLogic is
         view
         override
         onlyAlphixHook
-        poolActivated(key)
+        poolActivatedKey(key)
         whenNotPaused
         returns (bytes4)
     {
@@ -205,7 +231,7 @@ contract MockAlphixLogic is
         BalanceDelta,
         BalanceDelta,
         bytes calldata
-    ) external view override onlyAlphixHook poolActivated(key) whenNotPaused returns (bytes4, BalanceDelta) {
+    ) external view override onlyAlphixHook poolActivatedKey(key) whenNotPaused returns (bytes4, BalanceDelta) {
         return (this.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
     }
 
@@ -216,7 +242,7 @@ contract MockAlphixLogic is
         BalanceDelta,
         BalanceDelta,
         bytes calldata
-    ) external view override onlyAlphixHook poolActivated(key) whenNotPaused returns (bytes4, BalanceDelta) {
+    ) external view override onlyAlphixHook poolActivatedKey(key) whenNotPaused returns (bytes4, BalanceDelta) {
         return (this.afterRemoveLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
     }
 
@@ -225,11 +251,12 @@ contract MockAlphixLogic is
         view
         override
         onlyAlphixHook
-        poolActivated(key)
+        poolActivatedKey(key)
         whenNotPaused
-        returns (bytes4, BeforeSwapDelta, uint24)
+        returns (bytes4, BeforeSwapDelta, uint24, JitParams memory jitParams)
     {
-        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        jitParams = JitParams({tickLower: 0, tickUpper: 0, liquidityDelta: 0, shouldExecute: false});
+        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0, jitParams);
     }
 
     function afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
@@ -237,11 +264,12 @@ contract MockAlphixLogic is
         view
         override
         onlyAlphixHook
-        poolActivated(key)
+        poolActivatedKey(key)
         whenNotPaused
-        returns (bytes4, int128)
+        returns (bytes4, int128, JitParams memory jitParams)
     {
-        return (this.afterSwap.selector, 0);
+        jitParams = JitParams({tickLower: 0, tickUpper: 0, liquidityDelta: 0, shouldExecute: false});
+        return (this.afterSwap.selector, 0, jitParams);
     }
 
     function beforeDonate(address, PoolKey calldata key, uint256, uint256, bytes calldata)
@@ -249,7 +277,7 @@ contract MockAlphixLogic is
         view
         override
         onlyAlphixHook
-        poolActivated(key)
+        poolActivatedKey(key)
         whenNotPaused
         returns (bytes4)
     {
@@ -261,7 +289,7 @@ contract MockAlphixLogic is
         view
         override
         onlyAlphixHook
-        poolActivated(key)
+        poolActivatedKey(key)
         whenNotPaused
         returns (bytes4)
     {
@@ -274,7 +302,7 @@ contract MockAlphixLogic is
      * @notice Compute what a poke would produce without any state changes (mock implementation).
      * @dev Simple mock: if mockFee is set, use it; otherwise keep current fee.
      */
-    function computeFeeUpdate(PoolKey calldata key, uint256 currentRatio)
+    function computeFeeUpdate(uint256 currentRatio)
         public
         view
         override
@@ -286,32 +314,26 @@ contract MockAlphixLogic is
             DynamicFeeLib.OobState memory newOobState
         )
     {
-        PoolId poolId = key.toId();
-        PoolConfig memory cfg = poolConfig[poolId];
-
-        // Check currentRatio is valid for the pool type
-        if (!_isValidRatioForPoolType(cfg.poolType, currentRatio)) {
-            revert InvalidRatioForPoolType(cfg.poolType, currentRatio);
+        // Check currentRatio is valid
+        if (!_isValidRatio(currentRatio)) {
+            revert InvalidRatio(currentRatio);
         }
 
-        // Get pool type parameters
-        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[cfg.poolType];
-
-        // Read current fee from PoolManager
-        (,,, oldFee) = BaseDynamicFee(alphixHook).poolManager().getSlot0(poolId);
+        // Read current fee from PoolManager (use cached _poolId)
+        (,,, oldFee) = BaseDynamicFee(_alphixHook).poolManager().getSlot0(_poolId);
 
         // If mockFee is set, prefer it (clamped to bounds); otherwise keep current fee
         uint24 mf = mockFee;
         if (mf == 0) {
             newFee = oldFee;
         } else {
-            newFee = DynamicFeeLib.clampFee(uint256(mf), pp.minFee, pp.maxFee);
+            newFee = DynamicFeeLib.clampFee(uint256(mf), _poolParams.minFee, _poolParams.maxFee);
         }
 
         // Load and clamp old target ratio
-        oldTargetRatio = targetRatio[poolId];
-        if (oldTargetRatio > pp.maxCurrentRatio) {
-            oldTargetRatio = pp.maxCurrentRatio;
+        oldTargetRatio = _targetRatio;
+        if (oldTargetRatio > _poolParams.maxCurrentRatio) {
+            oldTargetRatio = _poolParams.maxCurrentRatio;
         }
 
         // For mock, keep target ratio unchanged (no-op EMA)
@@ -325,30 +347,27 @@ contract MockAlphixLogic is
      * @notice Compute and apply a fee update for a pool (mock implementation).
      * @dev Uses computeFeeUpdate for calculation, then updates storage.
      */
-    function poke(PoolKey calldata key, uint256 currentRatio)
+    function poke(uint256 currentRatio)
         external
         override
         onlyAlphixHook
-        poolActivated(key)
+        poolActivated
         whenNotPaused
         nonReentrant
         returns (uint24 newFee, uint24 oldFee, uint256 oldTargetRatio, uint256 newTargetRatio)
     {
-        PoolId poolId = key.toId();
-
         // Check cooldown
-        DynamicFeeLib.PoolTypeParams memory pp = poolTypeParams[poolConfig[poolId].poolType];
-        uint256 nextTs = lastFeeUpdate[poolId] + pp.minPeriod;
-        if (block.timestamp < nextTs) revert CooldownNotElapsed(poolId, nextTs, pp.minPeriod);
+        uint256 nextTs = _lastFeeUpdate + _poolParams.minPeriod;
+        if (block.timestamp < nextTs) revert CooldownNotElapsed(_poolId, nextTs, _poolParams.minPeriod);
 
         // Compute the fee update (view function does all the math)
         DynamicFeeLib.OobState memory newOobState;
-        (newFee, oldFee, oldTargetRatio, newTargetRatio, newOobState) = computeFeeUpdate(key, currentRatio);
+        (newFee, oldFee, oldTargetRatio, newTargetRatio, newOobState) = computeFeeUpdate(currentRatio);
 
         // Update storage (matching production behavior)
-        targetRatio[poolId] = newTargetRatio;
-        oobState[poolId] = newOobState;
-        lastFeeUpdate[poolId] = block.timestamp;
+        _targetRatio = newTargetRatio;
+        _oobState = newOobState;
+        _lastFeeUpdate = block.timestamp;
     }
 
     /* POOL MANAGEMENT */
@@ -357,49 +376,51 @@ contract MockAlphixLogic is
         PoolKey calldata key,
         uint24 _initialFee,
         uint256 _initialTargetRatio,
-        PoolType _poolType
-    ) external override onlyAlphixHook poolUnconfigured(key) whenNotPaused {
-        // Validate fee is within bounds for the pool type
-        if (!_isValidFeeForPoolType(_poolType, _initialFee)) {
-            revert InvalidFeeForPoolType(_poolType, _initialFee);
+        DynamicFeeLib.PoolParams calldata poolParams_
+    ) external override onlyAlphixHook poolUnconfigured whenNotPaused {
+        // Verify this is the same pool that was initialized
+        if (!_poolActivated) revert PoolNotConfigured();
+        if (PoolId.unwrap(key.toId()) != PoolId.unwrap(_poolKey.toId())) revert PoolNotConfigured();
+
+        // Set pool params first
+        _setPoolParams(poolParams_);
+
+        // Cache pool ID
+        _poolId = key.toId();
+
+        // Validate fee is within bounds
+        if (!_isValidFee(_initialFee)) {
+            revert InvalidFee(_initialFee);
         }
 
-        // Validate ratio is within bounds for the pool type
-        if (!_isValidRatioForPoolType(_poolType, _initialTargetRatio)) {
-            revert InvalidRatioForPoolType(_poolType, _initialTargetRatio);
+        // Validate ratio is within bounds
+        if (!_isValidRatio(_initialTargetRatio)) {
+            revert InvalidRatio(_initialTargetRatio);
         }
 
-        PoolId id = key.toId();
-        lastFeeUpdate[id] = block.timestamp;
-        targetRatio[id] = _initialTargetRatio;
-        poolConfig[id].initialFee = _initialFee;
-        poolConfig[id].initialTargetRatio = _initialTargetRatio;
-        poolConfig[id].poolType = _poolType;
-        poolConfig[id].isConfigured = true;
-        poolActive[id] = true;
+        _lastFeeUpdate = block.timestamp;
+        _targetRatio = _initialTargetRatio;
+        _poolConfig.initialFee = _initialFee;
+        _poolConfig.initialTargetRatio = _initialTargetRatio;
+        _poolConfig.isConfigured = true;
     }
 
-    function activatePool(PoolKey calldata key) external override onlyAlphixHook whenNotPaused poolConfigured(key) {
-        poolActive[key.toId()] = true;
+    function activatePool() external override onlyAlphixHook whenNotPaused poolConfigured {
+        // No-op for single pool (already active if configured)
     }
 
-    function deactivatePool(PoolKey calldata key) external override onlyAlphixHook whenNotPaused {
-        poolActive[key.toId()] = false;
+    function deactivatePool() external override onlyAlphixHook whenNotPaused {
+        _poolConfig.isConfigured = false;
     }
 
-    function setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams calldata params)
-        external
-        override
-        onlyOwner
-        whenNotPaused
-    {
-        _setPoolTypeParams(poolType, params);
+    function setPoolParams(DynamicFeeLib.PoolParams calldata params) external override onlyOwner whenNotPaused {
+        _setPoolParams(params);
     }
 
     /* GLOBAL PARAMS */
 
-    function setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) external override onlyOwner whenNotPaused {
-        _setGlobalMaxAdjRate(_globalMaxAdjRate);
+    function setGlobalMaxAdjRate(uint256 newMaxAdjRate) external override onlyOwner whenNotPaused {
+        _setGlobalMaxAdjRate(newMaxAdjRate);
     }
 
     /* ADMIN */
@@ -415,24 +436,36 @@ contract MockAlphixLogic is
     /* GETTERS */
 
     function getAlphixHook() external view override returns (address) {
-        return alphixHook;
+        return _alphixHook;
     }
 
-    function getPoolConfig(PoolId id) external view override returns (PoolConfig memory) {
-        return poolConfig[id];
+    function getPoolKey() external view override returns (PoolKey memory) {
+        return _poolKey;
     }
 
-    function getPoolTypeParams(PoolType poolType) external view override returns (DynamicFeeLib.PoolTypeParams memory) {
-        return poolTypeParams[poolType];
+    function getPoolId() external view override returns (PoolId) {
+        return _poolId;
+    }
+
+    function isPoolActivated() external view override returns (bool) {
+        return _poolActivated;
+    }
+
+    function getPoolConfig() external view override returns (PoolConfig memory) {
+        return _poolConfig;
+    }
+
+    function getPoolParams() external view override returns (DynamicFeeLib.PoolParams memory) {
+        return _poolParams;
     }
 
     function getGlobalMaxAdjRate() external view override returns (uint256) {
-        return globalMaxAdjRate;
+        return _globalMaxAdjRate;
     }
 
     /* INTERNAL */
 
-    function _setPoolTypeParams(PoolType poolType, DynamicFeeLib.PoolTypeParams memory params) internal {
+    function _setPoolParams(DynamicFeeLib.PoolParams memory params) internal {
         // Fee bounds
         if (
             params.minFee < AlphixGlobalConstants.MIN_FEE || params.minFee > params.maxFee
@@ -485,9 +518,8 @@ contract MockAlphixLogic is
                 || params.lowerSideFactor > AlphixGlobalConstants.TEN_WAD
         ) revert InvalidParameter();
 
-        poolTypeParams[poolType] = params;
-        emit PoolTypeParamsUpdated(
-            poolType,
+        _poolParams = params;
+        emit PoolParamsUpdated(
             params.minFee,
             params.maxFee,
             params.baseMaxFeeDelta,
@@ -501,33 +533,30 @@ contract MockAlphixLogic is
         );
     }
 
-    function _setGlobalMaxAdjRate(uint256 _globalMaxAdjRate) internal {
-        if (_globalMaxAdjRate == 0 || _globalMaxAdjRate > AlphixGlobalConstants.MAX_ADJUSTMENT_RATE) {
+    function _setGlobalMaxAdjRate(uint256 _globalMaxAdjRate_) internal {
+        if (_globalMaxAdjRate_ == 0 || _globalMaxAdjRate_ > AlphixGlobalConstants.MAX_ADJUSTMENT_RATE) {
             revert InvalidParameter();
         }
-        uint256 old = globalMaxAdjRate;
-        globalMaxAdjRate = _globalMaxAdjRate;
-        emit GlobalMaxAdjRateUpdated(old, globalMaxAdjRate);
+        uint256 old = _globalMaxAdjRate;
+        _globalMaxAdjRate = _globalMaxAdjRate_;
+        emit GlobalMaxAdjRateUpdated(old, _globalMaxAdjRate);
     }
 
     /**
-     * @dev Internal helper function to validate fee for pool type.
+     * @dev Internal helper function to validate fee.
      */
-    function _isValidFeeForPoolType(PoolType poolType, uint24 fee) internal view returns (bool) {
-        DynamicFeeLib.PoolTypeParams memory p = poolTypeParams[poolType];
-        return fee >= p.minFee && fee <= p.maxFee;
+    function _isValidFee(uint24 fee) internal view returns (bool) {
+        return fee >= _poolParams.minFee && fee <= _poolParams.maxFee;
     }
 
     /**
-     * @notice Check if ratio is valid for pool type.
-     * @dev Internal helper function to validate ratio for pool type.
-     * @param poolType The pool type.
+     * @notice Check if ratio is valid.
+     * @dev Internal helper function to validate ratio.
      * @param ratio The ratio to validate.
      * @return isValid True if ratio is within bounds.
      */
-    function _isValidRatioForPoolType(PoolType poolType, uint256 ratio) internal view returns (bool) {
-        DynamicFeeLib.PoolTypeParams memory p = poolTypeParams[poolType];
-        return ratio > 0 && ratio <= p.maxCurrentRatio;
+    function _isValidRatio(uint256 ratio) internal view returns (bool) {
+        return ratio > 0 && ratio <= _poolParams.maxCurrentRatio;
     }
 
     /* UUPS AUTHORIZATION */
@@ -537,6 +566,20 @@ contract MockAlphixLogic is
             revert InvalidLogicContract();
         }
     }
+
+    /* JIT LIQUIDITY (Flash Accounting Pattern - stubs) */
+
+    /**
+     * @notice Deposit tokens to yield source (stub).
+     * @dev Mock implementation does nothing.
+     */
+    function depositToYieldSource(Currency, uint256) external override {}
+
+    /**
+     * @notice Withdraw and approve for settlement (stub).
+     * @dev Mock implementation does nothing.
+     */
+    function withdrawAndApprove(Currency, uint256) external override {}
 
     /* MOCK API */
 

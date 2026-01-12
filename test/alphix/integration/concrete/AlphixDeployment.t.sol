@@ -167,7 +167,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertTrue(testHook.paused(), "Test hook should be paused");
 
         // Deploy a test logic
-        (,, IAlphixLogic testLogic) = _deployAlphixLogic(owner, address(testHook));
+        (,, IAlphixLogic testLogic) = _deployAlphixLogic(owner, address(testHook), address(accessManager));
         assertTrue(testHook.paused(), "Hook should be paused after construction and before initialize");
 
         // Normal initialization should succeed
@@ -183,7 +183,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         assertEq(testHook.getLogic(), address(testLogic), "Logic should be set");
 
         // Try initialization with different logic address (should still revert)
-        (,, IAlphixLogic newLogic) = _deployAlphixLogic(owner, address(testHook));
+        (,, IAlphixLogic newLogic) = _deployAlphixLogic(owner, address(testHook), address(accessManager));
 
         vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
         testHook.initialize(address(newLogic));
@@ -191,7 +191,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         // Try initialization from unauthorized account (should revert even if not initialized)
         Alphix testHook2 = _deployAlphixHook(poolManager, owner, accessManager, registry);
         // Deploy a test logic
-        (,, testLogic) = _deployAlphixLogic(owner, address(testHook2));
+        (,, testLogic) = _deployAlphixLogic(owner, address(testHook2), address(accessManager));
         assertTrue(testHook2.paused(), "Hook should be paused after construction and before initialize");
         vm.stopPrank();
 
@@ -205,7 +205,7 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         vm.startPrank(owner);
         Alphix testHook3 = _deployAlphixHook(poolManager, owner, accessManager, registry);
         // Deploy a test logic
-        (,, testLogic) = _deployAlphixLogic(owner, address(testHook3));
+        (,, testLogic) = _deployAlphixLogic(owner, address(testHook3), address(accessManager));
         assertTrue(testHook3.paused(), "Hook should be paused after construction and before initialize");
         vm.stopPrank();
 
@@ -231,8 +231,9 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Tests initialization with malicious logic contracts.
-     * @dev Verifies that only valid IAlphixLogic contracts can be set during initialization.
+     * @notice Tests initialization with zero address reverts.
+     * @dev ERC165 interface checks removed to reduce bytecode - owner is trusted.
+     *      Only zero address check remains.
      */
     function test_initializationWithMaliciousLogic() public {
         vm.startPrank(owner);
@@ -243,26 +244,12 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         vm.expectRevert(IAlphix.InvalidAddress.selector);
         testHook.initialize(address(0));
 
-        // Try to initialize with an EOA
-        vm.expectRevert(); // supportsInterface call on EOA
-        testHook.initialize(makeAddr("eoa"));
+        // Verify hook is still paused after failed attempt
+        assertTrue(testHook.paused(), "Hook should still be paused after failed initialization");
+        assertEq(testHook.getLogic(), address(0), "Logic should still be zero after failed initialization");
 
-        // Try to initialize with a contract that doesn't implement supportsInterface
-        MockERC20 maliciousToken = new MockERC20("Evil Token Contract", "ETC", 18);
-        vm.expectRevert();
-        testHook.initialize(address(maliciousToken));
-
-        // Try to initialize with a contract that fails to implement supportsInterface
-        MockERC165 maliciousContract = new MockERC165();
-        vm.expectRevert(IAlphixLogic.InvalidLogicContract.selector);
-        testHook.initialize(address(maliciousContract));
-
-        // Verify hook is still paused and uninitialized after failed attempts
-        assertTrue(testHook.paused(), "Hook should still be paused after failed initializations");
-        assertEq(testHook.getLogic(), address(0), "Logic should still be zero after failed initializations");
-
-        // Normal initialization should still work after failed attempts
-        (,, IAlphixLogic testLogic) = _deployAlphixLogic(owner, address(testHook));
+        // Normal initialization should still work after failed attempt
+        (,, IAlphixLogic testLogic) = _deployAlphixLogic(owner, address(testHook), address(accessManager));
         assertTrue(testHook.paused(), "Hook should still be paused after logic deployment");
         testHook.initialize(address(testLogic));
         assertFalse(testHook.paused(), "Hook should be unpaused after successful initialization");
@@ -272,21 +259,22 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setLogic should update logic and emit LogicUpdated.
-     * @dev Initializes the replacement logic with unified params.
+     * @notice setLogic should update logic correctly.
+     * @dev LogicUpdated event was removed for bytecode savings.
      */
     function test_setLogic_success() public {
         AlphixLogic newImpl = new AlphixLogic();
         ERC1967Proxy newProxy = new ERC1967Proxy(
             address(newImpl),
-            abi.encodeCall(newImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
+            abi.encodeCall(
+                newImpl.initialize, (owner, address(hook), address(accessManager), "Alphix LP Shares", "ALP")
+            )
         );
         address oldLogic = hook.getLogic();
         vm.prank(owner);
-        vm.expectEmit(true, true, false, true);
-        emit IAlphix.LogicUpdated(oldLogic, address(newProxy));
         hook.setLogic(address(newProxy));
         assertEq(hook.getLogic(), address(newProxy), "Logic not updated");
+        assertTrue(hook.getLogic() != oldLogic, "Logic should be different from old");
     }
 
     /**
@@ -298,7 +286,9 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         AlphixLogic newImpl = new AlphixLogic();
         ERC1967Proxy newProxy = new ERC1967Proxy(
             address(newImpl),
-            abi.encodeCall(newImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
+            abi.encodeCall(
+                newImpl.initialize, (owner, address(hook), address(accessManager), "Alphix LP Shares", "ALP")
+            )
         );
 
         // Verify current registry state before update (use hook.getLogic() to avoid coupling to test setup naming)
@@ -325,18 +315,17 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setLogic should revert on invalid logic contract.
+     * @notice setLogic allows any non-zero address (ERC165 check removed for bytecode savings).
+     * @dev Owner is trusted to provide valid logic contracts. Interface checks were removed
+     *      to reduce bytecode size. Invalid logic contracts will fail when called.
      */
-    function test_setLogic_revertsOnInvalidInterface() public {
-        MockERC20 maliciousContract = new MockERC20("Malicious Contract", "MC", 18);
-        vm.prank(owner);
-        vm.expectRevert();
-        hook.setLogic(address(maliciousContract));
+    function test_setLogic_allowsAnyNonZeroAddress() public {
+        MockERC20 anyContract = new MockERC20("Any Contract", "AC", 18);
 
-        MockERC165 mockErc165 = new MockERC165();
         vm.prank(owner);
-        vm.expectRevert(IAlphixLogic.InvalidLogicContract.selector);
-        hook.setLogic(address(mockErc165));
+        hook.setLogic(address(anyContract));
+
+        assertEq(hook.getLogic(), address(anyContract), "Logic should be updated to any non-zero address");
     }
 
     /**
@@ -346,7 +335,9 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         AlphixLogic newImpl = new AlphixLogic();
         ERC1967Proxy newProxy = new ERC1967Proxy(
             address(newImpl),
-            abi.encodeCall(newImpl.initialize, (owner, address(hook), stableParams, standardParams, volatileParams))
+            abi.encodeCall(
+                newImpl.initialize, (owner, address(hook), address(accessManager), "Alphix LP Shares", "ALP")
+            )
         );
         address oldLogic = hook.getLogic();
         vm.prank(user1);
@@ -357,7 +348,8 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setRegistry should update registry and emit RegistryUpdated.
+     * @notice setRegistry should update registry correctly.
+     * @dev RegistryUpdated event was removed for bytecode savings.
      */
     function test_setRegistry_success() public {
         Registry newReg = new Registry(address(accessManager));
@@ -366,10 +358,9 @@ contract AlphixDeploymentTest is BaseAlphixTest {
         vm.stopPrank();
         address oldRegistry = hook.getRegistry();
         vm.prank(owner);
-        vm.expectEmit(true, true, false, true);
-        emit IAlphix.RegistryUpdated(oldRegistry, address(newReg));
         hook.setRegistry(address(newReg));
         assertEq(hook.getRegistry(), address(newReg), "Registry not updated");
+        assertTrue(hook.getRegistry() != oldRegistry, "Registry should be different from old");
     }
 
     /**
@@ -440,19 +431,23 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice setRegistry should revert when setting to a contract that implements ERC165 but not IRegistry.
-     * @dev Addresses Olympix finding: call_to_non_contract_registry
+     * @notice setRegistry allows any contract with code (ERC165 check removed for bytecode savings).
+     * @dev ERC165 interface checks were removed to reduce bytecode size. Owner is trusted
+     *      to provide valid registry contracts. The call will fail later if the contract
+     *      doesn't implement registerContract.
      */
-    function test_setRegistry_revertsOnInvalidInterface() public {
+    function test_setRegistry_allowsContractWithCode() public {
         // Deploy a contract with ERC165 but wrong interface
-        MockERC165 wrongInterface = new MockERC165();
-        assertTrue(address(wrongInterface).code.length > 0, "Should be a contract");
+        MockERC165 anyContract = new MockERC165();
+        assertTrue(address(anyContract).code.length > 0, "Should be a contract");
 
+        // Since ERC165 check is removed, this will now attempt to call registerContract
+        // on a contract that doesn't implement it, which will revert differently
         vm.prank(owner);
-        vm.expectRevert(IAlphix.InvalidAddress.selector);
-        hook.setRegistry(address(wrongInterface));
+        vm.expectRevert(); // Will revert when trying to call registerContract
+        hook.setRegistry(address(anyContract));
 
-        // Verify registry was not changed
+        // Verify registry was not changed due to the registerContract failure
         assertEq(hook.getRegistry(), address(registry), "Registry should not have changed");
     }
 
@@ -532,51 +527,22 @@ contract AlphixDeploymentTest is BaseAlphixTest {
     }
 
     /**
-     * @notice After initialize, per-pool-type unified params should be set and a default global max adj rate should be applied.
-     * @dev Verifies logic.initialize consumed the initializer args for STABLE/STANDARD/VOLATILE and set a sane global cap.
+     * @notice After initialize, pool params should be set and a default global max adj rate should be applied.
+     * @dev Verifies pool params were set from initializePool call and a sane global cap is applied.
      */
-    function test_initialize_setsUnifiedParamsAndDefaultCap() public view {
-        // Verify STABLE params match initializer arguments
-        IAlphixLogic.PoolType ptStable = IAlphixLogic.PoolType.STABLE;
-        DynamicFeeLib.PoolTypeParams memory ps = logic.getPoolTypeParams(ptStable);
-        assertEq(ps.minFee, stableParams.minFee, "minFee mismatch (STABLE)");
-        assertEq(ps.maxFee, stableParams.maxFee, "maxFee mismatch (STABLE)");
-        assertEq(ps.baseMaxFeeDelta, stableParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch (STABLE)");
-        assertEq(ps.lookbackPeriod, stableParams.lookbackPeriod, "lookbackPeriod mismatch (STABLE)");
-        assertEq(ps.minPeriod, stableParams.minPeriod, "minPeriod mismatch (STABLE)");
-        assertEq(ps.ratioTolerance, stableParams.ratioTolerance, "ratioTolerance mismatch (STABLE)");
-        assertEq(ps.linearSlope, stableParams.linearSlope, "linearSlope mismatch (STABLE)");
-        assertEq(ps.maxCurrentRatio, stableParams.maxCurrentRatio, "maxCurrentRatio mismatch (STABLE)");
-        assertEq(ps.upperSideFactor, stableParams.upperSideFactor, "upperSideFactor mismatch (STABLE)");
-        assertEq(ps.lowerSideFactor, stableParams.lowerSideFactor, "lowerSideFactor mismatch (STABLE)");
-
-        // Verify STANDARD params match initializer arguments
-        IAlphixLogic.PoolType ptStandard = IAlphixLogic.PoolType.STANDARD;
-        ps = logic.getPoolTypeParams(ptStandard);
-        assertEq(ps.minFee, standardParams.minFee, "minFee mismatch (STANDARD)");
-        assertEq(ps.maxFee, standardParams.maxFee, "maxFee mismatch (STANDARD)");
-        assertEq(ps.baseMaxFeeDelta, standardParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch (STANDARD)");
-        assertEq(ps.lookbackPeriod, standardParams.lookbackPeriod, "lookbackPeriod mismatch (STANDARD)");
-        assertEq(ps.minPeriod, standardParams.minPeriod, "minPeriod mismatch (STANDARD)");
-        assertEq(ps.ratioTolerance, standardParams.ratioTolerance, "ratioTolerance mismatch (STANDARD)");
-        assertEq(ps.linearSlope, standardParams.linearSlope, "linearSlope mismatch (STANDARD)");
-        assertEq(ps.maxCurrentRatio, standardParams.maxCurrentRatio, "maxCurrentRatio mismatch (STANDARD)");
-        assertEq(ps.upperSideFactor, standardParams.upperSideFactor, "upperSideFactor mismatch (STANDARD)");
-        assertEq(ps.lowerSideFactor, standardParams.lowerSideFactor, "lowerSideFactor mismatch (STANDARD)");
-
-        // Verify VOLATILE params match initializer arguments
-        IAlphixLogic.PoolType ptVolatile = IAlphixLogic.PoolType.VOLATILE;
-        ps = logic.getPoolTypeParams(ptVolatile);
-        assertEq(ps.minFee, volatileParams.minFee, "minFee mismatch (VOLATILE)");
-        assertEq(ps.maxFee, volatileParams.maxFee, "maxFee mismatch (VOLATILE)");
-        assertEq(ps.baseMaxFeeDelta, volatileParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch (VOLATILE)");
-        assertEq(ps.lookbackPeriod, volatileParams.lookbackPeriod, "lookbackPeriod mismatch (VOLATILE)");
-        assertEq(ps.minPeriod, volatileParams.minPeriod, "minPeriod mismatch (VOLATILE)");
-        assertEq(ps.ratioTolerance, volatileParams.ratioTolerance, "ratioTolerance mismatch (VOLATILE)");
-        assertEq(ps.linearSlope, volatileParams.linearSlope, "linearSlope mismatch (VOLATILE)");
-        assertEq(ps.maxCurrentRatio, volatileParams.maxCurrentRatio, "maxCurrentRatio mismatch (VOLATILE)");
-        assertEq(ps.upperSideFactor, volatileParams.upperSideFactor, "upperSideFactor mismatch (VOLATILE)");
-        assertEq(ps.lowerSideFactor, volatileParams.lowerSideFactor, "lowerSideFactor mismatch (VOLATILE)");
+    function test_initialize_setsPoolParamsAndDefaultCap() public view {
+        // Verify pool params match what was passed to initializePool
+        DynamicFeeLib.PoolParams memory ps = logic.getPoolParams();
+        assertEq(ps.minFee, defaultPoolParams.minFee, "minFee mismatch");
+        assertEq(ps.maxFee, defaultPoolParams.maxFee, "maxFee mismatch");
+        assertEq(ps.baseMaxFeeDelta, defaultPoolParams.baseMaxFeeDelta, "baseMaxFeeDelta mismatch");
+        assertEq(ps.lookbackPeriod, defaultPoolParams.lookbackPeriod, "lookbackPeriod mismatch");
+        assertEq(ps.minPeriod, defaultPoolParams.minPeriod, "minPeriod mismatch");
+        assertEq(ps.ratioTolerance, defaultPoolParams.ratioTolerance, "ratioTolerance mismatch");
+        assertEq(ps.linearSlope, defaultPoolParams.linearSlope, "linearSlope mismatch");
+        assertEq(ps.maxCurrentRatio, defaultPoolParams.maxCurrentRatio, "maxCurrentRatio mismatch");
+        assertEq(ps.upperSideFactor, defaultPoolParams.upperSideFactor, "upperSideFactor mismatch");
+        assertEq(ps.lowerSideFactor, defaultPoolParams.lowerSideFactor, "lowerSideFactor mismatch");
 
         // Verify a default global cap is set inside logic and is within safe bound
         uint256 cap = logic.getGlobalMaxAdjRate();

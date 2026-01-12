@@ -31,4 +31,12 @@ library Roles {
      * Revoked in: 06c_RemoveRoles.s.sol
      */
     uint64 internal constant REGISTRAR_ROLE = 2;
+
+    /**
+     * @dev Yield manager role - can manage rehypothecation settings
+     * (yield sources, tick ranges, tax rates, treasury)
+     * Granted in: 06b_ConfigureRoles.s.sol
+     * Revoked in: 06c_RemoveRoles.s.sol
+     */
+    uint64 internal constant YIELD_MANAGER_ROLE = 3;
 }

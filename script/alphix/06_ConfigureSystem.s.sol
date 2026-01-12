@@ -13,6 +13,11 @@ import {AlphixLogic} from "../../src/AlphixLogic.sol";
  *
  * DEPLOYMENT ORDER: 6/11
  *
+ * ARCHITECTURE: Single-Pool-Per-Hook Design
+ * Each Alphix Hook + AlphixLogic pair manages exactly ONE pool.
+ * This script configures a SPECIFIC hook+logic pair.
+ * Run this script for each new hook deployment.
+ *
  * SENDER REQUIREMENTS: Must be run by ALPHIX_MANAGER (Alphix Hook owner).
  * The sender must be the owner of the Alphix Hook contract because:
  * - alphix.initialize() has onlyOwner modifier
@@ -37,7 +42,7 @@ import {AlphixLogic} from "../../src/AlphixLogic.sol";
  *
  * After this script:
  * - The system is fully configured and operational
- * - Users can create pools with the Alphix Hook
+ * - Users can create the ONE pool for this hook using script 09
  */
 contract ConfigureSystemScript is Script {
     function run() public {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-// inspiration from: OpenZeppelin Uniswap Hooks (last updated v0.1.0) (src/fee/BaseDynamicFee.sol)
+// inspiration from: OpenZeppelin Uniswap Hooks (last updated v1.2.0) (src/fee/BaseDynamicFee.sol)
 // Alphix version of the BaseDynamicFee
 
 pragma solidity ^0.8.26;
@@ -47,18 +47,16 @@ abstract contract BaseDynamicFee is BaseHook {
     }
 
     /**
-     * @dev Updates the dynamic LP fee for the given pool, which must have a key
-     * that contains this hook's address.
+     * @dev Updates the dynamic LP fee for the pool this hook serves.
      *
      * WARNING: This base implementation is abstract. Inheriting contracts MUST override
      * this function with proper access control (e.g., onlyOwner, role-based) and fee
      * computation logic. Failure to do so allows any external caller to arbitrarily
      * change pool fees.
      *
-     * @param key The pool key to update the dynamic LP fee for.
      * @param currentRatio The current ratio of the pool, used to update the dynamic LP fee.
      */
-    function poke(PoolKey calldata key, uint256 currentRatio) external virtual;
+    function poke(uint256 currentRatio) external virtual;
 
     /**
      * @dev Set the hook permissions, specifically `afterInitialize`.

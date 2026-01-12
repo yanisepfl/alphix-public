@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 /* UNISWAP V4 IMPORTS */
-import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -11,7 +10,6 @@ import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -75,14 +73,13 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param drainSteps Number of drain steps (3-8)
      * @param reentryLiquidity Amount of liquidity re-added
      * @param swapAmount Swap during drain
-     * @param poolTypeRaw Pool type
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
     function testFuzz_liquidityDrain_thenFlood_feeStability(
         uint128 initialLiquidity,
         uint8 drainSteps,
         uint128 reentryLiquidity,
-        uint256 swapAmount,
-        uint8 poolTypeRaw
+        uint256 swapAmount
     ) public {
         LiquidityDrainParams memory params = LiquidityDrainParams({
             initialLiquidity: uint128(bound(initialLiquidity, MIN_LIQUIDITY * 100, MAX_LIQUIDITY)),
@@ -91,11 +88,10 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
             swapAmount: bound(swapAmount, MIN_SWAP_AMOUNT, MAX_SWAP_AMOUNT / 4)
         });
 
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        (PoolKey memory testKey, PoolId testPoolId) = (key, poolId);
 
-        _executeLiquidityDrain(testKey, testPoolId, params, poolType);
-        _executeLiquidityFlood(testKey, testPoolId, params.reentryLiquidity, poolType);
+        _executeLiquidityDrain(testKey, testPoolId, params);
+        _executeLiquidityFlood(testKey, testPoolId, params.reentryLiquidity);
     }
 
     /**
@@ -104,16 +100,14 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param initialLiquidity Initial liquidity
      * @param waitTime Time before re-adding (1-7 days)
      * @param newLiquidity New liquidity amount
-     * @param poolTypeRaw Pool type
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
     function testFuzz_liquidityZero_thenRestore_poolRecovery(
         uint128 initialLiquidity,
         uint256 waitTime,
-        uint128 newLiquidity,
-        uint8 poolTypeRaw
+        uint128 newLiquidity
     ) public {
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        (PoolKey memory testKey, PoolId testPoolId) = (key, poolId);
 
         initialLiquidity = uint128(bound(initialLiquidity, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
         waitTime = bound(waitTime, 1 days, 7 days);
@@ -126,12 +120,12 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         uint256 aliceTokenId = _addLiquidityForUser(alice, testKey, minTick, maxTick, initialLiquidity);
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
-        hook.poke(testKey, 4e17);
+        hook.poke(4e17);
 
         vm.startPrank(alice);
         positionManager.decreaseLiquidity(
@@ -147,14 +141,14 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
 
         vm.warp(block.timestamp + params.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, 6e17);
+        hook.poke(6e17);
 
         uint24 feeAfterRecovery;
         (,,, feeAfterRecovery) = poolManager.getSlot0(testPoolId);
 
         assertGe(feeAfterRecovery, params.minFee, "Fee bounded after recovery");
         assertLe(feeAfterRecovery, params.maxFee, "Fee bounded after recovery");
-        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig(testPoolId);
+        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig();
         assertTrue(poolConfigAfter.isConfigured, "Pool remains configured");
     }
 
@@ -164,16 +158,14 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param baseLiquidity Base pool liquidity
      * @param massiveAddition Sudden large liquidity add
      * @param swapAmount Swap amount after injection
-     * @param poolTypeRaw Pool type
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
     function testFuzz_liquidityMassiveInjection_feeAdjustmentCorrect(
         uint128 baseLiquidity,
         uint128 massiveAddition,
-        uint256 swapAmount,
-        uint8 poolTypeRaw
+        uint256 swapAmount
     ) public {
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        (PoolKey memory testKey, PoolId testPoolId) = (key, poolId);
 
         baseLiquidity = uint128(bound(baseLiquidity, MIN_LIQUIDITY * 10, MAX_LIQUIDITY / 4));
         massiveAddition = uint128(bound(massiveAddition, MAX_LIQUIDITY / 2, MAX_LIQUIDITY));
@@ -186,8 +178,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         _addLiquidityForUser(alice, testKey, minTick, maxTick, baseLiquidity);
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         // Intentionally not asserting pre/post fee direction; fees are bounded and adaptive
@@ -206,7 +198,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         if (newRatio < 1e15) newRatio = 1e15;
 
         vm.prank(owner);
-        hook.poke(testKey, newRatio);
+        hook.poke(newRatio);
 
         uint24 feeAfterInjection;
         (,,, feeAfterInjection) = poolManager.getSlot0(testPoolId);
@@ -225,16 +217,14 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param liquidityAmount Pool liquidity
      * @param numConsecutiveHits Number of consecutive upper OOB pokes (5-50)
      * @param baseDeviation Base deviation from target
-     * @param poolTypeRaw Pool type
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
     function testFuzz_oobStreak_consecutiveUpperHits_feeIncreases(
         uint128 liquidityAmount,
         uint8 numConsecutiveHits,
-        uint256 baseDeviation,
-        uint8 poolTypeRaw
+        uint256 baseDeviation
     ) public {
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        (PoolKey memory testKey, PoolId testPoolId) = (key, poolId);
 
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
         numConsecutiveHits = uint8(bound(numConsecutiveHits, 5, 50));
@@ -250,8 +240,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         uint24 previousFee;
         (,,, previousFee) = poolManager.getSlot0(testPoolId);
@@ -265,7 +255,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
             if (oobRatio > params.maxCurrentRatio) oobRatio = params.maxCurrentRatio;
 
             vm.prank(owner);
-            hook.poke(testKey, oobRatio);
+            hook.poke(oobRatio);
 
             uint24 currentFee;
             (,,, currentFee) = poolManager.getSlot0(testPoolId);
@@ -285,16 +275,14 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param liquidityAmount Pool liquidity
      * @param numConsecutiveHits Number of consecutive lower OOB pokes (5-50)
      * @param baseDeviation Base deviation from target
-     * @param poolTypeRaw Pool type
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
     function testFuzz_oobStreak_consecutiveLowerHits_feeDecreases(
         uint128 liquidityAmount,
         uint8 numConsecutiveHits,
-        uint256 baseDeviation,
-        uint8 poolTypeRaw
+        uint256 baseDeviation
     ) public {
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        (PoolKey memory testKey, PoolId testPoolId) = (key, poolId);
 
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
         numConsecutiveHits = uint8(bound(numConsecutiveHits, 5, 50));
@@ -310,12 +298,12 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         vm.warp(block.timestamp + params.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, poolConfig.initialTargetRatio + 3e17);
+        hook.poke(poolConfig.initialTargetRatio + 3e17);
 
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -330,7 +318,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
             if (oobRatio < 1e15) oobRatio = 1e15;
 
             vm.prank(owner);
-            hook.poke(testKey, oobRatio);
+            hook.poke(oobRatio);
 
             uint24 currentFee;
             (,,, currentFee) = poolManager.getSlot0(testPoolId);
@@ -349,15 +337,10 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @dev Tests that streak resets when switching from upper to lower or vice versa
      * @param liquidityAmount Pool liquidity
      * @param numAlternations Number of side switches (6-20)
-     * @param poolTypeRaw Pool type
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
-    function testFuzz_oobStreak_alternatingHits_streakResets(
-        uint128 liquidityAmount,
-        uint8 numAlternations,
-        uint8 poolTypeRaw
-    ) public {
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+    function testFuzz_oobStreak_alternatingHits_streakResets(uint128 liquidityAmount, uint8 numAlternations) public {
+        (PoolKey memory testKey, PoolId testPoolId) = (key, poolId);
 
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
         numAlternations = uint8(bound(numAlternations, 6, 20));
@@ -372,8 +355,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         uint256 upperBound =
             poolConfig.initialTargetRatio + (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
@@ -396,7 +379,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
             }
 
             vm.prank(owner);
-            hook.poke(testKey, ratio);
+            hook.poke(ratio);
 
             uint24 currentFee;
             (,,, currentFee) = poolManager.getSlot0(testPoolId);
@@ -434,16 +417,14 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param normalLiquidity Normal state liquidity
      * @param crisisSwapSize Crisis event swap size
      * @param recoveryTime Time to recover (1-14 days)
-     * @param poolTypeRaw Pool type
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
     function testFuzz_blackSwan_fullLifecycle_systemRecovery(
         uint128 normalLiquidity,
         uint256 crisisSwapSize,
-        uint256 recoveryTime,
-        uint8 poolTypeRaw
+        uint256 recoveryTime
     ) public {
-        IAlphixLogic.PoolType poolType = _boundPoolType(poolTypeRaw);
-        (PoolKey memory testKey, PoolId testPoolId) = _createPoolWithType(poolType);
+        (PoolKey memory testKey, PoolId testPoolId) = (key, poolId);
 
         normalLiquidity = uint128(bound(normalLiquidity, MIN_LIQUIDITY * 100, MAX_LIQUIDITY));
         crisisSwapSize = bound(crisisSwapSize, MAX_SWAP_AMOUNT / 2, MAX_SWAP_AMOUNT);
@@ -456,12 +437,12 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         _addLiquidityForUser(alice, testKey, minTick, maxTick, normalLiquidity);
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig(testPoolId);
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolConfig.poolType);
+        logic.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
 
         vm.warp(block.timestamp + 7 days);
         vm.prank(owner);
-        hook.poke(testKey, 5e17);
+        hook.poke(5e17);
 
         uint24 feeNormal;
         (,,, feeNormal) = poolManager.getSlot0(testPoolId);
@@ -474,7 +455,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
 
         vm.warp(block.timestamp + params.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, 9e17);
+        hook.poke(9e17);
 
         uint24 feeCrisis;
         (,,, feeCrisis) = poolManager.getSlot0(testPoolId);
@@ -487,7 +468,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
             if (recoveryRatio < 1e17) recoveryRatio = 1e17;
 
             vm.prank(owner);
-            hook.poke(testKey, recoveryRatio);
+            hook.poke(recoveryRatio);
         }
 
         uint24 feeRecovered;
@@ -505,7 +486,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
             "System should respond to crisis with fee changes while staying bounded"
         );
 
-        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig(testPoolId);
+        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig();
         assertTrue(poolConfigAfter.isConfigured, "Pool operational after black swan");
     }
 
@@ -525,46 +506,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         return targetRatio > tol ? (targetRatio - tol) : 1e15;
     }
 
-    /**
-     * @notice Creates a new pool with specified pool type
-     * @dev Deploys fresh ERC20 tokens, mints to test users, and initializes pool
-     * @param poolType The type of pool to create (STABLE, STANDARD, or VOLATILE)
-     * @return testKey The pool key for the created pool
-     * @return testPoolId The pool ID for the created pool
-     */
-    function _createPoolWithType(IAlphixLogic.PoolType poolType)
-        internal
-        returns (PoolKey memory testKey, PoolId testPoolId)
-    {
-        MockERC20 token0 = new MockERC20("Test Token 0", "TEST0", 18);
-        MockERC20 token1 = new MockERC20("Test Token 1", "TEST1", 18);
-
-        vm.startPrank(owner);
-        token0.mint(alice, INITIAL_TOKEN_AMOUNT);
-        token0.mint(bob, INITIAL_TOKEN_AMOUNT);
-        token0.mint(charlie, INITIAL_TOKEN_AMOUNT);
-        token1.mint(alice, INITIAL_TOKEN_AMOUNT);
-        token1.mint(bob, INITIAL_TOKEN_AMOUNT);
-        token1.mint(charlie, INITIAL_TOKEN_AMOUNT);
-        vm.stopPrank();
-
-        Currency curr0 = Currency.wrap(address(token0));
-        Currency curr1 = Currency.wrap(address(token1));
-
-        testKey = PoolKey({
-            currency0: curr0 < curr1 ? curr0 : curr1,
-            currency1: curr0 < curr1 ? curr1 : curr0,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: IHooks(address(hook))
-        });
-
-        poolManager.initialize(testKey, Constants.SQRT_PRICE_1_1);
-        testPoolId = testKey.toId();
-
-        vm.prank(owner);
-        hook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, poolType);
-    }
+    // NOTE: _createPoolWithType helper removed in single-pool-per-hook architecture.
+    // Tests now use the default pool (key, poolId) from BaseAlphixTest setUp.
 
     /**
      * @notice Adds liquidity to a pool for a specific user
@@ -642,15 +585,13 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param testKey The pool key
      * @param testPoolId The pool ID
      * @param params The liquidity drain parameters
-     * @param poolType The pool type for getting pool parameters
+     * @dev Note: poolType parameter removed in single-pool architecture
      * @return aliceTokenId The token ID of Alice's liquidity position
      */
-    function _executeLiquidityDrain(
-        PoolKey memory testKey,
-        PoolId testPoolId,
-        LiquidityDrainParams memory params,
-        IAlphixLogic.PoolType poolType
-    ) internal returns (uint256 aliceTokenId) {
+    function _executeLiquidityDrain(PoolKey memory testKey, PoolId testPoolId, LiquidityDrainParams memory params)
+        internal
+        returns (uint256 aliceTokenId)
+    {
         vm.startPrank(alice);
         aliceTokenId = _addLiquidityForUser(
             alice,
@@ -661,7 +602,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolTypeParams memory poolParams = logic.getPoolTypeParams(poolType);
+        DynamicFeeLib.PoolParams memory poolParams = logic.getPoolParams();
         // Guard against tiny-liquidity rounding: ensure liquidityPerStep is at least 1
         uint128 liquidityPerStep = params.initialLiquidity / params.drainSteps;
         if (liquidityPerStep == 0) liquidityPerStep = 1;
@@ -684,7 +625,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
 
         vm.warp(block.timestamp + poolParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, 3e17);
+        hook.poke(3e17);
 
         uint24 feeDuringDrain;
         (,,, feeDuringDrain) = poolManager.getSlot0(testPoolId);
@@ -698,14 +639,9 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
      * @param testKey The pool key
      * @param testPoolId The pool ID
      * @param reentryLiquidity The amount of liquidity to inject
-     * @param poolType The pool type for getting pool parameters
+     * @dev Note: poolType parameter removed in single-pool architecture
      */
-    function _executeLiquidityFlood(
-        PoolKey memory testKey,
-        PoolId testPoolId,
-        uint128 reentryLiquidity,
-        IAlphixLogic.PoolType poolType
-    ) internal {
+    function _executeLiquidityFlood(PoolKey memory testKey, PoolId testPoolId, uint128 reentryLiquidity) internal {
         vm.startPrank(charlie);
         _addLiquidityForUser(
             charlie,
@@ -716,10 +652,10 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolTypeParams memory poolParams = logic.getPoolTypeParams(poolType);
+        DynamicFeeLib.PoolParams memory poolParams = logic.getPoolParams();
         vm.warp(block.timestamp + poolParams.minPeriod + 1);
         vm.prank(owner);
-        hook.poke(testKey, 5e17);
+        hook.poke(5e17);
 
         uint24 feeAfterFlood;
         (,,, feeAfterFlood) = poolManager.getSlot0(testPoolId);

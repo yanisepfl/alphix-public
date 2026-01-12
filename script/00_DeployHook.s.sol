@@ -18,13 +18,13 @@ contract DeployHookScript is BaseScript {
         );
 
         // Mine a salt that will produce a hook address with the correct flags
-        bytes memory constructorArgs = abi.encode(poolManager);
+        bytes memory constructorArgs = abi.encode(POOL_MANAGER);
         (address hookAddress, bytes32 salt) =
             HookMiner.find(CREATE2_FACTORY, flags, type(Counter).creationCode, constructorArgs);
 
         // Deploy the hook using CREATE2
         vm.startBroadcast();
-        Counter counter = new Counter{salt: salt}(poolManager);
+        Counter counter = new Counter{salt: salt}(POOL_MANAGER);
         vm.stopBroadcast();
 
         require(address(counter) == hookAddress, "DeployHookScript: Hook Address Mismatch");

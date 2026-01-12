@@ -6,7 +6,7 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 
 /* LOCAL IMPORTS */
-import {IAlphixLogic} from "./IAlphixLogic.sol";
+import {DynamicFeeLib} from "../libraries/DynamicFee.sol";
 
 /**
  * @title IAlphix.
@@ -35,29 +35,12 @@ interface IAlphix {
     );
 
     /**
-     * @dev Emitted upon logic change.
-     * @param oldLogic The previous logic contract address.
-     * @param newLogic The new logic contract address.
-     */
-    event LogicUpdated(address oldLogic, address newLogic);
-
-    /**
-     * @dev Emitted upon registry change.
-     * @param oldRegistry The previous registry contract address.
-     * @param newRegistry The new registry contract address.
-     */
-    event RegistryUpdated(address oldRegistry, address newRegistry);
-
-    /**
      * @dev Emitted upon pool configuration.
      * @param poolId The pool ID of the pool that has been configured.
      * @param initialFee The initial fee of the pool that has been configured.
      * @param initialTargetRatio The initial target ratio of the pool that has been configured.
-     * @param poolType The pool type of the pool that has been configured.
      */
-    event PoolConfigured(
-        PoolId indexed poolId, uint24 initialFee, uint256 initialTargetRatio, IAlphixLogic.PoolType poolType
-    );
+    event PoolConfigured(PoolId indexed poolId, uint24 initialFee, uint256 initialTargetRatio);
 
     /**
      * @dev Emitted upon pool activation.
@@ -115,26 +98,26 @@ interface IAlphix {
      * @param key The key of the pool to initialize.
      * @param _initialFee The initial fee of the pool to initialize.
      * @param _initialTargetRatio The initial target ratio of the pool to initialize.
-     * @param _poolType The pool type of the pool to initialize.
+     * @param _poolParams The pool parameters for the dynamic fee algorithm.
      */
     function initializePool(
         PoolKey calldata key,
         uint24 _initialFee,
         uint256 _initialTargetRatio,
-        IAlphixLogic.PoolType _poolType
+        DynamicFeeLib.PoolParams calldata _poolParams
     ) external;
 
     /**
-     * @notice Activate pool.
-     * @param key The key of the pool to activate.
+     * @notice Activate the pool this hook serves.
+     * @dev Uses the stored pool key from initializePool.
      */
-    function activatePool(PoolKey calldata key) external;
+    function activatePool() external;
 
     /**
-     * @notice Deactivate pool.
-     * @param key The key of the pool to deactivate.
+     * @notice Deactivate the pool this hook serves.
+     * @dev Uses the stored pool key from initializePool.
      */
-    function deactivatePool(PoolKey calldata key) external;
+    function deactivatePool() external;
 
     /**
      * @notice Pause the contract.
@@ -163,9 +146,20 @@ interface IAlphix {
     function getRegistry() external view returns (address registry);
 
     /**
-     * @notice Get the given key's current fee.
-     * @param key The key of the pool to get the current fee from.
-     * @return fee The current fee of the given pool.
+     * @notice Get the pool's current fee.
+     * @return fee The current fee of the pool.
      */
-    function getFee(PoolKey calldata key) external view returns (uint24 fee);
+    function getFee() external view returns (uint24 fee);
+
+    /**
+     * @notice Get the cached pool key.
+     * @return The pool key for the single pool this hook serves.
+     */
+    function getPoolKey() external view returns (PoolKey memory);
+
+    /**
+     * @notice Get the cached pool ID.
+     * @return The pool ID for the single pool this hook serves.
+     */
+    function getPoolId() external view returns (PoolId);
 }

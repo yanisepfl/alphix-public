@@ -102,6 +102,16 @@ Each of those parameters are bounded by global constants for additional security
 - **Side-Specific Throttling**: Asymmetric adjustments via upper/lower side factors
 - **Streak Multipliers**: Progressive fee adjustments for sustained out-of-bounds conditions
 
+### Governance & Operations
+
+The Alphix team manages the following aspects of the protocol:
+
+- **Upgradeability**: Logic contract upgrades via UUPS pattern
+- **Fee Dynamization**: Fee algorithm parameters and pool configurations
+- **Treasury**: Yield tax collection and distribution
+
+All administrative operations are executed through a **multisig wallet**. The protocol is **pausable** for emergency response.
+
 ## Testing
 
 The protocol includes comprehensive testing across multiple layers:

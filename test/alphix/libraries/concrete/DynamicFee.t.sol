@@ -22,10 +22,10 @@ contract DynamicFeeTest is Test {
     uint256 constant TWO_WAD = 2e18;
 
     // Sample pool type params for testing
-    DynamicFeeLib.PoolTypeParams testParams;
+    DynamicFeeLib.PoolParams testParams;
 
     function setUp() public {
-        testParams = DynamicFeeLib.PoolTypeParams({
+        testParams = DynamicFeeLib.PoolParams({
             minFee: 100, // 0.01%
             maxFee: 10000, // 1%
             baseMaxFeeDelta: 50,
@@ -335,7 +335,7 @@ contract DynamicFeeTest is Test {
         uint256 globalMaxAdjRate = ONE_WAD;
 
         // Set upper side factor to 0.5x (reduce upward adjustments)
-        DynamicFeeLib.PoolTypeParams memory customParams = testParams;
+        DynamicFeeLib.PoolParams memory customParams = testParams;
         customParams.upperSideFactor = HALF_WAD; // Use the HALF_WAD constant
 
         DynamicFeeLib.OobState memory initialState;

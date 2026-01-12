@@ -17,6 +17,16 @@ import {Registry} from "../../src/Registry.sol";
  *
  * DEPLOYMENT ORDER: 4/11
  *
+ * ARCHITECTURE: Single-Pool-Per-Hook Design
+ * Each Alphix Hook + AlphixLogic pair manages exactly ONE pool. To deploy multiple pools:
+ * 1. Deploy a new Alphix Hook (this script)
+ * 2. Deploy a new AlphixLogic proxy (script 05)
+ * 3. Configure the system (script 06)
+ * 4. Create the pool (script 09)
+ *
+ * The AccessManager and Registry are SHARED across all hook deployments and only need
+ * to be deployed once per network.
+ *
  * IMPORTANT: This script must be run by the AccessManager admin (ALPHIX_MANAGER)
  * because it calls:
  * - accessMgr.setTargetFunctionRole() - requires ADMIN_ROLE

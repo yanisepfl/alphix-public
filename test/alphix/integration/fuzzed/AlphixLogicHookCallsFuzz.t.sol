@@ -18,6 +18,7 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 /* LOCAL IMPORTS */
 import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
 import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 
@@ -109,16 +110,12 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
         tickSpacingMultiplier = uint8(bound(tickSpacingMultiplier, 1, 10));
         liquidityDelta = int256(bound(liquidityDelta, 1, 1e24));
 
+        // Deploy fresh hook stack
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Create fresh configured pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         // Calculate ticks based on multiplier
@@ -132,8 +129,8 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: liquidityDelta, salt: 0});
 
         // Should succeed from hook
-        vm.prank(address(hook));
-        bytes4 result = logic.beforeAddLiquidity(user1, kFresh, params, "");
+        vm.prank(address(freshHook));
+        bytes4 result = freshLogic.beforeAddLiquidity(user1, kFresh, params, "");
         assertEq(result, BaseHook.beforeAddLiquidity.selector, "selector mismatch");
     }
 
@@ -146,32 +143,28 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
         // Bound operation type
         operationType = uint8(bound(operationType, 0, 2));
 
+        // Deploy fresh hook stack
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Create and deactivate pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
-        vm.prank(address(hook));
-        logic.deactivatePool(kFresh);
+        vm.prank(address(freshHook));
+        freshLogic.deactivatePool();
 
-        vm.prank(address(hook));
+        vm.prank(address(freshHook));
         vm.expectRevert(IAlphixLogic.PoolPaused.selector);
 
         if (operationType == 0) {
             // Add liquidity
-            logic.beforeAddLiquidity(
+            freshLogic.beforeAddLiquidity(
                 user1, kFresh, ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}), ""
             );
         } else if (operationType == 1) {
             // Remove liquidity
-            logic.beforeRemoveLiquidity(
+            freshLogic.beforeRemoveLiquidity(
                 user1,
                 kFresh,
                 ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: -1000, salt: 0}),
@@ -179,7 +172,7 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
             );
         } else {
             // Swap
-            logic.beforeSwap(
+            freshLogic.beforeSwap(
                 user1, kFresh, SwapParams({zeroForOne: true, amountSpecified: 1e18, sqrtPriceLimitX96: 0}), ""
             );
         }
@@ -206,21 +199,17 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
             amountSpecified = -int256(bound(absAmount, 1, 1e24));
         }
 
+        // Deploy fresh hook stack
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Create fresh pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         // Swap should succeed from hook
-        vm.prank(address(hook));
-        (bytes4 result,,) = logic.beforeSwap(
+        vm.prank(address(freshHook));
+        (bytes4 result,,,) = freshLogic.beforeSwap(
             user1,
             kFresh,
             SwapParams({zeroForOne: zeroForOne, amountSpecified: amountSpecified, sqrtPriceLimitX96: 0}),
@@ -297,37 +286,33 @@ contract AlphixLogicHookCallsFuzzTest is BaseAlphixTest {
         // Bound cycles
         cycles = uint8(bound(cycles, 1, 5));
 
+        // Deploy fresh hook stack
+        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+
         // Create pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         for (uint256 i = 0; i < cycles; i++) {
             // Deactivate
-            vm.prank(address(hook));
-            logic.deactivatePool(kFresh);
+            vm.prank(address(freshHook));
+            freshLogic.deactivatePool();
 
             // Try to add liquidity - should fail when deactivated
-            vm.prank(address(hook));
+            vm.prank(address(freshHook));
             vm.expectRevert(IAlphixLogic.PoolPaused.selector);
-            logic.beforeAddLiquidity(
+            freshLogic.beforeAddLiquidity(
                 user1, kFresh, ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}), ""
             );
 
             // Reactivate
-            vm.prank(address(hook));
-            logic.activatePool(kFresh);
+            vm.prank(address(freshHook));
+            freshLogic.activatePool();
 
             // Add liquidity should now work
-            vm.prank(address(hook));
-            bytes4 result = logic.beforeAddLiquidity(
+            vm.prank(address(freshHook));
+            bytes4 result = freshLogic.beforeAddLiquidity(
                 user1, kFresh, ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: 0}), ""
             );
             assertEq(result, BaseHook.beforeAddLiquidity.selector, "should work when activated");

@@ -5,9 +5,6 @@ pragma solidity ^0.8.26;
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 
-/* LOCAL IMPORTS */
-import {IAlphixLogic} from "./IAlphixLogic.sol";
-
 /**
  * @title IRegistry.
  * @notice Interface for the Alphix ecosystem registry.
@@ -35,14 +32,10 @@ interface IRegistry {
      * @dev Emitted when a pool is registered or updated.
      * @param poolId The pool ID of the registered pool.
      * @param timestamp The timestamp at which the pool got registered.
-     * @param poolType The type of the registered pool.
+     * @param hookAddress The address of the Alphix hook serving this pool.
      */
     event PoolRegistered(
-        PoolId indexed poolId,
-        address indexed token0,
-        address indexed token1,
-        uint256 timestamp,
-        IAlphixLogic.PoolType poolType
+        PoolId indexed poolId, address indexed token0, address indexed token1, uint256 timestamp, address hookAddress
     );
 
     /**
@@ -93,7 +86,6 @@ interface IRegistry {
         uint24 initialFee;
         uint256 initialTargetRatio;
         uint256 timestamp;
-        IAlphixLogic.PoolType poolType;
     }
 
     /* REGISTRATION FUNCTIONS */
@@ -109,17 +101,18 @@ interface IRegistry {
     /**
      * @notice Register a pool.
      * @param key The pool key containing some pool parameters.
-     * @param poolType The type of the pool to register.
      * @param _initialFee The initial fee of the pool to register.
      * @param _initialTargetRatio The initial target ratio of the pool to register.
      * @dev Restricted function - requires appropriate role via AccessManager.
      */
-    function registerPool(
-        PoolKey calldata key,
-        IAlphixLogic.PoolType poolType,
-        uint24 _initialFee,
-        uint256 _initialTargetRatio
-    ) external;
+    function registerPool(PoolKey calldata key, uint24 _initialFee, uint256 _initialTargetRatio) external;
+
+    /**
+     * @notice Get the hook address for a pool.
+     * @param poolId The pool identifier.
+     * @return hookAddress The hook address serving this pool.
+     */
+    function getHookForPool(PoolId poolId) external view returns (address hookAddress);
 
     /* VIEW FUNCTIONS */
 
