@@ -16,7 +16,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
+import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 import {Alphix} from "../../../../src/Alphix.sol";
@@ -99,7 +99,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
+        IAlphix.PoolConfig memory config = hook.getPoolConfig();
         assertTrue(config.isConfigured, "Pool should be configured");
     }
 
@@ -159,7 +159,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Verify pool still configured
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
+        IAlphix.PoolConfig memory config = hook.getPoolConfig();
         assertTrue(config.isConfigured, "Pool should remain configured after gradual buildup");
     }
 
@@ -202,7 +202,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         }
 
         // Verify fee is within bounds
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         uint24 currentFee = hook.getFee();
 
         assertGe(currentFee, params.minFee, "Fee >= minFee after swaps");
@@ -229,7 +229,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         // Bound ratios to pool's configured max
         ratio1 = bound(ratio1, MIN_RATIO, params.maxCurrentRatio);
@@ -279,7 +279,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         for (uint8 i = 0; i < numPokes; i++) {
             vm.warp(block.timestamp + params.minPeriod + 1);
@@ -317,7 +317,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         // High ratio = above target, bound to pool's configured max
         highRatio = bound(highRatio, 8e17, params.maxCurrentRatio);
@@ -355,7 +355,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         // First poke with high ratio to increase fee
         vm.warp(block.timestamp + params.minPeriod + 1);
@@ -399,7 +399,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         // Bound extreme ratio to pool's configured max
         extremeRatio = bound(extremeRatio, 1, params.maxCurrentRatio);
@@ -436,7 +436,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         for (uint8 i = 0; i < numPokes; i++) {
             vm.warp(block.timestamp + params.minPeriod + 1);
@@ -468,7 +468,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
 
         // Deploy fresh stack
-        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        Alphix freshHook = _deployFreshAlphixStack();
 
         // Initialize pool with fuzzed fee
         (PoolKey memory freshKey,) = _initPoolWithHook(
@@ -493,7 +493,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Verify configuration
-        IAlphixLogic.PoolConfig memory config = freshLogic.getPoolConfig();
+        IAlphix.PoolConfig memory config = freshHook.getPoolConfig();
         assertTrue(config.isConfigured, "Fresh pool should be configured");
         assertEq(config.initialFee, initialFee, "Initial fee should match");
     }
@@ -507,7 +507,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         initialFee = uint24(bound(initialFee, 100, 10000));
 
         // Deploy fresh stack
-        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        Alphix freshHook = _deployFreshAlphixStack();
 
         // Initialize pool
         (PoolKey memory freshKey,) = _initPoolWithHook(
@@ -531,7 +531,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = freshLogic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = freshHook.getPoolParams();
 
         // Bound ratio to pool's max
         ratio = bound(ratio, MIN_RATIO, params.maxCurrentRatio);
@@ -627,7 +627,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY * 50, MAX_LIQUIDITY));
 
         // Deploy fresh stack with global max ratio params
-        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        Alphix freshHook = _deployFreshAlphixStack();
 
         DynamicFeeLib.PoolParams memory globalMaxParams = _createGlobalMaxRatioParams();
 
@@ -660,7 +660,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = freshLogic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = freshHook.getPoolParams();
 
         // Bound ratio to global max (1e24)
         ratio = bound(ratio, MIN_RATIO, AlphixGlobalConstants.MAX_CURRENT_RATIO);
@@ -687,7 +687,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         numPokes = uint8(bound(numPokes, 2, 15));
 
         // Deploy fresh stack with global max ratio params
-        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        Alphix freshHook = _deployFreshAlphixStack();
 
         DynamicFeeLib.PoolParams memory globalMaxParams = _createGlobalMaxRatioParams();
 
@@ -720,7 +720,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = freshLogic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = freshHook.getPoolParams();
 
         for (uint8 i = 0; i < numPokes; i++) {
             vm.warp(block.timestamp + params.minPeriod + 1);
@@ -750,7 +750,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         ratioOffset = bound(ratioOffset, 0, 1e23);
 
         // Deploy fresh stack with global max ratio params
-        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        Alphix freshHook = _deployFreshAlphixStack();
 
         DynamicFeeLib.PoolParams memory globalMaxParams = _createGlobalMaxRatioParams();
 
@@ -783,7 +783,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = freshLogic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = freshHook.getPoolParams();
 
         // Calculate ratio near global max
         uint256 extremeRatio = AlphixGlobalConstants.MAX_CURRENT_RATIO - ratioOffset;
@@ -809,7 +809,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         lowRatio = bound(lowRatio, MIN_RATIO, 1e17); // Very low ratio
 
         // Deploy fresh stack with global max ratio params
-        (Alphix freshHook, IAlphixLogic freshLogic) = _deployFreshAlphixStack();
+        Alphix freshHook = _deployFreshAlphixStack();
 
         DynamicFeeLib.PoolParams memory globalMaxParams = _createGlobalMaxRatioParams();
 
@@ -842,7 +842,7 @@ contract AlphixFullIntegrationFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory params = freshLogic.getPoolParams();
+        DynamicFeeLib.PoolParams memory params = freshHook.getPoolParams();
 
         // First poke with low ratio
         vm.warp(block.timestamp + params.minPeriod + 1);

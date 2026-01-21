@@ -26,8 +26,6 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {Alphix} from "../../../../src/Alphix.sol";
-import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
 import {MockYieldVault} from "../../../utils/mocks/MockYieldVault.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 
@@ -46,7 +44,6 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
     // We'll use these for each fuzzed test - deployed fresh per test
     Alphix internal testHook;
-    IAlphixLogic internal testLogic;
     AccessManager internal testAccessManager;
     PoolKey internal testKey;
     Currency internal testCurrency0;
@@ -100,7 +97,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // ══════════════════════════════════════════════════════════════════════
         {
             (uint256 previewDeposit0, uint256 previewDeposit1) =
-                AlphixLogic(address(testLogic)).previewAddReHypothecatedLiquidity(aliceShares);
+                Alphix(address(testHook)).previewAddReHypothecatedLiquidity(aliceShares);
 
             uint256 aliceToken0Before = MockERC20(Currency.unwrap(testCurrency0)).balanceOf(alice);
             uint256 aliceToken1Before = MockERC20(Currency.unwrap(testCurrency1)).balanceOf(alice);
@@ -115,14 +112,12 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
             assertApproxEqAbs(aliceToken1Before - aliceToken1After, previewDeposit1, 1, "Preview deposit1 should match");
 
             // Verify shares minted
-            assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), aliceShares, "Shares should be minted");
-            assertEq(
-                AlphixLogic(address(testLogic)).totalSupply(), aliceShares, "Total supply should equal alice shares"
-            );
+            assertEq(Alphix(address(testHook)).balanceOf(alice), aliceShares, "Shares should be minted");
+            assertEq(Alphix(address(testHook)).totalSupply(), aliceShares, "Total supply should equal alice shares");
 
             // Verify yield sources have funds (at least one should have funds depending on price)
-            uint256 yieldSource0Initial = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-            uint256 yieldSource1Initial = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+            uint256 yieldSource0Initial = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+            uint256 yieldSource1Initial = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
             assertTrue(
                 yieldSource0Initial > 0 || yieldSource1Initial > 0, "At least one yield source should have funds"
             );
@@ -132,13 +127,13 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // PHASE 2: Perform swap - verify JIT participates (yield source changes)
         // ══════════════════════════════════════════════════════════════════════
         {
-            uint256 yieldSource0Before = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-            uint256 yieldSource1Before = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+            uint256 yieldSource0Before = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+            uint256 yieldSource1Before = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
             _doSwapOnTestPool(5e18, true); // Small swap to avoid extreme price impact
 
-            uint256 yieldSource0AfterSwap = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-            uint256 yieldSource1AfterSwap = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+            uint256 yieldSource0AfterSwap = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+            uint256 yieldSource1AfterSwap = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
             // JIT should have participated - at least one yield source should change
             bool jitParticipated =
@@ -155,12 +150,12 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         {
             _addReHypoToTestPool(bob, bobShares);
 
-            assertEq(AlphixLogic(address(testLogic)).balanceOf(bob), bobShares, "Bob should have shares");
-            assertEq(AlphixLogic(address(testLogic)).totalSupply(), aliceShares + bobShares, "Total supply updated");
+            assertEq(Alphix(address(testHook)).balanceOf(bob), bobShares, "Bob should have shares");
+            assertEq(Alphix(address(testHook)).totalSupply(), aliceShares + bobShares, "Total supply updated");
 
             // Record pre-yield values for Alice
             (alicePreYield0, alicePreYield1) =
-                AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+                Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -169,8 +164,8 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         uint256 yieldAmount0 = 0;
         uint256 yieldAmount1 = 0;
         {
-            uint256 vault0Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-            uint256 vault1Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+            uint256 vault0Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+            uint256 vault1Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
             // Add 10% yield to vault0 if it has funds
             if (vault0Balance > 0) {
@@ -199,9 +194,9 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // Verify yield actually increased values
         {
             (uint256 alicePostYield0, uint256 alicePostYield1) =
-                AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+                Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
             (bobFinalPreview0, bobFinalPreview1) =
-                AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(bobShares);
+                Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(bobShares);
 
             // Verify yield increased values (swap fees may have affected share value)
             if (yieldAmount0 > 0 && alicePreYield0 > 0) {
@@ -231,7 +226,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
             uint256 bobToken1BeforeWithdraw = MockERC20(Currency.unwrap(testCurrency1)).balanceOf(bob);
 
             vm.prank(bob);
-            AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(bobShares);
+            Alphix(address(testHook)).removeReHypothecatedLiquidity(bobShares);
 
             uint256 bobToken0AfterWithdraw = MockERC20(Currency.unwrap(testCurrency0)).balanceOf(bob);
             uint256 bobToken1AfterWithdraw = MockERC20(Currency.unwrap(testCurrency1)).balanceOf(bob);
@@ -254,19 +249,19 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
                     "Bob withdrawal1 matches preview"
                 );
             }
-            assertEq(AlphixLogic(address(testLogic)).balanceOf(bob), 0, "Bob shares burned");
+            assertEq(Alphix(address(testHook)).balanceOf(bob), 0, "Bob shares burned");
         }
 
         // Alice withdraws
         vm.prank(alice);
-        AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(aliceShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
 
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 0, "Alice shares burned");
-        assertEq(AlphixLogic(address(testLogic)).totalSupply(), 0, "Total supply is zero");
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
+        assertEq(Alphix(address(testHook)).totalSupply(), 0, "Total supply is zero");
 
         // Verify yield sources are empty
-        assertEq(AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0), 0, "Yield source0 empty");
-        assertEq(AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1), 0, "Yield source1 empty");
+        assertEq(Alphix(address(testHook)).getAmountInYieldSource(testCurrency0), 0, "Yield source0 empty");
+        assertEq(Alphix(address(testHook)).getAmountInYieldSource(testCurrency1), 0, "Yield source1 empty");
     }
 
     /**
@@ -289,16 +284,15 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(alice, 100e18);
 
         // Verify it worked
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 100e18);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 100e18);
 
         // At low price, token1 is more valuable, so might have more token1
-        (uint256 preview0, uint256 preview1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 preview0, uint256 preview1) = Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(100e18);
         assertTrue(preview0 > 0 || preview1 > 0, "Should have value in at least one token");
 
         vm.prank(alice);
-        AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(100e18);
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 0);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
     /**
@@ -321,16 +315,15 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(alice, 100e18);
 
         // Verify it worked
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 100e18);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 100e18);
 
         // At high price, token0 is more valuable, so might have more token0
-        (uint256 preview0, uint256 preview1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 preview0, uint256 preview1) = Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(100e18);
         assertTrue(preview0 > 0 || preview1 > 0, "Should have value in at least one token");
 
         vm.prank(alice);
-        AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(100e18);
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 0);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
     /**
@@ -352,12 +345,11 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(alice, 100e18);
 
         // Get initial value
-        (uint256 initial0, uint256 initial1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 initial0, uint256 initial1) = Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Simulate loss on vault0
         if (boundedLoss > 0) {
-            uint256 vault0Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
+            uint256 vault0Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
             uint256 lossAmount = (vault0Balance * boundedLoss) / 100;
             if (lossAmount > 0) {
                 testVault0.simulateLoss(lossAmount);
@@ -365,8 +357,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         }
 
         // Get post-loss value
-        (uint256 postLoss0, uint256 postLoss1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 postLoss0, uint256 postLoss1) = Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Token0 should reflect loss (if there was any value), Token1 should be unchanged
         if (boundedLoss > 0 && initial0 > 0) {
@@ -379,8 +370,8 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // Withdrawal should still work
         vm.prank(alice);
-        AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(100e18);
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 0);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
     /**
@@ -402,8 +393,8 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(alice, 100e18);
 
         // Simulate some yield on the vault that has funds
-        uint256 vault0Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-        uint256 vault1Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+        uint256 vault0Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+        uint256 vault1Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
         if (vault0Balance > 0) {
             uint256 yieldAmount = vault0Balance / 10; // 10% yield
@@ -425,14 +416,14 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(bob, 100e18);
 
         // Both should have 100 shares
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 100e18);
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(bob), 100e18);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 100e18);
+        assertEq(Alphix(address(testHook)).balanceOf(bob), 100e18);
 
         // Same shares = same withdrawal value
         (uint256 aliceWithdraw0, uint256 aliceWithdraw1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(100e18);
         (uint256 bobWithdraw0, uint256 bobWithdraw1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Check that withdrawal values match for same share amount
         if (aliceWithdraw0 > 0) {
@@ -471,10 +462,10 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // Record initial values
         (uint256 initial0, uint256 initial1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+            Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
 
-        uint256 vault0Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-        uint256 vault1Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+        uint256 vault0Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+        uint256 vault1Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
         // ══════════════════════════════════════════════════════════════════════
         // Scenario: Apply different yield rates to each vault
@@ -509,8 +500,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // ══════════════════════════════════════════════════════════════════════
         // Verify: Each token reflects its own vault's yield/loss independently
         // ══════════════════════════════════════════════════════════════════════
-        (uint256 final0, uint256 final1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+        (uint256 final0, uint256 final1) = Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
 
         // Token0: should reflect loss then yield
         // Loss decreases value, yield increases from remaining balance
@@ -539,8 +529,8 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // Verify: User can still withdraw
         // ══════════════════════════════════════════════════════════════════════
         vm.prank(alice);
-        AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(aliceShares);
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 0, "Alice shares burned");
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
     }
 
     /**
@@ -562,10 +552,10 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(alice, aliceShares);
 
         (uint256 initial0, uint256 initial1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+            Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
 
-        uint256 vault0Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-        uint256 vault1Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+        uint256 vault0Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+        uint256 vault1Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
         // Vault0: HIGH yield
         if (vault0Balance > 0) {
@@ -583,8 +573,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
             testVault1.simulateLoss(lossAmount);
         }
 
-        (uint256 final0, uint256 final1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+        (uint256 final0, uint256 final1) = Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
 
         // Token0 should INCREASE significantly
         if (vault0Balance > 0 && initial0 > 0) {
@@ -605,8 +594,8 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // User can still withdraw
         vm.prank(alice);
-        AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(aliceShares);
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 0, "Alice shares burned");
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
     }
 
     /**
@@ -626,10 +615,10 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(alice, aliceShares);
 
         (uint256 initial0, uint256 initial1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+            Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
 
-        uint256 vault0Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-        uint256 vault1Balance = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+        uint256 vault0Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+        uint256 vault1Balance = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
         // Apply losses to both vaults
         if (boundedLoss0 > 0 && vault0Balance > 0) {
@@ -639,8 +628,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
             testVault1.simulateLoss((vault1Balance * boundedLoss1) / 100);
         }
 
-        (uint256 final0, uint256 final1) =
-            AlphixLogic(address(testLogic)).previewRemoveReHypothecatedLiquidity(aliceShares);
+        (uint256 final0, uint256 final1) = Alphix(address(testHook)).previewRemoveReHypothecatedLiquidity(aliceShares);
 
         // Both should decrease or stay same
         if (vault0Balance > 0 && boundedLoss0 > 0) {
@@ -656,8 +644,8 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // User can still withdraw (even at total loss)
         vm.prank(alice);
-        AlphixLogic(address(testLogic)).removeReHypothecatedLiquidity(aliceShares);
-        assertEq(AlphixLogic(address(testLogic)).balanceOf(alice), 0, "Alice shares burned");
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
     }
 
     /**
@@ -681,16 +669,16 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         _addReHypoToTestPool(alice, 100e18);
 
         // Record yield source balances before swap
-        uint256 yieldSource0Before = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-        uint256 yieldSource1Before = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+        uint256 yieldSource0Before = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+        uint256 yieldSource1Before = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
         // Do swap - only if there's liquidity in the direction we're swapping
         if (yieldSource0Before > 0 || yieldSource1Before > 0) {
             _doSwapOnTestPool(boundedSwapAmount, true);
 
             // Record yield source balances after swap
-            uint256 yieldSource0After = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency0);
-            uint256 yieldSource1After = AlphixLogic(address(testLogic)).getAmountInYieldSource(testCurrency1);
+            uint256 yieldSource0After = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
+            uint256 yieldSource1After = Alphix(address(testHook)).getAmountInYieldSource(testCurrency1);
 
             // JIT should have participated (full range) - at least one should change
             bool participated = (yieldSource0After != yieldSource0Before) || (yieldSource1After != yieldSource1Before);
@@ -706,7 +694,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         internal
     {
         // Deploy fresh Alphix stack (handles its own prank)
-        (testHook, testLogic, testAccessManager,) = _deployFreshAlphixStackFull();
+        (testHook, testAccessManager) = _deployFreshAlphixStackFull();
 
         vm.startPrank(owner);
 
@@ -742,7 +730,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         testVault1 = new MockYieldVault(IERC20(Currency.unwrap(testCurrency1)));
 
         // Setup yield manager role
-        _setupYieldManagerRole(owner, testAccessManager, address(testLogic));
+        _setupYieldManagerRole(owner, testAccessManager, address(testHook));
 
         vm.stopPrank();
     }
@@ -800,21 +788,19 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         int24 fullRangeUpper = TickMath.maxUsableTick(testKey.tickSpacing);
 
         vm.startPrank(owner);
-        AlphixLogic(address(testLogic)).setTickRange(fullRangeLower, fullRangeUpper);
-        AlphixLogic(address(testLogic)).setYieldSource(testCurrency0, address(testVault0));
-        AlphixLogic(address(testLogic)).setYieldSource(testCurrency1, address(testVault1));
-        AlphixLogic(address(testLogic)).setYieldTaxPips(100_000); // 10%
-        AlphixLogic(address(testLogic)).setYieldTreasury(owner);
+        Alphix(address(testHook)).setTickRange(fullRangeLower, fullRangeUpper);
+        Alphix(address(testHook)).setYieldSource(testCurrency0, address(testVault0));
+        Alphix(address(testHook)).setYieldSource(testCurrency1, address(testVault1));
         vm.stopPrank();
     }
 
     function _addReHypoToTestPool(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = AlphixLogic(address(testLogic)).previewAddReHypothecatedLiquidity(shares);
+        (uint256 amount0, uint256 amount1) = Alphix(address(testHook)).previewAddReHypothecatedLiquidity(shares);
 
         vm.startPrank(user);
-        MockERC20(Currency.unwrap(testCurrency0)).approve(address(testLogic), amount0);
-        MockERC20(Currency.unwrap(testCurrency1)).approve(address(testLogic), amount1);
-        AlphixLogic(address(testLogic)).addReHypothecatedLiquidity(shares);
+        MockERC20(Currency.unwrap(testCurrency0)).approve(address(testHook), amount0);
+        MockERC20(Currency.unwrap(testCurrency1)).approve(address(testHook), amount1);
+        Alphix(address(testHook)).addReHypothecatedLiquidity(shares);
         vm.stopPrank();
     }
 

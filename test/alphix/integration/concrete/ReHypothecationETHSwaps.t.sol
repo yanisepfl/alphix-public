@@ -20,8 +20,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixETHTest} from "../../BaseAlphixETH.t.sol";
-import {AlphixLogicETH} from "../../../../src/AlphixLogicETH.sol";
+import {AlphixETH} from "../../../../src/AlphixETH.sol";
+
 import {MockYieldVault} from "../../../utils/mocks/MockYieldVault.sol";
+import {MockAlphix4626WrapperWeth} from "../../../utils/mocks/MockAlphix4626WrapperWeth.sol";
+import {MockWETH9} from "../../../utils/mocks/MockWETH9.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 
 /**
@@ -39,7 +42,8 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
     address public alice;
     address public bob;
 
-    MockYieldVault public wethVault;
+    MockWETH9 public weth;
+    MockAlphix4626WrapperWeth public wethVault;
     MockYieldVault public tokenVault;
 
     int24 public fullRangeLower;
@@ -58,10 +62,12 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         token.mint(bob, INITIAL_TOKEN_AMOUNT);
 
         vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, payable(address(logic)));
+        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        wethVault = new MockYieldVault(IERC20(address(weth)));
+        // Deploy WETH mock and vaults
+        weth = new MockWETH9();
+        wethVault = new MockAlphix4626WrapperWeth(address(weth));
         tokenVault = new MockYieldVault(IERC20(address(token)));
 
         fullRangeLower = TickMath.minUsableTick(defaultTickSpacing);
@@ -82,10 +88,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         _addReHypoLiquidity(alice, 10e18);
 
         uint256 aliceTokenBefore = token.balanceOf(alice);
-        uint256 ethInYieldBefore =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 ethInYieldBefore = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
         uint256 tokenInYieldBefore =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+            AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
 
         // Swap 1 ETH -> Token
         vm.startPrank(alice);
@@ -104,10 +109,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         assertGt(token.balanceOf(alice), aliceTokenBefore, "Alice should have received tokens");
 
         // Verify yield sources are still operational
-        uint256 ethInYieldAfter =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 ethInYieldAfter = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
         uint256 tokenInYieldAfter =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+            AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
 
         // After zeroForOne swap, ETH in yield should increase, token should decrease
         assertGt(ethInYieldAfter, ethInYieldBefore, "ETH in yield should increase after ETH->Token swap");
@@ -123,10 +127,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         _addReHypoLiquidity(alice, 10e18);
 
         uint256 aliceEthBefore = alice.balance;
-        uint256 ethInYieldBefore =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 ethInYieldBefore = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
         uint256 tokenInYieldBefore =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+            AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
 
         // Swap 1 Token -> ETH
         vm.startPrank(alice);
@@ -146,10 +149,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         assertGt(alice.balance, aliceEthBefore, "Alice should have received ETH");
 
         // Verify yield sources are still operational
-        uint256 ethInYieldAfter =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 ethInYieldAfter = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
         uint256 tokenInYieldAfter =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+            AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
 
         // After oneForZero swap, ETH in yield should decrease, token should increase
         assertLt(ethInYieldAfter, ethInYieldBefore, "ETH in yield should decrease after Token->ETH swap");
@@ -193,7 +195,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         _addReHypoLiquidity(alice, 10e18);
 
         uint256 initialTokenInYield =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+            AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
 
         // Perform 5 consecutive ETH->Token swaps
         for (uint256 i = 0; i < 5; i++) {
@@ -210,7 +212,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         }
 
         uint256 finalTokenInYield =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+            AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
 
         // Token in yield should have decreased significantly
         assertLt(finalTokenInYield, initialTokenInYield, "Token in yield should decrease after multiple swaps");
@@ -257,9 +259,8 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
 
         // All swaps should have completed successfully
         // Yield sources should still have positive balances
-        uint256 ethInYield = AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
-        uint256 tokenInYield =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+        uint256 ethInYield = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 tokenInYield = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
 
         assertGt(ethInYield, 0, "ETH in yield should be positive");
         assertGt(tokenInYield, 0, "Token in yield should be positive");
@@ -361,11 +362,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         int24 narrowUpper = 100 * defaultTickSpacing;
 
         vm.startPrank(yieldManager);
-        AlphixLogicETH(payable(address(logic))).setTickRange(narrowLower, narrowUpper);
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
-        AlphixLogicETH(payable(address(logic))).setYieldTaxPips(100_000);
-        AlphixLogicETH(payable(address(logic))).setYieldTreasury(treasury);
+        AlphixETH(payable(address(hook))).setTickRange(narrowLower, narrowUpper);
+        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
+        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
         vm.stopPrank();
 
         _addReHypoLiquidity(alice, 10e18);
@@ -394,11 +393,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         int24 asymUpper = 50 * defaultTickSpacing;
 
         vm.startPrank(yieldManager);
-        AlphixLogicETH(payable(address(logic))).setTickRange(asymLower, asymUpper);
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
-        AlphixLogicETH(payable(address(logic))).setYieldTaxPips(100_000);
-        AlphixLogicETH(payable(address(logic))).setYieldTreasury(treasury);
+        AlphixETH(payable(address(hook))).setTickRange(asymLower, asymUpper);
+        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
+        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
         vm.stopPrank();
 
         _addReHypoLiquidity(alice, 10e18);
@@ -475,9 +472,8 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         _addReHypoLiquidity(alice, 10e18);
 
         // Simulate 10% loss
-        uint256 ethInYield = AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
-        uint256 tokenInYield =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(token)));
+        uint256 ethInYield = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 tokenInYield = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(token)));
         wethVault.simulateLoss(ethInYield / 10);
         tokenVault.simulateLoss(tokenInYield / 10);
 
@@ -492,138 +488,6 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
             receiver: alice,
             deadline: block.timestamp + 100
         });
-    }
-
-    /**
-     * @notice Test swap triggers tax accumulation
-     */
-    function test_swap_accumulatesTaxFromYield() public {
-        _addRegularLp(100 ether);
-        _configureReHypo();
-        _addReHypoLiquidity(alice, 10e18);
-
-        // Simulate positive yield
-        uint256 yield1 = 10e18;
-        vm.startPrank(owner);
-        token.mint(owner, yield1);
-        token.approve(address(tokenVault), yield1);
-        tokenVault.simulateYield(yield1);
-        vm.stopPrank();
-
-        // Do a swap that triggers JIT
-        vm.prank(alice);
-        swapRouter.swapExactTokensForTokens{value: 1 ether}({
-            amountIn: 1 ether,
-            amountOutMin: 0,
-            zeroForOne: true,
-            poolKey: key,
-            hookData: Constants.ZERO_BYTES,
-            receiver: alice,
-            deadline: block.timestamp + 100
-        });
-
-        // Collect tax
-        uint256 treasuryTokenBefore = token.balanceOf(treasury);
-        AlphixLogicETH(payable(address(logic))).collectAccumulatedTax();
-        uint256 treasuryTokenAfter = token.balanceOf(treasury);
-
-        // Treasury should have received some tax
-        assertGt(treasuryTokenAfter, treasuryTokenBefore, "Treasury should receive tax from yield");
-    }
-
-    /* ═══════════════════════════════════════════════════════════════════════════
-                        TAX COLLECTION TESTS
-       ═══════════════════════════════════════════════════════════════════════════ */
-
-    /**
-     * @notice Test tax collection with different tax rates
-     */
-    function test_taxCollection_differentRates() public {
-        _addRegularLp(100 ether);
-        _configureReHypo();
-        _addReHypoLiquidity(alice, 10e18);
-
-        // Simulate yield
-        uint256 yield1 = 100e18;
-        vm.startPrank(owner);
-        token.mint(owner, yield1);
-        token.approve(address(tokenVault), yield1);
-        tokenVault.simulateYield(yield1);
-        vm.stopPrank();
-
-        // Collect tax at 10% rate
-        (, uint256 collected1) = AlphixLogicETH(payable(address(logic))).collectAccumulatedTax();
-
-        // Tax should be approximately 10% of yield
-        assertApproxEqAbs(collected1, yield1 / 10, 2, "Tax should be ~10% of yield");
-    }
-
-    /**
-     * @notice Test tax collection goes to treasury
-     * @dev Note: For ETH pools, currency0 tax is sent as native ETH, not WETH
-     */
-    function test_taxCollection_goesToTreasury() public {
-        _addRegularLp(100 ether);
-        _configureReHypo();
-        _addReHypoLiquidity(alice, 10e18);
-
-        // Simulate yield on both currencies
-        uint256 yield0 = 1 ether;
-        uint256 yield1 = 100e18;
-
-        vm.startPrank(owner);
-        weth.deposit{value: yield0}();
-        weth.approve(address(wethVault), yield0);
-        wethVault.simulateYield(yield0);
-
-        token.mint(owner, yield1);
-        token.approve(address(tokenVault), yield1);
-        tokenVault.simulateYield(yield1);
-        vm.stopPrank();
-
-        // For ETH pools, treasury receives native ETH for currency0
-        uint256 treasuryEthBefore = treasury.balance;
-        uint256 treasuryTokenBefore = token.balanceOf(treasury);
-
-        // Collect tax
-        (uint256 collectedEth, uint256 collectedToken) = AlphixLogicETH(payable(address(logic))).collectAccumulatedTax();
-
-        uint256 treasuryEthAfter = treasury.balance;
-        uint256 treasuryTokenAfter = token.balanceOf(treasury);
-
-        // Treasury should receive the tax
-        assertEq(treasuryEthAfter - treasuryEthBefore, collectedEth, "Treasury should receive ETH tax");
-        assertEq(treasuryTokenAfter - treasuryTokenBefore, collectedToken, "Treasury should receive token tax");
-    }
-
-    /**
-     * @notice Test tax collection with zero tax rate
-     */
-    function test_taxCollection_zeroTaxRate() public {
-        _addRegularLp(100 ether);
-
-        // Configure with 0% tax
-        vm.startPrank(yieldManager);
-        AlphixLogicETH(payable(address(logic))).setTickRange(fullRangeLower, fullRangeUpper);
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
-        AlphixLogicETH(payable(address(logic))).setYieldTaxPips(0); // 0% tax
-        AlphixLogicETH(payable(address(logic))).setYieldTreasury(treasury);
-        vm.stopPrank();
-
-        _addReHypoLiquidity(alice, 10e18);
-
-        // Simulate yield
-        uint256 yield1 = 100e18;
-        vm.startPrank(owner);
-        token.mint(owner, yield1);
-        token.approve(address(tokenVault), yield1);
-        tokenVault.simulateYield(yield1);
-        vm.stopPrank();
-
-        // Collect tax - should be 0
-        (, uint256 collected1) = AlphixLogicETH(payable(address(logic))).collectAccumulatedTax();
-        assertEq(collected1, 0, "No tax should be collected with 0% rate");
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -659,8 +523,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         // Add significant rehypo position (same size as regular LP)
         _addReHypoLiquidity(alice, 100e18);
 
-        uint256 ethInYieldBefore =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 ethInYieldBefore = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
 
         vm.prank(alice);
         swapRouter.swapExactTokensForTokens{value: 1 ether}({
@@ -674,8 +537,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         });
 
         // Verify swap worked and rehypo was used
-        uint256 ethInYieldAfter =
-            AlphixLogicETH(payable(address(logic))).getAmountInYieldSource(Currency.wrap(address(0)));
+        uint256 ethInYieldAfter = AlphixETH(payable(address(hook))).getAmountInYieldSource(Currency.wrap(address(0)));
         assertGt(ethInYieldAfter, ethInYieldBefore, "ETH in yield should increase after ETH->Token swap");
     }
 
@@ -747,21 +609,18 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
 
     function _configureReHypo() internal {
         vm.startPrank(yieldManager);
-        AlphixLogicETH(payable(address(logic))).setTickRange(fullRangeLower, fullRangeUpper);
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
-        AlphixLogicETH(payable(address(logic))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
-        AlphixLogicETH(payable(address(logic))).setYieldTaxPips(100_000); // 10%
-        AlphixLogicETH(payable(address(logic))).setYieldTreasury(treasury);
+        AlphixETH(payable(address(hook))).setTickRange(fullRangeLower, fullRangeUpper);
+        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
+        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
         vm.stopPrank();
     }
 
     function _addReHypoLiquidity(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) =
-            AlphixLogicETH(payable(address(logic))).previewAddReHypothecatedLiquidity(shares);
+        (uint256 amount0, uint256 amount1) = AlphixETH(payable(address(hook))).previewAddReHypothecatedLiquidity(shares);
 
         vm.startPrank(user);
-        token.approve(address(logic), amount1);
-        AlphixLogicETH(payable(address(logic))).addReHypothecatedLiquidity{value: amount0}(shares);
+        token.approve(address(hook), amount1);
+        AlphixETH(payable(address(hook))).addReHypothecatedLiquidity{value: amount0}(shares);
         vm.stopPrank();
     }
 

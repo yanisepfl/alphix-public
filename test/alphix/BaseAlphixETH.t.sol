@@ -22,23 +22,19 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* OZ IMPORTS */
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /* LOCAL IMPORTS */
 import {EasyPosm} from "../utils/libraries/EasyPosm.sol";
 import {Deployers} from "../utils/Deployers.sol";
 import {AlphixETH} from "../../src/AlphixETH.sol";
-import {AlphixLogicETH} from "../../src/AlphixLogicETH.sol";
-import {Registry} from "../../src/Registry.sol";
-import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
-import {MockWETH9} from "../utils/mocks/MockWETH9.sol";
 
 /**
  * @title BaseAlphixETHTest
  * @author Alphix
  * @notice Base test contract for AlphixETH (native ETH pools) tests
- * @dev Provides common setup and helper functions for all AlphixETH tests
+ * @dev Provides common setup and helper functions for all AlphixETH tests.
+ *      Updated for simplified architecture: no AlphixLogicETH, no Registry, no proxy.
  */
 abstract contract BaseAlphixETHTest is Test, Deployers {
     using EasyPosm for IPositionManager;
@@ -73,7 +69,6 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
     uint64 constant FEE_POKER_ROLE = 1;
-    uint64 constant REGISTRAR_ROLE = 2;
     uint64 constant YIELD_MANAGER_ROLE = 3;
 
     // Optional: derived safe cap if tests ever want to override logic default
@@ -92,12 +87,7 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
 
     // AlphixETH contracts (default stack wired in setUp)
     AccessManager public accessManager;
-    Registry public registry;
     AlphixETH public hook;
-    AlphixLogicETH public logicImplementation;
-    ERC1967Proxy public logicProxy;
-    IAlphixLogic public logic;
-    MockWETH9 public weth;
 
     // Default test tokens and pool
     Currency public ethCurrency; // Native ETH (address(0))
@@ -140,15 +130,11 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
 
         vm.startPrank(owner);
 
-        // Deploy WETH mock
-        weth = new MockWETH9();
-
         // Setup default pool params
         _initializeDefaultPoolParams();
 
-        // Deploy a default AlphixETH Infrastructure (AccessManager, Registry, Hook, Logic)
-        (accessManager, registry, hook, logicImplementation, logicProxy, logic) =
-            _deployAlphixEthInfrastructure(poolManager, owner);
+        // Deploy a default AlphixETH Infrastructure (AccessManager + Hook)
+        (accessManager, hook) = _deployAlphixEthInfrastructure(poolManager, owner);
 
         // Setup ETH pool currencies
         ethCurrency = Currency.wrap(address(0)); // Native ETH
@@ -200,93 +186,64 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
 
     /**
      * @notice Deploys a fresh AlphixETH Infrastructure
+     * @param pm The pool manager to wire into the hook
+     * @param alphixOwner The owner of the hook
+     * @return am AccessManager instance
+     * @return newHook AlphixETH hook
      */
     function _deployAlphixEthInfrastructure(IPoolManager pm, address alphixOwner)
         internal
-        returns (
-            AccessManager am,
-            Registry reg,
-            AlphixETH newHook,
-            AlphixLogicETH impl,
-            ERC1967Proxy proxy,
-            IAlphixLogic newLogic
-        )
+        returns (AccessManager am, AlphixETH newHook)
     {
-        // AccessManager + Registry
+        // AccessManager
         am = new AccessManager(alphixOwner);
-        reg = new Registry(address(am));
 
-        // Deploy AlphixETH Hook (CREATE2, + constructor pauses)
-        newHook = _deployAlphixEthHook(pm, alphixOwner, am, reg);
-
-        // Logic implementation + proxy
-        (impl, proxy, newLogic) = _deployAlphixLogicEth(alphixOwner, address(newHook), address(am));
-
-        // Finalize Hook initialization (unpauses)
-        newHook.initialize(address(newLogic));
+        // Deploy AlphixETH Hook (CREATE2)
+        newHook = _deployAlphixEthHook(pm, alphixOwner, am);
     }
 
     /**
      * @notice Deploy an AlphixETH Hook
+     * @param pm The pool manager to wire into the hook
+     * @param alphixOwner The owner of the hook
+     * @param am The AccessManager instance
+     * @return newHook The deployed hook
      */
-    function _deployAlphixEthHook(IPoolManager pm, address alphixOwner, AccessManager am, Registry reg)
+    function _deployAlphixEthHook(IPoolManager pm, address alphixOwner, AccessManager am)
         internal
         returns (AlphixETH newHook)
     {
         address hookAddr = _computeNextHookAddress();
-        _setupAccessManagerRoles(hookAddr, am, reg);
-        bytes memory ctor = abi.encode(pm, alphixOwner, address(am), address(reg));
+        _setupAccessManagerRoles(hookAddr, am);
+        bytes memory ctor = abi.encode(pm, alphixOwner, address(am), "Alphix ETH LP Shares", "AELP");
         deployCodeTo("src/AlphixETH.sol:AlphixETH", ctor, hookAddr);
         newHook = AlphixETH(payable(hookAddr));
     }
 
     /**
-     * @notice Deploy AlphixLogicETH
-     */
-    function _deployAlphixLogicEth(address alphixOwner, address hookAddr, address accessManagerAddr)
-        internal
-        returns (AlphixLogicETH impl, ERC1967Proxy proxy, IAlphixLogic newLogic)
-    {
-        impl = new AlphixLogicETH();
-
-        // AlphixLogicETH.initializeEth(owner, hook, accessManager, weth, name, symbol)
-        bytes memory initData = abi.encodeCall(
-            impl.initializeEth,
-            (alphixOwner, hookAddr, accessManagerAddr, address(weth), "Alphix ETH LP Shares", "AELP")
-        );
-
-        proxy = new ERC1967Proxy(address(impl), initData);
-        newLogic = IAlphixLogic(address(proxy));
-    }
-
-    /**
      * @notice Deploy a fresh AlphixETH stack without pool initialization
+     * @return freshHook The new hook
      */
-    function _deployFreshAlphixEthStack() internal returns (AlphixETH freshHook, IAlphixLogic freshLogic) {
+    function _deployFreshAlphixEthStack() internal returns (AlphixETH freshHook) {
         vm.startPrank(owner);
-        (,, AlphixETH newHook,,, IAlphixLogic newLogic) = _deployAlphixEthInfrastructure(poolManager, owner);
+        (, AlphixETH newHook) = _deployAlphixEthInfrastructure(poolManager, owner);
         vm.stopPrank();
 
         freshHook = newHook;
-        freshLogic = newLogic;
     }
 
     /**
      * @notice Deploy a fresh AlphixETH stack returning all components
+     * @return freshHook The new hook
+     * @return freshAccessManager The new AccessManager for this hook
      */
-    function _deployFreshAlphixEthStackFull()
-        internal
-        returns (AlphixETH freshHook, IAlphixLogic freshLogic, AccessManager freshAccessManager, Registry freshRegistry)
-    {
+    function _deployFreshAlphixEthStackFull() internal returns (AlphixETH freshHook, AccessManager freshAccessManager) {
         vm.startPrank(owner);
-        (AccessManager freshAm, Registry freshReg, AlphixETH newHook,,, IAlphixLogic newLogic) =
-            _deployAlphixEthInfrastructure(poolManager, owner);
+        (AccessManager freshAm, AlphixETH newHook) = _deployAlphixEthInfrastructure(poolManager, owner);
         vm.stopPrank();
 
         freshHook = newHook;
-        freshLogic = newLogic;
         freshAccessManager = freshAm;
-        freshRegistry = freshReg;
     }
 
     /**
@@ -323,38 +280,21 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
      * @notice Compute a unique, permission-correct hook address
      */
     function _computeNextHookAddress() internal returns (address) {
+        // Only set flags for enabled hooks - must match getHookPermissions()
         // forge-lint: disable-next-line(unsafe-typecast)
-        uint160 flags = uint160(
-            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
-                | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-                | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-                | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_ADD_LIQUIDITY_RETURNS_DELTA_FLAG
-                | Hooks.AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG
-        );
+        uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG);
         // forge-lint: disable-next-line(unsafe-typecast)
         uint160 ns = uint160(hookNamespace++) << 144;
         return address(flags ^ ns);
     }
 
     /**
-     * @notice Sets up AccessManager roles for the registry and hook
+     * @notice Sets up AccessManager roles for the hook
+     * @dev Grants poker role to owner, sets function-level permissions
      */
-    function _setupAccessManagerRoles(address hookAddr, AccessManager am, Registry reg) internal {
-        // Grant registrar role to hook
-        am.grantRole(REGISTRAR_ROLE, hookAddr, 0);
-
+    function _setupAccessManagerRoles(address hookAddr, AccessManager am) internal {
         // Grant poker role to owner
         am.grantRole(FEE_POKER_ROLE, owner, 0);
-
-        // Assign role to specific functions on Registry
-        bytes4[] memory contractSelectors = new bytes4[](1);
-        contractSelectors[0] = reg.registerContract.selector;
-        am.setTargetFunctionRole(address(reg), contractSelectors, REGISTRAR_ROLE);
-
-        bytes4[] memory poolSelectors = new bytes4[](1);
-        poolSelectors[0] = reg.registerPool.selector;
-        am.setTargetFunctionRole(address(reg), poolSelectors, REGISTRAR_ROLE);
 
         // Assign poker role to poke function on Hook
         bytes4[] memory pokeSelectors = new bytes4[](1);
@@ -363,19 +303,21 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
     }
 
     /**
-     * @notice Configure YIELD_MANAGER_ROLE for AlphixLogicETH
+     * @notice Configure YIELD_MANAGER_ROLE for AlphixETH hook
+     * @dev Grants the role to the specified address and sets function-level permissions
+     * @param yieldManagerAddr The address to grant YIELD_MANAGER_ROLE
+     * @param am The AccessManager instance
+     * @param hookAddr The AlphixETH hook address
      */
-    function _setupYieldManagerRole(address yieldManagerAddr, AccessManager am, address payable logicAddr) internal {
+    function _setupYieldManagerRole(address yieldManagerAddr, AccessManager am, address hookAddr) internal {
         // Grant yield manager role
         am.grantRole(YIELD_MANAGER_ROLE, yieldManagerAddr, 0);
 
-        // Assign yield manager role to specific functions on AlphixLogicETH
-        bytes4[] memory yieldManagerSelectors = new bytes4[](4);
-        yieldManagerSelectors[0] = AlphixLogicETH(logicAddr).setYieldSource.selector;
-        yieldManagerSelectors[1] = AlphixLogicETH(logicAddr).setTickRange.selector;
-        yieldManagerSelectors[2] = AlphixLogicETH(logicAddr).setYieldTaxPips.selector;
-        yieldManagerSelectors[3] = AlphixLogicETH(logicAddr).setYieldTreasury.selector;
-        am.setTargetFunctionRole(logicAddr, yieldManagerSelectors, YIELD_MANAGER_ROLE);
+        // Assign yield manager role to specific functions on AlphixETH hook
+        bytes4[] memory yieldManagerSelectors = new bytes4[](2);
+        yieldManagerSelectors[0] = AlphixETH(payable(hookAddr)).setYieldSource.selector;
+        yieldManagerSelectors[1] = AlphixETH(payable(hookAddr)).setTickRange.selector;
+        am.setTargetFunctionRole(hookAddr, yieldManagerSelectors, YIELD_MANAGER_ROLE);
     }
 
     /**

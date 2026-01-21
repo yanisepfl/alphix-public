@@ -11,20 +11,15 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /**
  * @title ReHypothecationLib
  * @notice Library for managing rehypothecation of liquidity positions with ERC-4626 yield sources.
  * @dev Provides pure and internal functions for yield source interactions and JIT liquidity provisioning.
- *      This library is designed to be used by AlphixLogic to minimize contract size.
+ *      This library is designed to be used by Alphix to minimize contract size.
  *
- *      RATE-BASED YIELD TRACKING:
- *      Instead of tracking total assets, we track the exchange rate (assets per 1e18 shares).
- *      This simplifies yield calculation: yield = (currentRate - lastRate) * sharesOwned / 1e18
- *
- *      JIT LIQUIDITY PATTERN (following OpenZeppelin):
- *      - beforeSwap: Calculate liquidity from yield source balances, add to pool
+ *      JIT LIQUIDITY PATTERN (following OpenZeppelin flash accounting):
+ *      - beforeSwap: Calculate liquidity from yield source balances, add to pool (no settlement)
  *      - afterSwap: Remove all liquidity, resolve deltas with yield sources
  */
 library ReHypothecationLib {
@@ -42,7 +37,6 @@ library ReHypothecationLib {
     error InvalidYieldSource(address yieldSource);
     error ZeroShares();
     error InvalidTickRange(int24 tickLower, int24 tickUpper);
-    error InvalidYieldTaxPips(uint24 yieldTaxPips);
     error AssetMismatch(address expected, address actual);
 
     /* VALIDATION FUNCTIONS */
@@ -56,8 +50,7 @@ library ReHypothecationLib {
      * @return isValid True if the yield source is valid.
      */
     function isValidYieldSource(address yieldSource, Currency currency) internal view returns (bool isValid) {
-        if (yieldSource == address(0)) return false;
-        if (yieldSource.code.length == 0) return false;
+        if (yieldSource == address(0) || yieldSource.code.length == 0) return false;
 
         // Native ETH is not supported - ERC-4626 vaults only hold ERC20 tokens
         if (currency.isAddressZero()) return false;
@@ -82,14 +75,6 @@ library ReHypothecationLib {
         if (tickUpper > TickMath.MAX_TICK) revert InvalidTickRange(tickLower, tickUpper);
         if (tickLower % tickSpacing != 0) revert InvalidTickRange(tickLower, tickUpper);
         if (tickUpper % tickSpacing != 0) revert InvalidTickRange(tickLower, tickUpper);
-    }
-
-    /**
-     * @notice Validate yield tax is within bounds (uses Uniswap's MAX_LP_FEE = 1e6 = 100%).
-     * @param yieldTaxPips Yield tax in pips.
-     */
-    function validateYieldTaxPips(uint24 yieldTaxPips) internal pure {
-        if (yieldTaxPips > LPFeeLibrary.MAX_LP_FEE) revert InvalidYieldTaxPips(yieldTaxPips);
     }
 
     /* YIELD SOURCE OPERATIONS */
@@ -180,43 +165,6 @@ library ReHypothecationLib {
 
         // Deposit all assets into new yield source
         newSharesOwned = depositToYieldSource(newYieldSource, currency, assetsWithdrawn);
-    }
-
-    /* RATE-BASED YIELD CALCULATION */
-
-    /**
-     * @notice Calculate yield based on rate change.
-     * @dev yield = (currentRate - lastRate) * sharesOwned / shareUnit
-     *      If rate decreased (negative yield), returns 0.
-     * @param yieldSource The ERC-4626 vault address.
-     * @param sharesOwned The shares owned.
-     * @param lastRecordedRate The last recorded rate.
-     * @return yieldAmount The yield generated (0 if negative).
-     * @return currentRate The current rate.
-     */
-    function calculateYieldFromRate(address yieldSource, uint256 sharesOwned, uint256 lastRecordedRate)
-        internal
-        view
-        returns (uint256 yieldAmount, uint256 currentRate)
-    {
-        uint256 shareUnit;
-        (currentRate, shareUnit) = getCurrentRate(yieldSource);
-
-        if (currentRate > lastRecordedRate && sharesOwned > 0) {
-            uint256 rateIncrease = currentRate - lastRecordedRate;
-            yieldAmount = FullMath.mulDiv(rateIncrease, sharesOwned, shareUnit);
-        }
-    }
-
-    /**
-     * @notice Calculate tax amount from yield.
-     * @param yieldAmount The yield amount.
-     * @param yieldTaxPips Tax rate in pips (1e6 = 100%, same as Uniswap MAX_LP_FEE).
-     * @return taxAmount The tax amount.
-     */
-    function calculateTaxFromYield(uint256 yieldAmount, uint24 yieldTaxPips) internal pure returns (uint256 taxAmount) {
-        if (yieldAmount == 0 || yieldTaxPips == 0) return 0;
-        taxAmount = FullMath.mulDiv(yieldAmount, yieldTaxPips, LPFeeLibrary.MAX_LP_FEE);
     }
 
     /* JIT LIQUIDITY FUNCTIONS (following OpenZeppelin pattern) */

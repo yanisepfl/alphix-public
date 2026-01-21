@@ -33,7 +33,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         // Bound fee within valid range (use global bounds from contracts)
         fee = uint24(bound(fee, 1, LPFeeLibrary.MAX_LP_FEE));
 
-        (AlphixETH freshHook,) = _deployFreshAlphixEthStack();
+        AlphixETH freshHook = _deployFreshAlphixEthStack();
 
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
@@ -55,7 +55,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         // Bound ratio within valid range (1 wei to maxCurrentRatio)
         ratio = bound(ratio, 1, defaultPoolParams.maxCurrentRatio);
 
-        (AlphixETH freshHook,) = _deployFreshAlphixEthStack();
+        AlphixETH freshHook = _deployFreshAlphixEthStack();
 
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
@@ -73,7 +73,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         // Bound decimals to reasonable range
         decimals = uint8(bound(decimals, 6, 18));
 
-        (AlphixETH freshHook,) = _deployFreshAlphixEthStack();
+        AlphixETH freshHook = _deployFreshAlphixEthStack();
 
         Currency newToken = deployEthPoolToken(decimals);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
@@ -93,7 +93,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         // Bound tick spacing to valid range (must be positive and reasonable)
         tickSpacing = int24(bound(int256(tickSpacing), 1, 200));
 
-        (AlphixETH freshHook,) = _deployFreshAlphixEthStack();
+        AlphixETH freshHook = _deployFreshAlphixEthStack();
 
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = PoolKey({
@@ -118,28 +118,19 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
     /* ========================================================================== */
 
     /**
-     * @notice Fuzz test that receive() accepts ETH from any sender.
-     * @dev Simplified receive() for bytecode savings - accepts all ETH transfers.
+     * @notice Fuzz test that receive() rejects ETH from unauthorized senders.
+     * @dev Only PoolManager and ETH yield source are allowed to send ETH.
      */
-    function testFuzz_receive_acceptsFromAnySender(address sender) public {
+    function testFuzz_receive_rejectsUnauthorizedSenders(address sender) public {
         vm.assume(sender != address(0));
+        vm.assume(sender != address(poolManager));
         // Exclude precompiles and system addresses that might have special behavior
         vm.assume(uint160(sender) > 100);
 
         vm.deal(sender, 1 ether);
         vm.prank(sender);
         (bool success,) = address(hook).call{value: 1 ether}("");
-        assertTrue(success, "Should accept ETH from any sender (bytecode optimization)");
-    }
-
-    function testFuzz_receive_acceptsETHFromLogic(uint256 amount) public {
-        amount = bound(amount, 1, 100 ether);
-
-        vm.deal(address(logic), amount);
-        vm.prank(address(logic));
-        (bool success,) = address(hook).call{value: amount}("");
-        assertTrue(success);
-        assertEq(address(hook).balance, amount);
+        assertFalse(success, "Should reject ETH from unauthorized senders");
     }
 
     function testFuzz_receive_acceptsETHFromPoolManager(uint256 amount) public {
@@ -148,7 +139,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         vm.deal(address(poolManager), amount);
         vm.prank(address(poolManager));
         (bool success,) = address(hook).call{value: amount}("");
-        assertTrue(success);
+        assertTrue(success, "Should accept ETH from PoolManager");
         assertEq(address(hook).balance, amount);
     }
 
@@ -222,7 +213,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
             lowerSideFactor: 2e18
         });
 
-        (AlphixETH freshHook,) = _deployFreshAlphixEthStack();
+        AlphixETH freshHook = _deployFreshAlphixEthStack();
 
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
@@ -257,7 +248,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
             lowerSideFactor: lowerSideFactor
         });
 
-        (AlphixETH freshHook,) = _deployFreshAlphixEthStack();
+        AlphixETH freshHook = _deployFreshAlphixEthStack();
 
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);

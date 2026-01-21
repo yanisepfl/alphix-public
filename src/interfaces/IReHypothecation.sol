@@ -11,25 +11,20 @@ import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 
 /**
  * @title IReHypothecation.
- * @notice Interface for ReHypothecation functionality in AlphixLogic.
+ * @notice Interface for ReHypothecation functionality in Alphix.
  * @dev Defines the external API for yield source management with JIT liquidity provisioning.
  *      All management functions are gated by YIELD_MANAGER_ROLE via AccessManager.
  *
  *      SINGLE POOL DESIGN:
- *      - Each AlphixLogic instance serves exactly one pool (stored in _poolKey)
- *      - Shares are ERC20 tokens (AlphixLogic inherits ERC20Upgradeable)
+ *      - Each Alphix instance serves exactly one pool (stored in _poolKey)
+ *      - Shares are ERC20 tokens (Alphix inherits ERC20)
  *      - Use IERC20.totalSupply() and IERC20.balanceOf() for share accounting
  *
  *      JIT LIQUIDITY FLOW:
  *      1. Users deposit assets → assets go to ERC-4626 yield sources
- *      2. beforeSwap: withdraw from yield sources → add liquidity to pool
+ *      2. beforeSwap: compute JIT params → add liquidity to pool (no settlement)
  *      3. Swap executes using the liquidity
- *      4. afterSwap: remove liquidity from pool → deposit back to yield sources
- *
- *      YIELD TAX MODEL:
- *      - Track lastRecordedRate (value of 1 share in assets) per currency
- *      - On add/remove liquidity: calculate yield since last rate, accumulate tax
- *      - Accumulated tax is collected lazily via collectAccumulatedTax()
+ *      4. afterSwap: remove liquidity from pool → resolve deltas → deposit/withdraw yield sources
  */
 interface IReHypothecation is IERC20 {
     /* STRUCTS */
@@ -38,26 +33,20 @@ interface IReHypothecation is IERC20 {
      * @dev Configuration for the pool's rehypothecation settings.
      * @param tickLower Lower tick boundary for JIT liquidity position.
      * @param tickUpper Upper tick boundary for JIT liquidity position.
-     * @param yieldTaxPips Yield tax in pips (1e6 = 100%, like Uniswap fees).
      */
     struct ReHypothecationConfig {
         int24 tickLower;
         int24 tickUpper;
-        uint24 yieldTaxPips;
     }
 
     /**
      * @dev State for tracking yield source deposits per currency.
      * @param yieldSource The ERC-4626 vault address for this currency.
      * @param sharesOwned The amount of ERC-4626 vault shares owned by the hook.
-     * @param lastRecordedRate The last recorded exchange rate (assets per share unit).
-     * @param accumulatedTax Tax accumulated but not yet collected.
      */
     struct YieldSourceState {
         address yieldSource;
         uint256 sharesOwned;
-        uint256 lastRecordedRate;
-        uint256 accumulatedTax;
     }
 
     /* EVENTS */
@@ -71,26 +60,6 @@ interface IReHypothecation is IERC20 {
      * @dev Emitted when tick range is updated.
      */
     event TickRangeUpdated(int24 tickLower, int24 tickUpper);
-
-    /**
-     * @dev Emitted when yield tax is updated.
-     */
-    event YieldTaxUpdated(uint24 yieldTaxPips);
-
-    /**
-     * @dev Emitted when yield treasury is updated.
-     */
-    event YieldTreasuryUpdated(address oldTreasury, address newTreasury);
-
-    /**
-     * @dev Emitted when yield tax is accumulated (during add/remove liquidity).
-     */
-    event YieldTaxAccumulated(Currency indexed currency, uint256 yieldAmount, uint256 taxAmount);
-
-    /**
-     * @dev Emitted when accumulated tax is collected to treasury.
-     */
-    event AccumulatedTaxCollected(Currency indexed currency, uint256 amount);
 
     /**
      * @dev Emitted when rehypothecated liquidity is added.
@@ -128,11 +97,6 @@ interface IReHypothecation is IERC20 {
      * @dev Thrown when tick range is invalid.
      */
     error InvalidTickRange(int24 tickLower, int24 tickUpper);
-
-    /**
-     * @dev Thrown when yield tax exceeds maximum (1e6 pips = 100%).
-     */
-    error InvalidYieldTaxPips(uint24 yieldTaxPips);
 
     /**
      * @dev Thrown when msg.value doesn't match expected amount for native ETH.
@@ -173,20 +137,6 @@ interface IReHypothecation is IERC20 {
      */
     function setTickRange(int24 tickLower, int24 tickUpper) external;
 
-    /**
-     * @notice Set yield tax.
-     * @dev Gated by YIELD_MANAGER_ROLE via AccessManager.
-     * @param yieldTaxPips Yield tax in pips (max 1e6 = 100%).
-     */
-    function setYieldTaxPips(uint24 yieldTaxPips) external;
-
-    /**
-     * @notice Set the treasury address for yield tax collection.
-     * @dev Gated by YIELD_MANAGER_ROLE via AccessManager.
-     * @param treasury The new treasury address.
-     */
-    function setYieldTreasury(address treasury) external;
-
     /* VIEW FUNCTIONS */
 
     /**
@@ -200,7 +150,7 @@ interface IReHypothecation is IERC20 {
     function getCurrencyYieldSource(Currency currency) external view returns (address yieldSource);
 
     /**
-     * @notice Get the amount of assets in the yield source for a currency (excluding accumulated tax).
+     * @notice Get the amount of assets in the yield source for a currency.
      */
     function getAmountInYieldSource(Currency currency) external view returns (uint256 amount);
 
@@ -208,16 +158,6 @@ interface IReHypothecation is IERC20 {
      * @notice Get the rehypothecation configuration.
      */
     function getReHypothecationConfig() external view returns (ReHypothecationConfig memory config);
-
-    /**
-     * @notice Get the treasury address for yield tax collection.
-     */
-    function getYieldTreasury() external view returns (address treasury);
-
-    /**
-     * @notice Get the accumulated tax for a currency.
-     */
-    function getAccumulatedTax(Currency currency) external view returns (uint256 amount);
 
     /**
      * @notice Preview amounts required to add a given number of shares.
@@ -261,7 +201,6 @@ interface IReHypothecation is IERC20 {
     /**
      * @notice Add rehypothecated liquidity.
      * @dev Deposits assets into yield sources and mints shares to sender.
-     *      Calculates and accumulates any yield tax since last operation.
      *      Pool must be active (uses existing poolActivated modifier).
      * @param shares Number of shares to mint.
      * @return delta Balance delta representing assets deposited.
@@ -271,18 +210,9 @@ interface IReHypothecation is IERC20 {
     /**
      * @notice Remove rehypothecated liquidity.
      * @dev Burns shares and withdraws assets from yield sources to sender.
-     *      Calculates and accumulates any yield tax since last operation.
      *      Pool must be active (uses existing poolActivated modifier).
      * @param shares Number of shares to burn.
      * @return delta Balance delta representing assets withdrawn.
      */
     function removeReHypothecatedLiquidity(uint256 shares) external returns (BalanceDelta delta);
-
-    /**
-     * @notice Collect accumulated tax to the treasury.
-     * @dev Permissionless. Withdraws accumulated tax from yield sources and sends to treasury.
-     * @return collected0 Amount collected for currency0.
-     * @return collected1 Amount collected for currency1.
-     */
-    function collectAccumulatedTax() external returns (uint256 collected0, uint256 collected1);
 }

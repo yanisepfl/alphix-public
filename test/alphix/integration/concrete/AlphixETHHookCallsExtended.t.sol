@@ -267,48 +267,6 @@ contract AlphixETHHookCallsExtendedTest is BaseAlphixETHTest {
     }
 
     /* ========================================================================== */
-    /*                           DEACTIVATED POOL TESTS                           */
-    /* ========================================================================== */
-
-    function test_swap_revertsWhenPoolDeactivated() public {
-        vm.prank(owner);
-        hook.deactivatePool();
-
-        vm.startPrank(alice);
-        vm.expectRevert();
-        swapRouter.swapExactTokensForTokens{value: 1 ether}({
-            amountIn: 1 ether,
-            amountOutMin: 0,
-            zeroForOne: true,
-            poolKey: key,
-            hookData: Constants.ZERO_BYTES,
-            receiver: alice,
-            deadline: block.timestamp + 100
-        });
-        vm.stopPrank();
-    }
-
-    function test_swap_resumesAfterReactivation() public {
-        vm.prank(owner);
-        hook.deactivatePool();
-
-        vm.prank(owner);
-        hook.activatePool();
-
-        vm.startPrank(alice);
-        swapRouter.swapExactTokensForTokens{value: 1 ether}({
-            amountIn: 1 ether,
-            amountOutMin: 0,
-            zeroForOne: true,
-            poolKey: key,
-            hookData: Constants.ZERO_BYTES,
-            receiver: alice,
-            deadline: block.timestamp + 100
-        });
-        vm.stopPrank();
-    }
-
-    /* ========================================================================== */
     /*                           FEE UPDATE TESTS                                 */
     /* ========================================================================== */
 
@@ -362,14 +320,14 @@ contract AlphixETHHookCallsExtendedTest is BaseAlphixETHTest {
     /* ========================================================================== */
 
     /**
-     * @notice Test receive() accepts ETH from any sender.
-     * @dev Simplified receive() for bytecode savings - accepts all ETH transfers.
+     * @notice Test receive() rejects ETH from unauthorized senders.
+     * @dev AlphixETH only accepts ETH from PoolManager during JIT settlement.
      */
-    function test_receive_acceptsFromRandom() public {
+    function test_receive_rejectsFromRandom() public {
         vm.deal(alice, 1 ether);
         vm.prank(alice);
         (bool success,) = address(hook).call{value: 1 ether}("");
-        assertTrue(success, "Should accept from any sender (bytecode optimization)");
+        assertFalse(success, "Should reject from non-PoolManager sender");
     }
 
     function test_receive_acceptsFromPoolManager() public {
@@ -377,13 +335,5 @@ contract AlphixETHHookCallsExtendedTest is BaseAlphixETHTest {
         vm.prank(address(poolManager));
         (bool success,) = address(hook).call{value: 1 ether}("");
         assertTrue(success, "Should accept from PoolManager");
-    }
-
-    function test_receive_acceptsFromLogic() public {
-        address logicAddr = hook.getLogic();
-        vm.deal(logicAddr, 1 ether);
-        vm.prank(logicAddr);
-        (bool success,) = address(hook).call{value: 1 ether}("");
-        assertTrue(success, "Should accept from Logic");
     }
 }

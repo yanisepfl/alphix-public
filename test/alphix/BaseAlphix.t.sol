@@ -25,22 +25,19 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* OZ IMPORTS */
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /* LOCAL IMPORTS */
 import {EasyPosm} from "../utils/libraries/EasyPosm.sol";
 import {Deployers} from "../utils/Deployers.sol";
 import {Alphix} from "../../src/Alphix.sol";
-import {AlphixLogic} from "../../src/AlphixLogic.sol";
-import {Registry} from "../../src/Registry.sol";
-import {IAlphixLogic} from "../../src/interfaces/IAlphixLogic.sol";
 import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
 
 /**
  * @title BaseAlphixTest
  * @author Alphix
  * @notice Base test contract for Alphix following Uniswap v4-template pattern
- * @dev Provides common setup and helper functions for all Alphix tests
+ * @dev Provides common setup and helper functions for all Alphix tests.
+ *      Updated for simplified architecture: no AlphixLogic, no Registry, no proxy.
  */
 abstract contract BaseAlphixTest is Test, Deployers {
     using EasyPosm for IPositionManager;
@@ -75,7 +72,6 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
     uint64 constant FEE_POKER_ROLE = 1;
-    uint64 constant REGISTRAR_ROLE = 2;
     uint64 constant YIELD_MANAGER_ROLE = 3;
 
     // Optional: derived safe cap if tests ever want to override logic default
@@ -95,11 +91,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
 
     // Alphix contracts (default stack wired in setUp)
     AccessManager public accessManager;
-    Registry public registry;
     Alphix public hook;
-    AlphixLogic public logicImplementation;
-    ERC1967Proxy public logicProxy;
-    IAlphixLogic public logic;
 
     // Default test tokens and pool
     Currency public currency0;
@@ -139,9 +131,8 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Setup default pool params
         _initializeDefaultPoolParams();
 
-        // Deploy a default Alphix Infrastructure (AccessManager, Registry, Hook, Logic)
-        (accessManager, registry, hook, logicImplementation, logicProxy, logic) =
-            _deployAlphixInfrastructure(poolManager, owner);
+        // Deploy a default Alphix Infrastructure (AccessManager + Hook)
+        (accessManager, hook) = _deployAlphixInfrastructure(poolManager, owner);
 
         // Setup default tokens and pool (18 decimals)
         (currency0, currency1) = deployCurrencyPairWithDecimals(18, 18);
@@ -186,37 +177,19 @@ abstract contract BaseAlphixTest is Test, Deployers {
     /**
      * @notice Deploys a fresh Alphix Infrastructure
      * @param pm The pool manager to wire into the hook
-     * @param alphixOwner The owner of the hook and logic proxy
+     * @param alphixOwner The owner of the hook
      * @return am AccessManager instance
-     * @return reg Registry instance
      * @return newHook Alphix hook
-     * @return impl AlphixLogic implementation
-     * @return proxy ERC1967 proxy pointing to AlphixLogic
-     * @return newLogic IAlphixLogic interface for the proxy
      */
     function _deployAlphixInfrastructure(IPoolManager pm, address alphixOwner)
         internal
-        returns (
-            AccessManager am,
-            Registry reg,
-            Alphix newHook,
-            AlphixLogic impl,
-            ERC1967Proxy proxy,
-            IAlphixLogic newLogic
-        )
+        returns (AccessManager am, Alphix newHook)
     {
-        // AccessManager + Registry
+        // AccessManager
         am = new AccessManager(alphixOwner);
-        reg = new Registry(address(am));
 
-        // Deploy Alphix Hook (CREATE2, + constructor pauses)
-        newHook = _deployAlphixHook(pm, alphixOwner, am, reg);
-
-        // Logic implementation + proxy (initialize sets per-type params and default global max adj rate)
-        (impl, proxy, newLogic) = _deployAlphixLogic(alphixOwner, address(newHook), address(am));
-
-        // Finalize Hook initialization (unpauses)
-        newHook.initialize(address(newLogic));
+        // Deploy Alphix Hook (CREATE2)
+        newHook = _deployAlphixHook(pm, alphixOwner, am);
     }
 
     /**
@@ -224,87 +197,50 @@ abstract contract BaseAlphixTest is Test, Deployers {
      * @param pm The pool manager to wire into the hook
      * @param alphixOwner The owner of the hook
      * @param am The AccessManager instance
-     * @param reg The Registry instance
      * @return newHook The deployed hook
      */
-    function _deployAlphixHook(IPoolManager pm, address alphixOwner, AccessManager am, Registry reg)
+    function _deployAlphixHook(IPoolManager pm, address alphixOwner, AccessManager am)
         internal
         returns (Alphix newHook)
     {
         address hookAddr = _computeNextHookAddress();
-        _setupAccessManagerRoles(hookAddr, am, reg);
-        bytes memory ctor = abi.encode(pm, alphixOwner, address(am), address(reg));
+        _setupAccessManagerRoles(hookAddr, am);
+        bytes memory ctor = abi.encode(pm, alphixOwner, address(am), "Alphix LP Shares", "ALP");
         deployCodeTo("src/Alphix.sol:Alphix", ctor, hookAddr);
         newHook = Alphix(hookAddr);
     }
 
     /**
-     * @notice Deploy Alphix Logic
-     * @dev Deploys implementation and proxy and initializes it with provided owner, hook, and accessManager.
-     *      Pool params are now passed at pool activation via initializePool(), not at AlphixLogic deployment.
-     * @param alphixOwner The logic admin
-     * @param hookAddr The hook address to wire
-     * @param accessManagerAddr The AccessManager address for YIELD_MANAGER_ROLE gating
-     * @return impl AlphixLogic implementation
-     * @return proxy ERC1967Proxy instance
-     * @return newLogic IAlphixLogic interface
-     */
-    function _deployAlphixLogic(address alphixOwner, address hookAddr, address accessManagerAddr)
-        internal
-        returns (AlphixLogic impl, ERC1967Proxy proxy, IAlphixLogic newLogic)
-    {
-        impl = new AlphixLogic();
-
-        // AlphixLogic.initialize(owner, hook, accessManager, name, symbol)
-        bytes memory initData =
-            abi.encodeCall(impl.initialize, (alphixOwner, hookAddr, accessManagerAddr, "Alphix LP Shares", "ALP"));
-
-        proxy = new ERC1967Proxy(address(impl), initData);
-        newLogic = IAlphixLogic(address(proxy));
-    }
-
-    /**
-     * @notice Deploy a fresh Alphix infrastructure (Hook + Logic) without initializing a pool.
+     * @notice Deploy a fresh Alphix infrastructure without initializing a pool.
      * @dev Used by tests that need to test pool initialization on a clean hook.
-     *      Each call deploys a completely fresh AccessManager, Registry, Hook, and Logic.
      *      Automatically pranks as owner during deployment.
      * @return freshHook The new hook
-     * @return freshLogic The new logic interface
      */
-    function _deployFreshAlphixStack() internal returns (Alphix freshHook, IAlphixLogic freshLogic) {
+    function _deployFreshAlphixStack() internal returns (Alphix freshHook) {
         // Deploy fresh infrastructure (must be as owner for AccessManager operations)
         vm.startPrank(owner);
-        (,, Alphix newHook,,, IAlphixLogic newLogic) = _deployAlphixInfrastructure(poolManager, owner);
+        (, Alphix newHook) = _deployAlphixInfrastructure(poolManager, owner);
         vm.stopPrank();
 
         freshHook = newHook;
-        freshLogic = newLogic;
     }
 
     /**
-     * @notice Deploy a fresh Alphix infrastructure (Hook + Logic) without initializing a pool,
+     * @notice Deploy a fresh Alphix infrastructure without initializing a pool,
      *         returning also the AccessManager for role management.
      * @dev Used by tests that need access to the AccessManager for role manipulation.
      *      Automatically pranks as owner during deployment.
      * @return freshHook The new hook
-     * @return freshLogic The new logic interface
      * @return freshAccessManager The new AccessManager for this hook
-     * @return freshRegistry The new Registry for this hook
      */
-    function _deployFreshAlphixStackFull()
-        internal
-        returns (Alphix freshHook, IAlphixLogic freshLogic, AccessManager freshAccessManager, Registry freshRegistry)
-    {
+    function _deployFreshAlphixStackFull() internal returns (Alphix freshHook, AccessManager freshAccessManager) {
         // Deploy fresh infrastructure (must be as owner for AccessManager operations)
         vm.startPrank(owner);
-        (AccessManager freshAm, Registry freshReg, Alphix newHook,,, IAlphixLogic newLogic) =
-            _deployAlphixInfrastructure(poolManager, owner);
+        (AccessManager freshAm, Alphix newHook) = _deployAlphixInfrastructure(poolManager, owner);
         vm.stopPrank();
 
         freshHook = newHook;
-        freshLogic = newLogic;
         freshAccessManager = freshAm;
-        freshRegistry = freshReg;
     }
 
     /**
@@ -489,39 +425,21 @@ abstract contract BaseAlphixTest is Test, Deployers {
      * @dev Encodes v4 hook permissions into the low bits and namespaces the high bits to avoid collisions
      */
     function _computeNextHookAddress() internal returns (address) {
+        // Only set flags for enabled hooks - must match getHookPermissions()
         // forge-lint: disable-next-line(unsafe-typecast)
-        uint160 flags = uint160(
-            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
-                | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-                | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-                | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_ADD_LIQUIDITY_RETURNS_DELTA_FLAG
-                | Hooks.AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG
-        );
+        uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG);
         // forge-lint: disable-next-line(unsafe-typecast)
         uint160 ns = uint160(hookNamespace++) << 144;
         return address(flags ^ ns);
     }
 
     /**
-     * @notice Sets up AccessManager roles for the registry and hook
-     * @dev Grants registrar role to Hook and poker role to owner, sets function-level permissions
+     * @notice Sets up AccessManager roles for the hook
+     * @dev Grants poker role to owner, sets function-level permissions
      */
-    function _setupAccessManagerRoles(address hookAddr, AccessManager am, Registry reg) internal {
-        // Grant registrar role to hook
-        am.grantRole(REGISTRAR_ROLE, hookAddr, 0);
-
+    function _setupAccessManagerRoles(address hookAddr, AccessManager am) internal {
         // Grant poker role to owner (by default, tests can override)
         am.grantRole(FEE_POKER_ROLE, owner, 0);
-
-        // Assign role to specific functions on Registry
-        bytes4[] memory contractSelectors = new bytes4[](1);
-        contractSelectors[0] = reg.registerContract.selector;
-        am.setTargetFunctionRole(address(reg), contractSelectors, REGISTRAR_ROLE);
-
-        bytes4[] memory poolSelectors = new bytes4[](1);
-        poolSelectors[0] = reg.registerPool.selector;
-        am.setTargetFunctionRole(address(reg), poolSelectors, REGISTRAR_ROLE);
 
         // Assign poker role to poke function on Hook
         bytes4[] memory pokeSelectors = new bytes4[](1);
@@ -531,23 +449,21 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
-     * @notice Configure YIELD_MANAGER_ROLE for AlphixLogic
+     * @notice Configure YIELD_MANAGER_ROLE for Alphix hook
      * @dev Grants the role to the specified address and sets function-level permissions
      * @param yieldManagerAddr The address to grant YIELD_MANAGER_ROLE
      * @param am The AccessManager instance
-     * @param logicAddr The AlphixLogic proxy address
+     * @param hookAddr The Alphix hook address
      */
-    function _setupYieldManagerRole(address yieldManagerAddr, AccessManager am, address logicAddr) internal {
+    function _setupYieldManagerRole(address yieldManagerAddr, AccessManager am, address hookAddr) internal {
         // Grant yield manager role
         am.grantRole(YIELD_MANAGER_ROLE, yieldManagerAddr, 0);
 
-        // Assign yield manager role to specific functions on AlphixLogic
-        bytes4[] memory yieldManagerSelectors = new bytes4[](4);
-        yieldManagerSelectors[0] = AlphixLogic(logicAddr).setYieldSource.selector;
-        yieldManagerSelectors[1] = AlphixLogic(logicAddr).setTickRange.selector;
-        yieldManagerSelectors[2] = AlphixLogic(logicAddr).setYieldTaxPips.selector;
-        yieldManagerSelectors[3] = AlphixLogic(logicAddr).setYieldTreasury.selector;
-        am.setTargetFunctionRole(logicAddr, yieldManagerSelectors, YIELD_MANAGER_ROLE);
+        // Assign yield manager role to specific functions on Alphix hook
+        bytes4[] memory yieldManagerSelectors = new bytes4[](2);
+        yieldManagerSelectors[0] = Alphix(hookAddr).setYieldSource.selector;
+        yieldManagerSelectors[1] = Alphix(hookAddr).setTickRange.selector;
+        am.setTargetFunctionRole(hookAddr, yieldManagerSelectors, YIELD_MANAGER_ROLE);
     }
 
     /**

@@ -16,7 +16,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
+import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 
@@ -120,8 +120,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         uint256 aliceTokenId = _addLiquidityForUser(alice, testKey, minTick, maxTick, initialLiquidity);
         vm.stopPrank();
 
-        logic.getPoolConfig(); // Assert pool is configured
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        hook.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         vm.prank(owner);
@@ -148,7 +148,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
 
         assertGe(feeAfterRecovery, params.minFee, "Fee bounded after recovery");
         assertLe(feeAfterRecovery, params.maxFee, "Fee bounded after recovery");
-        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig();
+        IAlphix.PoolConfig memory poolConfigAfter = hook.getPoolConfig();
         assertTrue(poolConfigAfter.isConfigured, "Pool remains configured");
     }
 
@@ -178,8 +178,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         _addLiquidityForUser(alice, testKey, minTick, maxTick, baseLiquidity);
         vm.stopPrank();
 
-        logic.getPoolConfig(); // Assert pool is configured
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        hook.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
         // Intentionally not asserting pre/post fee direction; fees are bounded and adaptive
@@ -240,8 +240,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig();
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        IAlphix.PoolConfig memory poolConfig = hook.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         uint24 previousFee;
         (,,, previousFee) = poolManager.getSlot0(testPoolId);
@@ -298,8 +298,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig();
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        IAlphix.PoolConfig memory poolConfig = hook.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         vm.warp(block.timestamp + params.minPeriod + 1);
         vm.prank(owner);
@@ -355,8 +355,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        IAlphixLogic.PoolConfig memory poolConfig = logic.getPoolConfig();
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        IAlphix.PoolConfig memory poolConfig = hook.getPoolConfig();
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         uint256 upperBound =
             poolConfig.initialTargetRatio + (poolConfig.initialTargetRatio * params.ratioTolerance / 1e18);
@@ -437,8 +437,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         _addLiquidityForUser(alice, testKey, minTick, maxTick, normalLiquidity);
         vm.stopPrank();
 
-        logic.getPoolConfig(); // Assert pool is configured
-        DynamicFeeLib.PoolParams memory params = logic.getPoolParams();
+        hook.getPoolConfig(); // Assert pool is configured
+        DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         vm.warp(block.timestamp + 7 days);
         vm.prank(owner);
@@ -486,7 +486,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
             "System should respond to crisis with fee changes while staying bounded"
         );
 
-        IAlphixLogic.PoolConfig memory poolConfigAfter = logic.getPoolConfig();
+        IAlphix.PoolConfig memory poolConfigAfter = hook.getPoolConfig();
         assertTrue(poolConfigAfter.isConfigured, "Pool operational after black swan");
     }
 
@@ -602,7 +602,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory poolParams = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory poolParams = hook.getPoolParams();
         // Guard against tiny-liquidity rounding: ensure liquidityPerStep is at least 1
         uint128 liquidityPerStep = params.initialLiquidity / params.drainSteps;
         if (liquidityPerStep == 0) liquidityPerStep = 1;
@@ -652,7 +652,7 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        DynamicFeeLib.PoolParams memory poolParams = logic.getPoolParams();
+        DynamicFeeLib.PoolParams memory poolParams = hook.getPoolParams();
         vm.warp(block.timestamp + poolParams.minPeriod + 1);
         vm.prank(owner);
         hook.poke(5e17);

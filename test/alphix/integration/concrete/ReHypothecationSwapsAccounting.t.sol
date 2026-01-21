@@ -22,7 +22,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
 import {MockYieldVault} from "../../../utils/mocks/MockYieldVault.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 
@@ -57,8 +57,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         uint256 vault1Balance;
         uint256 poolManagerToken0;
         uint256 poolManagerToken1;
-        uint256 logicToken0;
-        uint256 logicToken1;
+        uint256 hookToken0;
+        uint256 hookToken1;
         uint256 treasuryToken0;
         uint256 treasuryToken1;
         uint256 totalSupplyShares;
@@ -78,7 +78,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(bob, INITIAL_TOKEN_AMOUNT * 10);
 
         vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, address(logic));
+        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
         vault0 = new MockYieldVault(IERC20(Currency.unwrap(currency0)));
@@ -104,9 +104,9 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         // Take snapshot before swap
         AccountingSnapshot memory before = _takeSnapshot();
         uint256 totalToken0Before = before.aliceToken0 + before.bobToken0 + before.vault0Balance
-            + before.poolManagerToken0 + before.logicToken0 + before.treasuryToken0;
+            + before.poolManagerToken0 + before.hookToken0 + before.treasuryToken0;
         uint256 totalToken1Before = before.aliceToken1 + before.bobToken1 + before.vault1Balance
-            + before.poolManagerToken1 + before.logicToken1 + before.treasuryToken1;
+            + before.poolManagerToken1 + before.hookToken1 + before.treasuryToken1;
 
         // Bob swaps token0 -> token1
         uint256 swapAmount = 10e18;
@@ -126,9 +126,9 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         // Take snapshot after swap
         AccountingSnapshot memory after_ = _takeSnapshot();
         uint256 totalToken0After = after_.aliceToken0 + after_.bobToken0 + after_.vault0Balance
-            + after_.poolManagerToken0 + after_.logicToken0 + after_.treasuryToken0;
+            + after_.poolManagerToken0 + after_.hookToken0 + after_.treasuryToken0;
         uint256 totalToken1After = after_.aliceToken1 + after_.bobToken1 + after_.vault1Balance
-            + after_.poolManagerToken1 + after_.logicToken1 + after_.treasuryToken1;
+            + after_.poolManagerToken1 + after_.hookToken1 + after_.treasuryToken1;
 
         // Total token0 should be conserved (no creation/destruction)
         assertEq(totalToken0Before, totalToken0After, "Token0 total should be conserved");
@@ -146,13 +146,13 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         uint256 sharesToMint = 100e18;
         (uint256 expectedAmount0, uint256 expectedAmount1) =
-            AlphixLogic(address(logic)).previewAddReHypothecatedLiquidity(sharesToMint);
+            Alphix(address(hook)).previewAddReHypothecatedLiquidity(sharesToMint);
 
         _addReHypoLiquidity(alice, sharesToMint);
 
         // Preview withdrawal should return approximately what was deposited
         (uint256 previewAmount0, uint256 previewAmount1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(sharesToMint);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(sharesToMint);
 
         // Allow 0.1% tolerance for rounding
         assertApproxEqRel(previewAmount0, expectedAmount0, 1e15, "Token0 should be retrievable");
@@ -169,11 +169,11 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         _addReHypoLiquidity(alice, 100e18);
 
         (uint256 previewBefore0, uint256 previewBefore1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Simulate 10% yield on both vaults
-        uint256 yield0 = AlphixLogic(address(logic)).getAmountInYieldSource(currency0) / 10;
-        uint256 yield1 = AlphixLogic(address(logic)).getAmountInYieldSource(currency1) / 10;
+        uint256 yield0 = Alphix(address(hook)).getAmountInYieldSource(currency0) / 10;
+        uint256 yield1 = Alphix(address(hook)).getAmountInYieldSource(currency1) / 10;
 
         vm.startPrank(owner);
         MockERC20(Currency.unwrap(currency0)).mint(owner, yield0);
@@ -186,19 +186,12 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         vm.stopPrank();
 
         (uint256 previewAfter0, uint256 previewAfter1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
-        // After yield, withdrawal preview should show more (minus 10% tax)
-        // Expected: original + (yield * 90%) because 10% goes to tax
-        uint256 expectedIncrease0 = (yield0 * 90) / 100;
-        uint256 expectedIncrease1 = (yield1 * 90) / 100;
-
-        assertApproxEqRel(
-            previewAfter0, previewBefore0 + expectedIncrease0, 1e16, "Token0 value should increase by yield minus tax"
-        );
-        assertApproxEqRel(
-            previewAfter1, previewBefore1 + expectedIncrease1, 1e16, "Token1 value should increase by yield minus tax"
-        );
+        // After yield, withdrawal preview should show more
+        // Expected: original + yield (no tax deduction)
+        assertApproxEqRel(previewAfter0, previewBefore0 + yield0, 1e16, "Token0 value should increase by yield");
+        assertApproxEqRel(previewAfter1, previewBefore1 + yield1, 1e16, "Token1 value should increase by yield");
     }
 
     /**
@@ -211,57 +204,19 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         _addReHypoLiquidity(alice, 100e18);
 
         (uint256 previewBefore0, uint256 previewBefore1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Simulate 20% loss on currency0
-        uint256 amountInVault0 = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 amountInVault0 = Alphix(address(hook)).getAmountInYieldSource(currency0);
         vault0.simulateLoss(amountInVault0 / 5);
 
         (uint256 previewAfter0, uint256 previewAfter1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Token0 should show ~20% loss
         assertApproxEqRel(previewAfter0, (previewBefore0 * 80) / 100, 1e16, "Token0 should show 20% loss");
         // Token1 should be unchanged
         assertApproxEqRel(previewAfter1, previewBefore1, 1e15, "Token1 should be unchanged");
-    }
-
-    /**
-     * @notice Test exact tax calculation
-     * @dev Tax should be exactly (yield * taxPips / 1_000_000)
-     */
-    function test_accounting_exactTaxCalculation() public {
-        _addRegularLp(1000e18);
-        _configureReHypo();
-        _addReHypoLiquidity(alice, 100e18);
-
-        // Get current tax rate
-        uint24 taxPips = AlphixLogic(address(logic)).getReHypothecationConfig().yieldTaxPips;
-
-        // Simulate yield
-        uint256 yield0 = 100e18;
-        uint256 yield1 = 200e18;
-
-        vm.startPrank(owner);
-        MockERC20(Currency.unwrap(currency0)).mint(owner, yield0);
-        MockERC20(Currency.unwrap(currency0)).approve(address(vault0), yield0);
-        vault0.simulateYield(yield0);
-
-        MockERC20(Currency.unwrap(currency1)).mint(owner, yield1);
-        MockERC20(Currency.unwrap(currency1)).approve(address(vault1), yield1);
-        vault1.simulateYield(yield1);
-        vm.stopPrank();
-
-        // Collect tax
-        (uint256 collected0, uint256 collected1) = AlphixLogic(address(logic)).collectAccumulatedTax();
-
-        // Calculate expected tax
-        uint256 expectedTax0 = (yield0 * taxPips) / 1_000_000;
-        uint256 expectedTax1 = (yield1 * taxPips) / 1_000_000;
-
-        // Allow 1 wei tolerance for rounding
-        assertApproxEqAbs(collected0, expectedTax0, 1, "Tax0 should be exact");
-        assertApproxEqAbs(collected1, expectedTax1, 1, "Tax1 should be exact");
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -277,8 +232,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         _configureReHypo();
         _addReHypoLiquidity(alice, 100e18);
 
-        uint256 yieldSource0Before = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1Before = AlphixLogic(address(logic)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0Before = Alphix(address(hook)).getAmountInYieldSource(currency0);
+        uint256 yieldSource1Before = Alphix(address(hook)).getAmountInYieldSource(currency1);
 
         // Swap token0 -> token1
         uint256 swapAmount = 10e18;
@@ -295,8 +250,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         });
         vm.stopPrank();
 
-        uint256 yieldSource0After = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1After = AlphixLogic(address(logic)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0After = Alphix(address(hook)).getAmountInYieldSource(currency0);
+        uint256 yieldSource1After = Alphix(address(hook)).getAmountInYieldSource(currency1);
 
         // For zeroForOne swap: token0 in, token1 out
         // JIT adds liquidity, swap happens, JIT removes
@@ -316,7 +271,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         // Test with small rehypo position
         _addReHypoLiquidity(alice, 10e18);
 
-        uint256 yieldSource0BeforeSmall = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 yieldSource0BeforeSmall = Alphix(address(hook)).getAmountInYieldSource(currency0);
 
         uint256 swapAmount = 10e18;
         vm.startPrank(bob);
@@ -332,17 +287,17 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         });
         vm.stopPrank();
 
-        uint256 yieldSource0AfterSmall = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 yieldSource0AfterSmall = Alphix(address(hook)).getAmountInYieldSource(currency0);
         uint256 smallPositionGain = yieldSource0AfterSmall - yieldSource0BeforeSmall;
 
         // Remove small position
         vm.prank(alice);
-        AlphixLogic(address(logic)).removeReHypothecatedLiquidity(10e18);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(10e18);
 
         // Add larger rehypo position (10x)
         _addReHypoLiquidity(alice, 100e18);
 
-        uint256 yieldSource0BeforeLarge = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 yieldSource0BeforeLarge = Alphix(address(hook)).getAmountInYieldSource(currency0);
 
         vm.startPrank(bob);
         MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
@@ -357,7 +312,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         });
         vm.stopPrank();
 
-        uint256 yieldSource0AfterLarge = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 yieldSource0AfterLarge = Alphix(address(hook)).getAmountInYieldSource(currency0);
         uint256 largePositionGain = yieldSource0AfterLarge - yieldSource0BeforeLarge;
 
         // Larger position should capture more of the swap
@@ -379,8 +334,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         _addReHypoLiquidity(alice, 500e18);
 
         // Track yield source balances
-        uint256 yieldSource0Before = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1Before = AlphixLogic(address(logic)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0Before = Alphix(address(hook)).getAmountInYieldSource(currency0);
+        uint256 yieldSource1Before = Alphix(address(hook)).getAmountInYieldSource(currency1);
 
         uint256 swapAmount = 50e18;
         uint256 bobToken1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(bob);
@@ -402,8 +357,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         uint256 outputReceived = bobToken1After - bobToken1Before;
 
         // Track yield source balance changes
-        uint256 yieldSource0After = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1After = AlphixLogic(address(logic)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0After = Alphix(address(hook)).getAmountInYieldSource(currency0);
+        uint256 yieldSource1After = Alphix(address(hook)).getAmountInYieldSource(currency1);
 
         // Verify swap happened
         assertGt(outputReceived, 0, "Should receive output from swap");
@@ -632,10 +587,10 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         AccountingSnapshot memory after_ = _takeSnapshot();
 
         // Total tokens should still be conserved
-        uint256 totalToken0Before = before.aliceToken0 + before.bobToken0 + before.vault0Balance
-            + before.poolManagerToken0 + before.logicToken0;
-        uint256 totalToken0After = after_.aliceToken0 + after_.bobToken0 + after_.vault0Balance
-            + after_.poolManagerToken0 + after_.logicToken0;
+        uint256 totalToken0Before =
+            before.aliceToken0 + before.bobToken0 + before.vault0Balance + before.poolManagerToken0 + before.hookToken0;
+        uint256 totalToken0After =
+            after_.aliceToken0 + after_.bobToken0 + after_.vault0Balance + after_.poolManagerToken0 + after_.hookToken0;
 
         assertEq(totalToken0Before, totalToken0After, "Token0 should be conserved after multiple swaps");
     }
@@ -652,11 +607,9 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         int24 narrowUpper = 100;
 
         vm.startPrank(yieldManager);
-        AlphixLogic(address(logic)).setTickRange(narrowLower, narrowUpper);
-        AlphixLogic(address(logic)).setYieldSource(currency0, address(vault0));
-        AlphixLogic(address(logic)).setYieldSource(currency1, address(vault1));
-        AlphixLogic(address(logic)).setYieldTaxPips(100_000);
-        AlphixLogic(address(logic)).setYieldTreasury(treasury);
+        Alphix(address(hook)).setTickRange(narrowLower, narrowUpper);
+        Alphix(address(hook)).setYieldSource(currency0, address(vault0));
+        Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();
 
         _addReHypoLiquidity(alice, 100e18);
@@ -708,14 +661,14 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         _addReHypoLiquidity(alice, 100e18);
 
         (uint256 previewBefore0, uint256 previewBefore1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Simulate 50% loss on vault0
-        uint256 amountInVault0 = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 amountInVault0 = Alphix(address(hook)).getAmountInYieldSource(currency0);
         vault0.simulateLoss(amountInVault0 / 2);
 
         (uint256 previewAfter0, uint256 previewAfter1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Token0 should show ~50% loss
         assertApproxEqRel(previewAfter0, previewBefore0 / 2, 1e16, "Token0 should show 50% loss");
@@ -724,7 +677,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // User should still be able to withdraw (even at a loss)
         vm.prank(alice);
-        AlphixLogic(address(logic)).removeReHypothecatedLiquidity(100e18);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(100e18);
 
         // Verify alice received tokens (reduced by loss)
         assertGt(MockERC20(Currency.unwrap(currency0)).balanceOf(alice), INITIAL_TOKEN_AMOUNT * 10 - previewBefore0);
@@ -771,11 +724,11 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // Alice withdraws all rehypo
         vm.prank(alice);
-        AlphixLogic(address(logic)).removeReHypothecatedLiquidity(100e18);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(100e18);
 
         // Verify yield sources are now empty
-        assertEq(AlphixLogic(address(logic)).getAmountInYieldSource(currency0), 0, "Vault0 should be empty");
-        assertEq(AlphixLogic(address(logic)).getAmountInYieldSource(currency1), 0, "Vault1 should be empty");
+        assertEq(Alphix(address(hook)).getAmountInYieldSource(currency0), 0, "Vault0 should be empty");
+        assertEq(Alphix(address(hook)).getAmountInYieldSource(currency1), 0, "Vault1 should be empty");
 
         // Swap should still work (uses regular LP)
         uint256 swapAmount = 10e18;
@@ -810,21 +763,20 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         _addReHypoLiquidity(alice, 100e18);
         _addReHypoLiquidity(bob, 50e18);
 
-        uint256 totalShares = AlphixLogic(address(logic)).totalSupply();
+        uint256 totalShares = Alphix(address(hook)).totalSupply();
         assertEq(totalShares, 150e18, "Total shares should be 150e18");
 
         // Alice's share proportion
-        uint256 aliceShares = AlphixLogic(address(logic)).balanceOf(alice);
-        uint256 bobShares = AlphixLogic(address(logic)).balanceOf(bob);
+        uint256 aliceShares = Alphix(address(hook)).balanceOf(alice);
+        uint256 bobShares = Alphix(address(hook)).balanceOf(bob);
 
         assertEq(aliceShares, 100e18, "Alice should have 100e18 shares");
         assertEq(bobShares, 50e18, "Bob should have 50e18 shares");
 
         // Both withdraw - verify proportional distribution
         (uint256 alicePreview0, uint256 alicePreview1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
-        (uint256 bobPreview0, uint256 bobPreview1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(50e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 bobPreview0, uint256 bobPreview1) = Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(50e18);
 
         // Alice should get 2x what Bob gets (100:50 ratio)
         assertApproxEqRel(alicePreview0, bobPreview0 * 2, 1e16, "Alice should get 2x token0");
@@ -850,19 +802,19 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // Record Alice's initial deposited value
         (uint256 aliceInitialValue0, uint256 aliceInitialValue1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         console2.log("=== PHASE 1: Alice deposits ===");
         console2.log("Alice initial value token0:", aliceInitialValue0);
         console2.log("Alice initial value token1:", aliceInitialValue1);
 
         // PHASE 2: 50% loss occurs on vault0
-        uint256 amountInVault0 = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 amountInVault0 = Alphix(address(hook)).getAmountInYieldSource(currency0);
         vault0.simulateLoss(amountInVault0 / 2); // 50% loss
 
         // Check Alice's value after loss
         (uint256 alicePostLossValue0, uint256 alicePostLossValue1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         console2.log("=== PHASE 2: After 50% loss ===");
         console2.log("Alice post-loss value token0:", alicePostLossValue0);
@@ -876,7 +828,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         // Bob should enter at the CURRENT (post-loss) share price
         // This means Bob deposits less tokens for same shares (since share price is lower)
         (uint256 bobRequiredAmount0, uint256 bobRequiredAmount1) =
-            AlphixLogic(address(logic)).previewAddReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewAddReHypothecatedLiquidity(100e18);
 
         console2.log("=== PHASE 3: Bob deposits after loss ===");
         console2.log("Bob required amount0:", bobRequiredAmount0);
@@ -890,9 +842,9 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // PHASE 4: Verify both can withdraw fairly
         (uint256 aliceFinalPreview0, uint256 aliceFinalPreview1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
         (uint256 bobFinalPreview0, uint256 bobFinalPreview1) =
-            AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+            Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         console2.log("=== PHASE 4: Final state ===");
         console2.log("Alice final preview0:", aliceFinalPreview0);
@@ -924,17 +876,17 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         _addReHypoLiquidity(bob, 100e18);
 
         // Record initial values (should be equal)
-        (uint256 aliceInitial0,) = AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
-        (uint256 bobInitial0,) = AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 aliceInitial0,) = Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 bobInitial0,) = Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
         assertApproxEqRel(aliceInitial0, bobInitial0, 1e15, "Initial values should match");
 
         // 30% loss occurs
-        uint256 amountInVault0 = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
+        uint256 amountInVault0 = Alphix(address(hook)).getAmountInYieldSource(currency0);
         vault0.simulateLoss((amountInVault0 * 30) / 100);
 
         // Both should see equal loss (proportional to shares)
-        (uint256 alicePostLoss0,) = AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
-        (uint256 bobPostLoss0,) = AlphixLogic(address(logic)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 alicePostLoss0,) = Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
+        (uint256 bobPostLoss0,) = Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(100e18);
 
         // Both should have ~30% less
         assertApproxEqRel(alicePostLoss0, (aliceInitial0 * 70) / 100, 2e16, "Alice should see 30% loss");
@@ -956,11 +908,9 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         int24 narrowUpper = 20;
 
         vm.startPrank(yieldManager);
-        AlphixLogic(address(logic)).setTickRange(narrowLower, narrowUpper);
-        AlphixLogic(address(logic)).setYieldSource(currency0, address(vault0));
-        AlphixLogic(address(logic)).setYieldSource(currency1, address(vault1));
-        AlphixLogic(address(logic)).setYieldTaxPips(100_000);
-        AlphixLogic(address(logic)).setYieldTreasury(treasury);
+        Alphix(address(hook)).setTickRange(narrowLower, narrowUpper);
+        Alphix(address(hook)).setYieldSource(currency0, address(vault0));
+        Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();
 
         _addReHypoLiquidity(alice, 100e18);
@@ -982,8 +932,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // Now price should be outside the narrow JIT range
         // Record yield source balances
-        uint256 yieldSource0Before = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1Before = AlphixLogic(address(logic)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0Before = Alphix(address(hook)).getAmountInYieldSource(currency0);
+        uint256 yieldSource1Before = Alphix(address(hook)).getAmountInYieldSource(currency1);
 
         console2.log("Yield source0 before second swap:", yieldSource0Before);
         console2.log("Yield source1 before second swap:", yieldSource1Before);
@@ -1003,8 +953,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         });
         vm.stopPrank();
 
-        uint256 yieldSource0After = AlphixLogic(address(logic)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1After = AlphixLogic(address(logic)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0After = Alphix(address(hook)).getAmountInYieldSource(currency0);
+        uint256 yieldSource1After = Alphix(address(hook)).getAmountInYieldSource(currency1);
 
         console2.log("Yield source0 after second swap:", yieldSource0After);
         console2.log("Yield source1 after second swap:", yieldSource1After);
@@ -1041,11 +991,11 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         snapshot.vault1Balance = MockERC20(Currency.unwrap(currency1)).balanceOf(address(vault1));
         snapshot.poolManagerToken0 = MockERC20(Currency.unwrap(currency0)).balanceOf(address(poolManager));
         snapshot.poolManagerToken1 = MockERC20(Currency.unwrap(currency1)).balanceOf(address(poolManager));
-        snapshot.logicToken0 = MockERC20(Currency.unwrap(currency0)).balanceOf(address(logic));
-        snapshot.logicToken1 = MockERC20(Currency.unwrap(currency1)).balanceOf(address(logic));
+        snapshot.hookToken0 = MockERC20(Currency.unwrap(currency0)).balanceOf(address(hook));
+        snapshot.hookToken1 = MockERC20(Currency.unwrap(currency1)).balanceOf(address(hook));
         snapshot.treasuryToken0 = MockERC20(Currency.unwrap(currency0)).balanceOf(treasury);
         snapshot.treasuryToken1 = MockERC20(Currency.unwrap(currency1)).balanceOf(treasury);
-        snapshot.totalSupplyShares = AlphixLogic(address(logic)).totalSupply();
+        snapshot.totalSupplyShares = Alphix(address(hook)).totalSupply();
     }
 
     function _addRegularLp(uint256 amount) internal {
@@ -1076,21 +1026,19 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
     function _configureReHypo() internal {
         vm.startPrank(yieldManager);
-        AlphixLogic(address(logic)).setTickRange(fullRangeLower, fullRangeUpper);
-        AlphixLogic(address(logic)).setYieldSource(currency0, address(vault0));
-        AlphixLogic(address(logic)).setYieldSource(currency1, address(vault1));
-        AlphixLogic(address(logic)).setYieldTaxPips(100_000); // 10%
-        AlphixLogic(address(logic)).setYieldTreasury(treasury);
+        Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
+        Alphix(address(hook)).setYieldSource(currency0, address(vault0));
+        Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();
     }
 
     function _addReHypoLiquidity(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = AlphixLogic(address(logic)).previewAddReHypothecatedLiquidity(shares);
+        (uint256 amount0, uint256 amount1) = Alphix(address(hook)).previewAddReHypothecatedLiquidity(shares);
 
         vm.startPrank(user);
-        MockERC20(Currency.unwrap(currency0)).approve(address(logic), amount0);
-        MockERC20(Currency.unwrap(currency1)).approve(address(logic), amount1);
-        AlphixLogic(address(logic)).addReHypothecatedLiquidity(shares);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
         vm.stopPrank();
     }
 

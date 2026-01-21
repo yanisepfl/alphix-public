@@ -24,7 +24,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {Alphix} from "../../../../src/Alphix.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
+import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 
@@ -40,7 +40,6 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
     // Core contracts
     Alphix public hook;
-    IAlphixLogic public logic;
     IPoolManager public poolManager;
     IPositionManager public positionManager;
     IUniswapV4Router04 public swapRouter;
@@ -86,7 +85,6 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
 
     constructor(
         Alphix _hook,
-        IAlphixLogic _logic,
         address _owner,
         address _user1,
         address _user2,
@@ -98,7 +96,6 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         Currency _currency1
     ) {
         hook = _hook;
-        logic = _logic;
         owner = _owner;
         user1 = _user1;
         user2 = _user2;
@@ -130,7 +127,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         poolKey.toId(); // Validate poolKey is valid
 
         // Check if pool is configured
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
+        IAlphix.PoolConfig memory config = hook.getPoolConfig();
         if (!config.isConfigured) return;
 
         // Conditionally warp time to test cooldown enforcement
@@ -155,7 +152,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
             if (newFee > ghostmaxFeeObserved) ghostmaxFeeObserved = newFee;
             if (newFee < ghostminFeeObserved) ghostminFeeObserved = newFee;
 
-            config = logic.getPoolConfig();
+            config = hook.getPoolConfig();
             ghostsumOfTargetRatios += config.initialTargetRatio;
         } catch {
             // Poke can fail for various valid reasons (cooldown, paused, zero ratio, etc.)
@@ -172,7 +169,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         PoolKey memory poolKey = pools[poolSeed % pools.length];
         poolKey.toId(); // Validate poolKey is valid
 
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
+        IAlphix.PoolConfig memory config = hook.getPoolConfig();
         if (!config.isConfigured) return;
 
         // Bound swap amount (0.01 to 100 tokens)
@@ -220,7 +217,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         PoolKey memory poolKey = pools[poolSeed % pools.length];
         PoolId poolId = poolKey.toId();
 
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
+        IAlphix.PoolConfig memory config = hook.getPoolConfig();
         if (!config.isConfigured) return;
 
         // Bound liquidity (1 to 1000 units)
@@ -293,7 +290,7 @@ contract AlphixInvariantHandler is CommonBase, StdCheats, StdUtils {
         PoolKey memory poolKey = pools[poolSeed % pools.length];
         PoolId poolId = poolKey.toId();
 
-        IAlphixLogic.PoolConfig memory config = logic.getPoolConfig();
+        IAlphix.PoolConfig memory config = hook.getPoolConfig();
         if (!config.isConfigured) return;
 
         // Select random actor
