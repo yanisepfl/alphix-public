@@ -408,6 +408,7 @@ contract Alphix is
         returns (BalanceDelta delta)
     {
         if (shares == 0) revert ZeroShares();
+        if (msg.value > 0) revert UnexpectedETH();
 
         // Calculate amounts with rounding up (protocol-favorable for deposits)
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForDeposit(shares);

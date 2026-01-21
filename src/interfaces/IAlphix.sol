@@ -142,6 +142,11 @@ interface IAlphix {
      */
     error InvalidCurrentRatio(uint256 ratio);
 
+    /**
+     * @dev Thrown when ETH is sent to a non-ETH pool.
+     */
+    error UnexpectedETH();
+
     /* ADMIN FUNCTIONS */
 
     /**
