@@ -85,6 +85,9 @@ contract SwapUniversalRouterScript is Script {
 
         envVar = string.concat("SWAP_MIN_OUTPUT_", cfg.network);
         cfg.minOutput = vm.envUint(envVar);
+        if (cfg.minOutput == 0) {
+            console.log("WARNING: SWAP_MIN_OUTPUT_%s is 0 - no slippage protection", cfg.network);
+        }
     }
 
     function _executeSwap(SwapConfig memory cfg) internal {

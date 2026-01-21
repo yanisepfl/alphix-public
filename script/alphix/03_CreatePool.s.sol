@@ -125,21 +125,30 @@ contract CreatePoolScript is Script {
         // forge-lint: disable-next-line(unsafe-typecast)
         cfg.tickSpacing = int24(uint24(rawTickSpacing));
 
-        // forge-lint: disable-next-line(unsafe-typecast)
-        cfg.sqrtPrice = uint160(vm.envUint(string.concat("SQRT_PRICE_", cfg.network)));
+        // sqrtPrice validation (must fit in uint160 and be within TickMath bounds)
+        uint256 rawSqrtPrice = vm.envUint(string.concat("SQRT_PRICE_", cfg.network));
+        require(rawSqrtPrice <= type(uint160).max, string.concat("SQRT_PRICE_", cfg.network, " exceeds uint160 max"));
+        require(
+            rawSqrtPrice >= TickMath.MIN_SQRT_PRICE && rawSqrtPrice <= TickMath.MAX_SQRT_PRICE,
+            string.concat("SQRT_PRICE_", cfg.network, " outside TickMath bounds")
+        );
+        cfg.sqrtPrice = uint160(rawSqrtPrice);
         cfg.amount0 = vm.envUint(string.concat("AMOUNT0_", cfg.network));
         cfg.amount1 = vm.envUint(string.concat("AMOUNT1_", cfg.network));
 
-        // Liquidity range validation (must fit in int24 after cast)
+        // Liquidity range validation (must be > 0 and fit in int24 after cast)
         uint256 rawLiquidityRange = vm.envUint(string.concat("LIQUIDITY_RANGE_", cfg.network));
+        require(rawLiquidityRange > 0, string.concat("LIQUIDITY_RANGE_", cfg.network, " must be > 0"));
         require(
             rawLiquidityRange <= uint256(uint24(type(int24).max)),
             string.concat("LIQUIDITY_RANGE_", cfg.network, " exceeds int24 max")
         );
         cfg.liquidityRange = rawLiquidityRange;
 
-        // forge-lint: disable-next-line(unsafe-typecast)
-        cfg.initialFee = uint24(vm.envUint(string.concat("INITIAL_FEE_", cfg.network)));
+        // initialFee validation (must fit in uint24)
+        uint256 rawInitialFee = vm.envUint(string.concat("INITIAL_FEE_", cfg.network));
+        require(rawInitialFee <= type(uint24).max, string.concat("INITIAL_FEE_", cfg.network, " exceeds uint24 max"));
+        cfg.initialFee = uint24(rawInitialFee);
         cfg.targetRatio = vm.envUint(string.concat("TARGET_RATIO_", cfg.network));
     }
 

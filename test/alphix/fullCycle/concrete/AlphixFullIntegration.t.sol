@@ -314,7 +314,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         }
 
         // Update fee to higher value
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg = hook.getPoolConfig();
+        assertTrue(poolCfg.isConfigured, "Pool should be configured before poke");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -415,7 +416,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 calculatedRatio = (totalVolume * 1e18) / totalLiquidity;
 
         // Apply the calculated ratio via poke
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg1 = hook.getPoolConfig();
+        assertTrue(poolCfg1.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -439,7 +441,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
      * @dev Simulates realistic LP behavior: early LPs vs late LPs, different amounts
      */
     function test_complex_LP_fee_distribution_different_timelines() public {
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg2 = hook.getPoolConfig();
+        assertTrue(poolCfg2.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         // === Week 1: Alice enters as early LP ===
@@ -549,7 +552,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Ratio = 200/200 = 1.0 = 100% (but will be capped)
         uint256 ratio = 1e18; // 100%
 
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg3 = hook.getPoolConfig();
+        assertTrue(poolCfg3.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -592,7 +596,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Phase 3: First fee adjustment based on initial volume
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg4 = hook.getPoolConfig();
+        assertTrue(poolCfg4.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -660,7 +665,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Phase 3: Admin responds with higher fee due to volatility
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg5 = hook.getPoolConfig();
+        assertTrue(poolCfg5.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -690,7 +696,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         );
         vm.stopPrank();
 
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg6 = hook.getPoolConfig();
+        assertTrue(poolCfg6.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         // Week 1: Low activity (50% ratio)
@@ -807,7 +814,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         // Total liquidity = 20e18, Total volume = 14e18
         // Realistic ratio = 14/20 = 0.7 = 70%
         vm.warp(block.timestamp + 2 days);
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg7 = hook.getPoolConfig();
+        assertTrue(poolCfg7.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -1047,7 +1055,8 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         uint256 bobOutput = _performSwapAndGetOutput(bob, testKey, swapAmount);
 
         // Update fee and perform second swap
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolCfg8 = hook.getPoolConfig();
+        assertTrue(poolCfg8.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 

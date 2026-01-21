@@ -606,20 +606,29 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         vm.stopPrank();
 
         DynamicFeeLib.PoolParams memory poolParams = hook.getPoolParams();
+        // Guard against drainSteps == 0
+        if (params.drainSteps == 0) return aliceTokenId;
+
         // Guard against tiny-liquidity rounding: ensure liquidityPerStep is at least 1
         uint128 liquidityPerStep = params.initialLiquidity / params.drainSteps;
         if (liquidityPerStep == 0) liquidityPerStep = 1;
 
-        // Defensive bound to avoid future underflow if drainSteps is 0
-        uint8 stepsMinusOne = params.drainSteps > 0 ? params.drainSteps - 1 : 0;
-        for (uint256 i = 0; i < stepsMinusOne; i++) {
+        // Track remaining liquidity to fully drain including final remainder
+        uint128 remaining = params.initialLiquidity;
+        for (uint256 i = 0; i < params.drainSteps && remaining > 0; i++) {
+            // On final step or when remaining < liquidityPerStep, drain all remaining
+            uint128 stepLiquidity =
+                (i + 1 == params.drainSteps || remaining < liquidityPerStep) ? remaining : liquidityPerStep;
+
             vm.warp(block.timestamp + 1 days);
 
             vm.startPrank(alice);
             positionManager.decreaseLiquidity(
-                aliceTokenId, liquidityPerStep, 0, 0, alice, block.timestamp + 60, Constants.ZERO_BYTES
+                aliceTokenId, stepLiquidity, 0, 0, alice, block.timestamp + 60, Constants.ZERO_BYTES
             );
             vm.stopPrank();
+
+            remaining -= stepLiquidity;
 
             vm.startPrank(bob);
             _performSwap(bob, testKey, params.swapAmount, i % 2 == 0);
