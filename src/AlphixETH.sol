@@ -168,13 +168,14 @@ contract AlphixETH is Alphix {
             if (state.sharesOwned > 0) {
                 if (currency.isAddressZero()) {
                     // For ETH, redeem to ETH then deposit ETH to new yield source
-                    uint256 assetsRedeemed =
-                        IAlphix4626WrapperWeth(oldYieldSource).redeemETH(state.sharesOwned, address(this), address(this));
+                    uint256 assetsRedeemed = IAlphix4626WrapperWeth(oldYieldSource)
+                        .redeemETH(state.sharesOwned, address(this), address(this));
                     state.sharesOwned =
                         IAlphix4626WrapperWeth(newYieldSource).depositETH{value: assetsRedeemed}(address(this));
                 } else {
-                    state.sharesOwned =
-                        ReHypothecationLib.migrateYieldSource(oldYieldSource, newYieldSource, currency, state.sharesOwned);
+                    state.sharesOwned = ReHypothecationLib.migrateYieldSource(
+                        oldYieldSource, newYieldSource, currency, state.sharesOwned
+                    );
                 }
             }
         }
