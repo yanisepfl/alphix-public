@@ -375,9 +375,11 @@ contract Alphix is
         address oldYieldSource = state.yieldSource;
 
         // Migrate if old yield source exists with shares
-        if (oldYieldSource != address(0) && state.sharesOwned > 0) {
-            state.sharesOwned =
-                ReHypothecationLib.migrateYieldSource(oldYieldSource, newYieldSource, currency, state.sharesOwned);
+        if (oldYieldSource != address(0)) {
+            if (state.sharesOwned > 0) {
+                state.sharesOwned =
+                    ReHypothecationLib.migrateYieldSource(oldYieldSource, newYieldSource, currency, state.sharesOwned);
+            }
         }
 
         state.yieldSource = newYieldSource;
@@ -410,7 +412,9 @@ contract Alphix is
         // Calculate amounts with rounding up (protocol-favorable for deposits)
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForDeposit(shares);
 
-        if (amount0 == 0 && amount1 == 0) revert ZeroAmounts();
+        if (amount0 == 0) {
+            if (amount1 == 0) revert ZeroAmounts();
+        }
 
         // Transfer tokens from sender (ERC20 only)
         _transferFromSender(_poolKey.currency0, amount0);
@@ -547,11 +551,13 @@ contract Alphix is
                 currentSqrtPriceX96, sqrtPriceLowerX96, sqrtPriceUpperX96, liquidity
             );
 
-            if (amt0 + 1 > amount0 && liquidity > 1) {
-                liquidity -= 1;
-                (, amt1) = LiquidityAmounts.getAmountsForLiquidity(
-                    currentSqrtPriceX96, sqrtPriceLowerX96, sqrtPriceUpperX96, liquidity
-                );
+            if (amt0 + 1 > amount0) {
+                if (liquidity > 1) {
+                    liquidity -= 1;
+                    (, amt1) = LiquidityAmounts.getAmountsForLiquidity(
+                        currentSqrtPriceX96, sqrtPriceLowerX96, sqrtPriceUpperX96, liquidity
+                    );
+                }
             }
 
             return (amt1 + 1, uint256(liquidity));
@@ -583,11 +589,13 @@ contract Alphix is
                 currentSqrtPriceX96, sqrtPriceLowerX96, sqrtPriceUpperX96, liquidity
             );
 
-            if (amt1 + 1 > amount1 && liquidity > 1) {
-                liquidity -= 1;
-                (amt0,) = LiquidityAmounts.getAmountsForLiquidity(
-                    currentSqrtPriceX96, sqrtPriceLowerX96, sqrtPriceUpperX96, liquidity
-                );
+            if (amt1 + 1 > amount1) {
+                if (liquidity > 1) {
+                    liquidity -= 1;
+                    (amt0,) = LiquidityAmounts.getAmountsForLiquidity(
+                        currentSqrtPriceX96, sqrtPriceLowerX96, sqrtPriceUpperX96, liquidity
+                    );
+                }
             }
 
             return (amt0 + 1, uint256(liquidity));
@@ -840,8 +848,10 @@ contract Alphix is
         uint256 amount0Available = _getAmountInYieldSource(_poolKey.currency0);
         uint256 amount1Available = _getAmountInYieldSource(_poolKey.currency1);
 
-        if (amount0Available == 0 && amount1Available == 0) {
-            return JitParams({tickLower: 0, tickUpper: 0, liquidityDelta: 0, shouldExecute: false});
+        if (amount0Available == 0) {
+            if (amount1Available == 0) {
+                return JitParams({tickLower: 0, tickUpper: 0, liquidityDelta: 0, shouldExecute: false});
+            }
         }
 
         // Compute liquidity to add

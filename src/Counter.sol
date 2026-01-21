@@ -54,7 +54,7 @@ contract Counter is BaseHook {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        beforeSwapCount[key.toId()]++;
+        ++beforeSwapCount[key.toId()];
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
@@ -63,7 +63,7 @@ contract Counter is BaseHook {
         override
         returns (bytes4, int128)
     {
-        afterSwapCount[key.toId()]++;
+        ++afterSwapCount[key.toId()];
         return (BaseHook.afterSwap.selector, 0);
     }
 
@@ -72,7 +72,7 @@ contract Counter is BaseHook {
         override
         returns (bytes4)
     {
-        beforeAddLiquidityCount[key.toId()]++;
+        ++beforeAddLiquidityCount[key.toId()];
         return BaseHook.beforeAddLiquidity.selector;
     }
 
@@ -81,7 +81,7 @@ contract Counter is BaseHook {
         override
         returns (bytes4)
     {
-        beforeRemoveLiquidityCount[key.toId()]++;
+        ++beforeRemoveLiquidityCount[key.toId()];
         return BaseHook.beforeRemoveLiquidity.selector;
     }
 }

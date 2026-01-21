@@ -2,102 +2,118 @@
 
 ![Alphix Logo](./branding-materials/logos/type/LogoTypeWhite.png)
 
-> **A Uniswap V4 Dynamic-Fee Hook with upgradeable logic for seamless feature integration**
+> **A Uniswap V4 Dynamic-Fee Hook with JIT Liquidity Rehypothecation**
 
 
-## Overview 
+## Overview
 
 
 ### Our Vision
 
-Alphix is building the foundation for the next generation of Automated Market Makers (AMMs) and Concentrated Liquidity AMMs (CLMMs) through composable and customizable markets.
+Alphix is building the foundation for the next generation of Automated Market Makers (AMMs) and Concentrated Liquidity AMMs (CLMMs) through composable markets.
 
-Think dynamic fees, liquidity rehypothecation, automated rebalancing, and other market efficiency innovations — all coexisting in a single pool.
+Think dynamic fees and liquidity rehypothecation coexisting in a single pool.
 
 ### Our Hook
 
-This repository presents Alphix's flagship product: a **Dynamic Fee Hook**.
+This repository presents Alphix's flagship product: a **Dynamic Fee Hook with JIT Liquidity Rehypothecation**.
 
-We have implemented a **Flexible Uniswap V4 Hook** that adjusts LP fees dynamically based on pool ratio signals, with its logic separated into an **upgradeable** contract to allow safe iteration over time without requiring to redeploy a new hook and pool per innovation. 
+We have implemented a **Uniswap V4 Hook** that:
 
-Fee updates are computed from deviations between current and target volume/TVL ratios using EMA smoothing. For security, we apply both global and pool type specific bounds, cooldowns, and side-specific throttling to control sensitivity.
+1. **Adjusts LP fees dynamically** based on pool ratio signals using EMA smoothing
+2. **Rehypothecates idle liquidity** through ERC-4626 yield vaults using Just-In-Time (JIT) liquidity provisioning
+3. **Issues ERC20 LP shares** representing pro-rata ownership of rehypothecated positions
+
+Fee updates are computed from deviations between current and target volume/TVL ratios. For security, we apply global bounds, cooldowns, and side-specific throttling to control sensitivity.
 
 ## Architecture
 
-The system follows a three-layer architecture with clear separation of concerns:
+The system follows a **single-pool-per-hook design** with separation of concerns:
 
 ### Core Components
 
-1. **Hook Entrypoint** ([`Alphix.sol`](src/Alphix.sol))
-   - Implements Uniswap V4 `IHooks` interface
-   - Delegates all callbacks to upgradeable logic contract
-   - Manages pool lifecycle (initialization, activation, deactivation)
-   - Exposes fee poke functionality and administrative operations
-   - Integrates with Registry for automatic tracking
+1. **Alphix Hook** ([`Alphix.sol`](src/Alphix.sol))
+   - Uniswap V4 Hook with dynamic fee support
+   - ERC20 LP shares for rehypothecated liquidity positions
+   - JIT liquidity provisioning via `beforeSwap`/`afterSwap` hooks
+   - Per-currency ERC-4626 yield source integration
+   - Access-controlled via OpenZeppelin AccessManager
+   - Each instance serves exactly **one pool**
 
-2. **Upgradeable Logic** ([`AlphixLogic.sol`](src/AlphixLogic.sol))
-   - Deployed behind ERC1967 proxy with UUPS upgradeability
-   - Implements fee computation algorithms and EMA target updates
-   - Manages per-pool configuration and state
-   - Enforces cooldowns, bounds, and side-specific throttling
-   - Tracks active/configured/paused pool status
+2. **AlphixETH Hook** ([`AlphixETH.sol`](src/AlphixETH.sol))
+   - Extends Alphix for pools with native ETH as currency0
+   - Uses `IAlphix4626WrapperWeth` for ETH yield sources
+   - Handles ETH deposits/withdrawals for JIT liquidity
+   - Supports wrapped ETH yield vaults (e.g., Aave aWETH)
 
-3. **Math Library** ([`DynamicFee.sol`](src/libraries/DynamicFee.sol))
+3. **DynamicFee Library** ([`DynamicFee.sol`](src/libraries/DynamicFee.sol))
    - Pure functions for fee calculations
    - EMA computation with configurable lookback periods
    - Fee clamping and out-of-bounds (OOB) detection
    - Streak tracking for consecutive OOB hits
 
+4. **ReHypothecation Library** ([`ReHypothecation.sol`](src/libraries/ReHypothecation.sol))
+   - ERC-4626 yield source interactions
+   - JIT liquidity amount calculations
+   - Tick range validation and liquidity math
+
 ### Supporting Infrastructure
 
-- **Registry** ([`Registry.sol`](src/Registry.sol)): Automatic deployment and pool tracking using AccessManager roles
+- **BaseDynamicFee** ([`BaseDynamicFee.sol`](src/BaseDynamicFee.sol)): OpenZeppelin-based foundation for dynamic fee hooks
 - **Global Constants** ([`AlphixGlobalConstants.sol`](src/libraries/AlphixGlobalConstants.sol)): System-wide bounds and configuration limits
-- **Interfaces** ([`src/interfaces/`](src/interfaces/)): External API definitions for all contracts
-- **Base Contracts** ([`BaseDynamicFee.sol`](src/BaseDynamicFee.sol)): OpenZeppelin-based foundation for dynamic fee hooks
+- **Interfaces** ([`src/interfaces/`](src/interfaces/)): External API definitions
+  - `IAlphix`: Main hook interface
+  - `IReHypothecation`: Rehypothecation functions
+  - `IAlphix4626WrapperWeth`: ETH yield source interface
 
-## Pool Types & Parameters
+## Key Features
 
-Three built-in pool categories with distinct sensitivity profiles:
+### Dynamic Fees
 
-| PoolType  | Parameter Set                  |
-|-----------|--------------------------------|
-| STABLE    | Low baseMaxFeeDelta, tight ratioTolerance, short lookbackPeriod |
-| STANDARD  | Moderate sensitivity and bounds |
-| VOLATILE  | High sensitivity, wider bands   |
+Each pool is configured with parameters including:
 
-Each `PoolTypeParams` includes:
+- `minFee` / `maxFee` (uint24) - Fee bounds
+- `baseMaxFeeDelta` (uint24) - Maximum fee adjustment per update
+- `lookbackPeriod` (uint24) - EMA smoothing period in days
+- `minPeriod` (uint256) - Cooldown between fee updates
+- `ratioTolerance` / `linearSlope` (uint256, 1e18 scaled)
+- `lowerSideFactor` / `upperSideFactor` (uint256) - Asymmetric throttling multipliers
 
-- `minFee` / `maxFee` (uint24)
-- `baseMaxFeeDelta` (uint24)  
-- `lookbackPeriod` (uint24, expressed in days)  
-- `minPeriod` (uint256, expressed in seconds)  
-- `ratioTolerance` / `linearSlope` (uint256, 1e18 scaled)  
-- `lowerSideFactor` / `upperSideFactor` (uint256, throttling multipliers)
+### JIT Liquidity Rehypothecation
 
-Each of those parameters are bounded by global constants for additional security.
+- Idle liquidity is deposited into ERC-4626 yield vaults
+- Before swaps: liquidity is pulled from vaults and added to the pool
+- After swaps: liquidity is removed and returned to vaults
+- Users receive ERC20 shares representing their pro-rata ownership
+- Supports both ERC20 and native ETH pools
 
-## Security & Upgradability
+### Access Control Roles
+
+| Role | ID | Permissions |
+|------|-----|-------------|
+| ADMIN_ROLE | 0 | Full access, ownership |
+| FEE_POKER_ROLE | 1 | Call `poke()` to update fees |
+| REGISTRAR_ROLE | 2 | Reserved |
+| YIELD_MANAGER_ROLE | 3 | Configure yield sources and tick ranges |
+
+## Security
 
 ### Security Patterns
 
-- **OpenZeppelin 5 Upgradeable Contracts**: Ownable2StepUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable
+- **OpenZeppelin 5 Contracts**: Ownable2Step, AccessManaged, ReentrancyGuardTransient, Pausable
 - **Access Control**:
   - Hook owner (will be multisig)
-  - AccessManager for Registry with role-based permissions (REGISTRAR_ROLE, POKER_ROLE)
+  - AccessManager for granular role-based permissions
   - Two-step ownership transfers to prevent accidental transfers
 - **State Protection**:
-  - ReentrancyGuard on sensitive operations
+  - Transient reentrancy guard on sensitive operations
   - Pausable for emergency stops
-  - Cooldowns to prevent manipulation
-- **Upgrade Safety**:
-  - UUPS pattern with owner-only authorization
-  - Interface compliance checks (`IAlphixLogic` enforcement)
-  - State preservation across upgrades
+  - Cooldowns to prevent fee manipulation
 
 ### Economic Security
 
 - **Global Bounds**: System-wide limits on fees, ratios, and parameters
-- **Pool Type Bounds**: Category-specific constraints (STABLE, STANDARD, VOLATILE)
+- **Pool Parameter Bounds**: Configurable constraints per pool
 - **Cooldown Enforcement**: Time-based rate limiting on fee updates
 - **Side-Specific Throttling**: Asymmetric adjustments via upper/lower side factors
 - **Streak Multipliers**: Progressive fee adjustments for sustained out-of-bounds conditions
@@ -106,8 +122,8 @@ Each of those parameters are bounded by global constants for additional security
 
 The Alphix team manages the following aspects of the protocol:
 
-- **Upgradeability**: Logic contract upgrades via UUPS pattern
 - **Fee Dynamization**: Fee algorithm parameters and pool configurations
+- **Yield Sources**: ERC-4626 vault configurations and tick ranges
 - **Treasury**: Yield tax collection and distribution
 
 All administrative operations are executed through a **multisig wallet**. The protocol is **pausable** for emergency response.
@@ -175,69 +191,84 @@ Or manually:
 slither . --filter-paths "lib/|test/|script/" --json slither-report.json
 ```
 
-### Deployment
+## Deployment
 
 Located in `script/alphix/`.
 
-#### Running Scripts 
+### Deployment Order
+
+| Script | Purpose |
+|--------|---------|
+| `00_DeployAccessManager.s.sol` | Deploy OpenZeppelin AccessManager |
+| `01_DeployAlphix.s.sol` | Deploy Alphix hook (ERC20/ERC20 pools) |
+| `01_DeployAlphixETH.s.sol` | Deploy AlphixETH hook (ETH/ERC20 pools) |
+| `02_ConfigureAndUnpause.s.sol` | Configure roles and unpause |
+| `03_CreatePool.s.sol` | Create Uniswap V4 pool with initial liquidity |
+| `04_ConfigureReHypothecation.s.sol` | Set yield sources and JIT tick range |
+| `05_AddRHLiquidity.s.sol` | Add rehypothecated liquidity |
+| `06_Swap.s.sol` | Execute swaps (testnet - PoolSwapTest) |
+| `06b_SwapUniversalRouter.s.sol` | Execute swaps (mainnet - Universal Router) |
+| `07_PokeFee.s.sol` | Update dynamic fee |
+| `08_TransferOwnership.s.sol` | Transfer to multisig |
+| `08b_AcceptOwnership.s.sol` | Accept ownership transfer |
+
+### Running Scripts
 
 ```bash
 # 1. Set up environment
 cp .env.example .env
 # Edit .env with your configuration
-# Load your environment
 source .env
 
-# 1.5. (Optional for Beta) Deploy Mock Tokens and Faucet
-forge script script/alphix/00_DeployMockERC20.s.sol --rpc-url $RPC_URL --broadcast --verify
-forge script script/alphix/01_DeployMockFaucet.s.sol --rpc-url $RPC_URL --broadcast --verify
+# 2. Deploy AccessManager
+forge script script/alphix/00_DeployAccessManager.s.sol --rpc-url $RPC_URL --broadcast --verify
 
-# 2. Deploy core system (scripts 02-06)
-forge script script/alphix/02_DeployAccessManager.s.sol --rpc-url $RPC_URL --broadcast --verify
-forge script script/alphix/03_DeployRegistry.s.sol --rpc-url $RPC_URL --broadcast --verify
-forge script script/alphix/04_DeployAlphixLogic.s.sol --rpc-url $RPC_URL --broadcast --verify
-forge script script/alphix/05_DeployAlphix.s.sol --rpc-url $RPC_URL --broadcast --verify
-forge script script/alphix/06_ConfigureSystem.s.sol --rpc-url $RPC_URL --broadcast
+# 3. Deploy Hook (choose one based on pool type)
+# For ERC20/ERC20 pools:
+forge script script/alphix/01_DeployAlphix.s.sol --rpc-url $RPC_URL --broadcast --verify
+# For ETH/ERC20 pools:
+forge script script/alphix/01_DeployAlphixETH.s.sol --rpc-url $RPC_URL --broadcast --verify
 
-# 3. Create your first pool
-forge script script/alphix/09_CreatePoolAndAddLiquidity.s.sol --rpc-url $RPC_URL --broadcast
+# 4. Configure roles and unpause
+forge script script/alphix/02_ConfigureAndUnpause.s.sol --rpc-url $RPC_URL --broadcast
 
-# 4. Test swaps and dynamic fees
-forge script script/alphix/10_Swap.s.sol --rpc-url $RPC_URL --broadcast
-forge script script/alphix/11_PokeFee.s.sol --rpc-url $RPC_URL --broadcast
+# 5. Create pool with initial liquidity
+forge script script/alphix/03_CreatePool.s.sol --rpc-url $RPC_URL --broadcast
+
+# 6. (Optional) Configure rehypothecation
+forge script script/alphix/04_ConfigureReHypothecation.s.sol --rpc-url $RPC_URL --broadcast
+forge script script/alphix/05_AddRHLiquidity.s.sol --rpc-url $RPC_URL --broadcast
+
+# 7. Test swaps and dynamic fees
+# Testnet (PoolSwapTest):
+forge script script/alphix/06_Swap.s.sol --rpc-url $RPC_URL --broadcast
+# Mainnet (Universal Router):
+forge script script/alphix/06b_SwapUniversalRouter.s.sol --rpc-url $RPC_URL --broadcast
+
+# 8. Update dynamic fee
+forge script script/alphix/07_PokeFee.s.sol --rpc-url $RPC_URL --broadcast
+
+# 9. Transfer ownership to multisig
+forge script script/alphix/08_TransferOwnership.s.sol --rpc-url $RPC_URL --broadcast
+# New owner accepts:
+forge script script/alphix/08b_AcceptOwnership.s.sol --rpc-url $RPC_URL --broadcast
 ```
 
-### Testnet Addresses
+### Testnet Utilities
 
-#### Base Sepolia Deployment
+Mock contracts for testing are available in `script/alphix/testnet/`:
 
-Core Contracts:
+- `TestnetDeployMockERC20.s.sol` - Deploy mock ERC20 tokens
+- `TestnetDeployMockYieldVault.s.sol` - Deploy mock ERC-4626 vault
+- `TestnetMockYieldVaultETH.sol` - Mock ETH yield vault implementing `IAlphix4626WrapperWeth`
 
-```bash
-# Registry contract address
-REGISTRY_BASE_SEPOLIA=0x5a22AA4a4B62E3Ee72cb6d077b0873d6aA794B54
+### Deployed Addresses
 
-# Alphix Hook contract address (this is the main hook contract)
-ALPHIX_HOOK_BASE_SEPOLIA=0x285A195230239822AdBC6Fd2281c7b1De1a17Fc0
+#### Base Sepolia (Testnet)
 
-# AlphixLogic implementation contract address
-ALPHIX_LOGIC_IMPL_BASE_SEPOLIA=0x3c59d4d01682c6180a564f52573C07372bD07cb0
+Coming Soon!
 
-# AlphixLogic proxy contract address (this is what Alphix Hook uses)
-ALPHIX_LOGIC_PROXY_BASE_SEPOLIA=0x8768950eB999Faa53c8b0aA0Cd7dCC19b9D23A34
-```
-
-Active Pools:
-
-```text
-# aUSDC/aDAI pool
-Pool ID: 0x4bd4386e6ef583af6cea0e010a7118f41c4d3315e88b81a88fc7fd3822bf766b
-
-# aDAI/aETH pool
-Pool ID: 0x47da32fed07f99dc9a10744a58f43bf563909d8b46203c300487caf3edd8b1f3
-```
-
-### Mainnet Addresses
+#### Mainnet
 
 Coming Soon!
 
@@ -250,13 +281,13 @@ Coming Soon!
 
 ## Partners
 
-- Base: Base Batch 001 & IncuBase. 
-- Uniswap Foundation: Buildathon Season. 
+- Base: Base Batch 001 & IncuBase.
+- Uniswap Foundation: Buildathon Season.
 - More partners to come!
 
 ## Acknowledgements
 
-Alphix builds on top of Uniswap V4, leveraging its new **[Hook Feature](#hooks)**. Our implementation follows the official **[Uniswap v4 template](https://github.com/uniswapfoundation/v4-template)**, and closely follows **[OpenZeppelin's Uniswap Hook template](https://github.com/OpenZeppelin/uniswap-hooks)**. This helps us ensure compatibility and best practices.
+Alphix builds on top of Uniswap V4, leveraging its new **Hook Feature**. Our implementation follows the official **[Uniswap v4 template](https://github.com/uniswapfoundation/v4-template)**, and closely follows **[OpenZeppelin's Uniswap Hook template](https://github.com/OpenZeppelin/uniswap-hooks)**. This helps us ensure compatibility and best practices.
 
 ## License
 

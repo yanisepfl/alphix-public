@@ -77,8 +77,10 @@ contract AlphixETH is Alphix {
      */
     receive() external payable {
         address ethYieldSource = _yieldSourceState[Currency.wrap(address(0))].yieldSource;
-        if (msg.sender != address(poolManager) && msg.sender != ethYieldSource) {
-            revert UnauthorizedETHSender();
+        if (msg.sender != address(poolManager)) {
+            if (msg.sender != ethYieldSource) {
+                revert UnauthorizedETHSender();
+            }
         }
     }
 
@@ -146,8 +148,10 @@ contract AlphixETH is Alphix {
             // For ETH currency, just validate basic 4626 compliance
             // The yield source must implement depositETH/withdrawETH but we can't
             // easily check interface support without ERC165
-            if (newYieldSource != address(0) && newYieldSource.code.length == 0) {
-                revert InvalidYieldSource(newYieldSource);
+            if (newYieldSource != address(0)) {
+                if (newYieldSource.code.length == 0) {
+                    revert InvalidYieldSource(newYieldSource);
+                }
             }
         } else {
             // For non-ETH currencies, use standard validation
@@ -160,16 +164,18 @@ contract AlphixETH is Alphix {
         address oldYieldSource = state.yieldSource;
 
         // Migrate if old yield source exists with shares
-        if (oldYieldSource != address(0) && state.sharesOwned > 0) {
-            if (currency.isAddressZero()) {
-                // For ETH, redeem to ETH then deposit ETH to new yield source
-                uint256 assetsRedeemed =
-                    IAlphix4626WrapperWeth(oldYieldSource).redeemETH(state.sharesOwned, address(this), address(this));
-                state.sharesOwned =
-                    IAlphix4626WrapperWeth(newYieldSource).depositETH{value: assetsRedeemed}(address(this));
-            } else {
-                state.sharesOwned =
-                    ReHypothecationLib.migrateYieldSource(oldYieldSource, newYieldSource, currency, state.sharesOwned);
+        if (oldYieldSource != address(0)) {
+            if (state.sharesOwned > 0) {
+                if (currency.isAddressZero()) {
+                    // For ETH, redeem to ETH then deposit ETH to new yield source
+                    uint256 assetsRedeemed =
+                        IAlphix4626WrapperWeth(oldYieldSource).redeemETH(state.sharesOwned, address(this), address(this));
+                    state.sharesOwned =
+                        IAlphix4626WrapperWeth(newYieldSource).depositETH{value: assetsRedeemed}(address(this));
+                } else {
+                    state.sharesOwned =
+                        ReHypothecationLib.migrateYieldSource(oldYieldSource, newYieldSource, currency, state.sharesOwned);
+                }
             }
         }
 
@@ -197,7 +203,9 @@ contract AlphixETH is Alphix {
         // Calculate amounts with rounding up (protocol-favorable for deposits)
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForDeposit(shares);
 
-        if (amount0 == 0 && amount1 == 0) revert ZeroAmounts();
+        if (amount0 == 0) {
+            if (amount1 == 0) revert ZeroAmounts();
+        }
 
         // Validate ETH amount
         if (msg.value < amount0) revert InvalidMsgValue();
