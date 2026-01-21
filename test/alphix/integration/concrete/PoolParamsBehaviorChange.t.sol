@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 /* FORGE IMPORTS */
+import {Vm} from "forge-std/Vm.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -996,6 +997,181 @@ contract PoolParamsBehaviorChangeTest is BaseAlphixTest {
     function _getLowerToleranceBound(uint256 targetRatio, uint256 ratioTolerance) internal pure returns (uint256) {
         return targetRatio - (targetRatio * ratioTolerance / 1e18);
     }
+
+    /* ========================================================================== */
+    /*                   EMA TARGET RATIO VERIFICATION TESTS                      */
+    /* ========================================================================== */
+
+    /**
+     * @notice Verifies that poke() actually updates _targetRatio via EMA
+     * @dev This test explicitly checks that the FeeUpdated event shows different
+     *      old and new target ratios after a poke, confirming EMA is applied.
+     */
+    function test_poke_updatesTargetRatioViaEMA() public {
+        // Use a ratio different from target to see EMA movement
+        uint256 currentRatio = _getAboveToleranceRatio(INITIAL_TARGET_RATIO, originalParams.ratioTolerance);
+
+        vm.recordLogs();
+        vm.prank(owner);
+        hook.poke(currentRatio);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool foundEvent = false;
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == FEE_UPDATED_TOPIC) {
+                (,, uint256 oldTargetRatio,, uint256 newTargetRatio) =
+                    abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
+
+                // Key assertion: target ratio should have changed (EMA was applied)
+                assertTrue(newTargetRatio != oldTargetRatio, "Target ratio should update via EMA");
+
+                // New target should move toward current ratio (EMA convergence)
+                // If currentRatio > oldTargetRatio, newTargetRatio should be > oldTargetRatio
+                if (currentRatio > oldTargetRatio) {
+                    assertTrue(newTargetRatio > oldTargetRatio, "EMA should move target toward current (upward)");
+                    assertTrue(newTargetRatio <= currentRatio, "New target should not exceed current");
+                }
+
+                foundEvent = true;
+                break;
+            }
+        }
+
+        assertTrue(foundEvent, "FeeUpdated event should be emitted");
+    }
+
+    /**
+     * @notice Verifies that short lookback produces larger target ratio changes per poke
+     * @dev EMA formula: newTarget = old + alpha * (current - old) where alpha = 2/(lookbackPeriod + 1)
+     *      Shorter lookback = higher alpha = larger change per poke
+     */
+    function test_lookbackPeriod_shortLookbackProducesLargerTargetRatioChanges() public {
+        // Deploy two fresh stacks with different lookback periods
+        Alphix shortHook = _deployFreshAlphixStack();
+        Alphix longHook = _deployFreshAlphixStack();
+
+        (PoolKey memory shortKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, shortHook);
+        (PoolKey memory longKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, longHook);
+
+        vm.prank(owner);
+        shortHook.initializePool(shortKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams);
+        vm.prank(owner);
+        longHook.initializePool(longKey, INITIAL_FEE, INITIAL_TARGET_RATIO, longLookbackParams);
+
+        vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
+
+        // Use ratio significantly different from target to see EMA effect
+        uint256 currentRatio = INITIAL_TARGET_RATIO * 15 / 10; // 1.5x target
+
+        // Poke short lookback hook
+        vm.recordLogs();
+        vm.prank(owner);
+        shortHook.poke(currentRatio);
+
+        uint256 shortTargetChange = 0;
+        Vm.Log[] memory shortLogs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < shortLogs.length; i++) {
+            if (shortLogs[i].topics[0] == FEE_UPDATED_TOPIC) {
+                (,, uint256 oldTarget,, uint256 newTarget) =
+                    abi.decode(shortLogs[i].data, (uint24, uint24, uint256, uint256, uint256));
+                shortTargetChange = newTarget > oldTarget ? newTarget - oldTarget : oldTarget - newTarget;
+                break;
+            }
+        }
+
+        // Poke long lookback hook
+        vm.recordLogs();
+        vm.prank(owner);
+        longHook.poke(currentRatio);
+
+        uint256 longTargetChange = 0;
+        Vm.Log[] memory longLogs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < longLogs.length; i++) {
+            if (longLogs[i].topics[0] == FEE_UPDATED_TOPIC) {
+                (,, uint256 oldTarget,, uint256 newTarget) =
+                    abi.decode(longLogs[i].data, (uint24, uint24, uint256, uint256, uint256));
+                longTargetChange = newTarget > oldTarget ? newTarget - oldTarget : oldTarget - newTarget;
+                break;
+            }
+        }
+
+        // Short lookback should produce larger target ratio changes
+        assertTrue(shortTargetChange > longTargetChange, "Short lookback should produce larger target ratio changes");
+
+        // Both should have non-zero changes (EMA is being applied)
+        assertTrue(shortTargetChange > 0, "Short lookback target should change");
+        assertTrue(longTargetChange > 0, "Long lookback target should change");
+    }
+
+    /**
+     * @notice Verifies EMA convergence over multiple pokes
+     * @dev After multiple pokes with the same current ratio, target ratio should converge
+     *      toward the current ratio (distance decreases each poke).
+     *      Uses shortLookbackParams for faster convergence in tests.
+     */
+    function test_poke_targetRatioConvergesOverMultiplePokes() public {
+        // Deploy fresh hook with short lookback for faster convergence
+        Alphix freshHook = _deployFreshAlphixStack();
+        (PoolKey memory testKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
+
+        vm.prank(owner);
+        freshHook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams);
+
+        vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
+
+        uint256 currentRatio = INITIAL_TARGET_RATIO * 12 / 10; // 1.2x target
+
+        uint256 lastTargetRatio = INITIAL_TARGET_RATIO;
+        uint256 lastDistance = currentRatio - INITIAL_TARGET_RATIO; // Initial distance
+
+        // Poke multiple times and verify convergence
+        for (uint256 i = 0; i < 5; i++) {
+            vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
+
+            vm.recordLogs();
+            vm.prank(owner);
+            freshHook.poke(currentRatio);
+
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j = 0; j < logs.length; j++) {
+                if (logs[j].topics[0] == FEE_UPDATED_TOPIC) {
+                    (,, uint256 oldTarget,, uint256 newTarget) =
+                        abi.decode(logs[j].data, (uint24, uint24, uint256, uint256, uint256));
+
+                    // Verify old target matches our expectation
+                    assertEq(oldTarget, lastTargetRatio, "Old target should match last known target");
+
+                    // Calculate new distance to current ratio
+                    uint256 newDistance = newTarget > currentRatio ? newTarget - currentRatio : currentRatio - newTarget;
+
+                    // Distance should decrease (convergence)
+                    assertTrue(newDistance < lastDistance, "Distance to current ratio should decrease (convergence)");
+
+                    lastDistance = newDistance;
+                    lastTargetRatio = newTarget;
+                    break;
+                }
+            }
+        }
+
+        // After 5 pokes with short lookback, target should be closer to current than initially
+        // With short lookback (7 days), alpha = 2/(7+1) = 0.25, so convergence should be visible
+        uint256 finalDistance =
+            lastTargetRatio > currentRatio ? lastTargetRatio - currentRatio : currentRatio - lastTargetRatio;
+        uint256 initialDistance = currentRatio - INITIAL_TARGET_RATIO;
+
+        // With alpha=0.25, after 5 pokes: (1-0.25)^5 ≈ 0.237, so ~76% convergence
+        // Using a more conservative check (at least 50% convergence)
+        assertTrue(finalDistance < initialDistance / 2, "Target should have converged significantly");
+    }
+
+    /* ========================================================================== */
+    /*                              HELPER FUNCTIONS                              */
+    /* ========================================================================== */
 
     /**
      * @notice Get a ratio slightly above the tolerance (out of bounds upper)

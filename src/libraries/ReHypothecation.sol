@@ -25,19 +25,9 @@ import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
 library ReHypothecationLib {
     using SafeERC20 for IERC20;
 
-    /* CONSTANTS */
-
-    /**
-     * @dev Default rate precision for yield tracking when vault has no decimals() function.
-     */
-    uint256 internal constant DEFAULT_RATE_PRECISION = 1e18;
-
     /* ERRORS */
 
-    error InvalidYieldSource(address yieldSource);
-    error ZeroShares();
     error InvalidTickRange(int24 tickLower, int24 tickUpper);
-    error AssetMismatch(address expected, address actual);
 
     /* VALIDATION FUNCTIONS */
 
@@ -70,11 +60,10 @@ library ReHypothecationLib {
      * @param tickSpacing Pool's tick spacing.
      */
     function validateTickRange(int24 tickLower, int24 tickUpper, int24 tickSpacing) internal pure {
-        if (tickLower >= tickUpper) revert InvalidTickRange(tickLower, tickUpper);
-        if (tickLower < TickMath.MIN_TICK) revert InvalidTickRange(tickLower, tickUpper);
-        if (tickUpper > TickMath.MAX_TICK) revert InvalidTickRange(tickLower, tickUpper);
-        if (tickLower % tickSpacing != 0) revert InvalidTickRange(tickLower, tickUpper);
-        if (tickUpper % tickSpacing != 0) revert InvalidTickRange(tickLower, tickUpper);
+        if (
+            tickLower >= tickUpper || tickLower < TickMath.MIN_TICK || tickUpper > TickMath.MAX_TICK
+                || tickLower % tickSpacing != 0 || tickUpper % tickSpacing != 0
+        ) revert InvalidTickRange(tickLower, tickUpper);
     }
 
     /* YIELD SOURCE OPERATIONS */
@@ -110,29 +99,6 @@ library ReHypothecationLib {
     {
         if (amount == 0) return 0;
         sharesRedeemed = IERC4626(yieldSource).withdraw(amount, recipient, address(this));
-    }
-
-    /**
-     * @notice Get the share unit for a yield source (10 ** decimals).
-     * @param yieldSource The ERC-4626 vault address.
-     * @return unit The share unit (e.g., 1e18 for 18 decimals, 1e6 for 6 decimals).
-     */
-    function getShareUnit(address yieldSource) internal view returns (uint256 unit) {
-        if (yieldSource == address(0)) return DEFAULT_RATE_PRECISION;
-        return 10 ** IERC4626(yieldSource).decimals();
-    }
-
-    /**
-     * @notice Get the current exchange rate (assets per 1 share unit).
-     * @dev Uses the vault's decimals to determine the share unit for rate calculation.
-     * @param yieldSource The ERC-4626 vault address.
-     * @return rate The current rate (assets per share unit).
-     * @return shareUnit The share unit used for rate calculation.
-     */
-    function getCurrentRate(address yieldSource) internal view returns (uint256 rate, uint256 shareUnit) {
-        if (yieldSource == address(0)) return (DEFAULT_RATE_PRECISION, DEFAULT_RATE_PRECISION);
-        shareUnit = 10 ** IERC4626(yieldSource).decimals();
-        rate = IERC4626(yieldSource).convertToAssets(shareUnit);
     }
 
     /**

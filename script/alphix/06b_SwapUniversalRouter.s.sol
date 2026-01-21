@@ -90,7 +90,6 @@ contract SwapUniversalRouterScript is Script {
     function _executeSwap(SwapConfig memory cfg) internal {
         Alphix alphix = Alphix(cfg.hookAddr);
         PoolKey memory poolKey = alphix.getPoolKey();
-        bool isEthPool = poolKey.currency0.isAddressZero();
 
         address tokenIn = cfg.zeroForOne ? Currency.unwrap(poolKey.currency0) : Currency.unwrap(poolKey.currency1);
         address tokenOut = cfg.zeroForOne ? Currency.unwrap(poolKey.currency1) : Currency.unwrap(poolKey.currency0);
@@ -100,7 +99,8 @@ contract SwapUniversalRouterScript is Script {
         vm.startBroadcast();
 
         // Approve input token via Permit2 (skip if selling native ETH)
-        bool sellingEth = isEthPool && cfg.zeroForOne;
+        // Derive from tokenIn directly to handle any pool ordering
+        bool sellingEth = tokenIn == address(0);
         if (!sellingEth) {
             _approveToken(tokenIn, cfg.routerAddr, cfg.amountIn);
         }
@@ -173,7 +173,8 @@ contract SwapUniversalRouterScript is Script {
 
         console.log("Executing swap via Universal Router...");
         uint256 valueToSend = sellingEth ? cfg.amountIn : 0;
-        IUniversalRouter(cfg.routerAddr).execute{value: valueToSend}(commands, inputs, block.timestamp + 60);
+        // Use 5 minute deadline to handle mainnet congestion
+        IUniversalRouter(cfg.routerAddr).execute{value: valueToSend}(commands, inputs, block.timestamp + 5 minutes);
         console.log("  - Done");
     }
 

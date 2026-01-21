@@ -28,6 +28,7 @@ import {EasyPosm} from "../utils/libraries/EasyPosm.sol";
 import {Deployers} from "../utils/Deployers.sol";
 import {AlphixETH} from "../../src/AlphixETH.sol";
 import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
+import {Roles} from "../../script/alphix/libraries/Roles.sol";
 
 /**
  * @title BaseAlphixETHTest
@@ -68,8 +69,9 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
     uint24 constant INITIAL_FEE = 500; // 0.05%
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
-    uint64 constant FEE_POKER_ROLE = 1;
-    uint64 constant YIELD_MANAGER_ROLE = 3;
+    // Use shared role constants from Roles library
+    uint64 constant FEE_POKER_ROLE = Roles.FEE_POKER_ROLE;
+    uint64 constant YIELD_MANAGER_ROLE = Roles.YIELD_MANAGER_ROLE;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =

@@ -115,13 +115,29 @@ contract CreatePoolScript is Script {
         require(cfg.token1 != address(0), string.concat(envVar, " not set"));
         require(cfg.token0 < cfg.token1, "TOKEN0 must be < TOKEN1");
 
+        // Tick spacing validation (must fit in int24 and be > 0)
+        uint256 rawTickSpacing = vm.envUint(string.concat("TICK_SPACING_", cfg.network));
+        require(rawTickSpacing > 0, string.concat("TICK_SPACING_", cfg.network, " must be > 0"));
+        require(
+            rawTickSpacing <= uint256(uint24(type(int24).max)),
+            string.concat("TICK_SPACING_", cfg.network, " exceeds int24 max")
+        );
         // forge-lint: disable-next-line(unsafe-typecast)
-        cfg.tickSpacing = int24(uint24(vm.envUint(string.concat("TICK_SPACING_", cfg.network))));
+        cfg.tickSpacing = int24(uint24(rawTickSpacing));
+
         // forge-lint: disable-next-line(unsafe-typecast)
         cfg.sqrtPrice = uint160(vm.envUint(string.concat("SQRT_PRICE_", cfg.network)));
         cfg.amount0 = vm.envUint(string.concat("AMOUNT0_", cfg.network));
         cfg.amount1 = vm.envUint(string.concat("AMOUNT1_", cfg.network));
-        cfg.liquidityRange = vm.envUint(string.concat("LIQUIDITY_RANGE_", cfg.network));
+
+        // Liquidity range validation (must fit in int24 after cast)
+        uint256 rawLiquidityRange = vm.envUint(string.concat("LIQUIDITY_RANGE_", cfg.network));
+        require(
+            rawLiquidityRange <= uint256(uint24(type(int24).max)),
+            string.concat("LIQUIDITY_RANGE_", cfg.network, " exceeds int24 max")
+        );
+        cfg.liquidityRange = rawLiquidityRange;
+
         // forge-lint: disable-next-line(unsafe-typecast)
         cfg.initialFee = uint24(vm.envUint(string.concat("INITIAL_FEE_", cfg.network)));
         cfg.targetRatio = vm.envUint(string.concat("TARGET_RATIO_", cfg.network));

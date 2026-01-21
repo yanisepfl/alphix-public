@@ -1102,11 +1102,15 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
 
     /**
      * @notice Helper for week 4 operations to avoid stack too deep
+     * @param week3Fee Unused - kept for API consistency, could be used for fee progression assertions
+     * @param newParams Pool parameters to use for minPeriod calculations
      */
-    function _executeWeek4Operations(uint24, DynamicFeeLib.PoolParams memory newParams)
+    function _executeWeek4Operations(uint24 week3Fee, DynamicFeeLib.PoolParams memory newParams)
         internal
         returns (uint24 week4Fee)
     {
+        // Silence unused parameter warning - kept for potential future fee progression tests
+        week3Fee;
         // Day 27: Test pool pause/unpause
         vm.warp(block.timestamp + 1 days);
 

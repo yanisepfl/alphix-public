@@ -50,9 +50,6 @@ contract AddRHLiquidityScript is Script {
         PoolKey memory poolKey = alphix.getPoolKey();
         bool isEthPool = poolKey.currency0.isAddressZero();
 
-        // Preview required amounts
-        (uint256 amount0, uint256 amount1) = alphix.previewAddReHypothecatedLiquidity(shares);
-
         console.log("===========================================");
         console.log("ADDING REHYPOTHECATED LIQUIDITY");
         console.log("===========================================");
@@ -60,13 +57,8 @@ contract AddRHLiquidityScript is Script {
         console.log("Alphix:", hookAddr);
         console.log("Pool Type:", isEthPool ? "ETH/ERC20" : "ERC20/ERC20");
         console.log("");
-        console.log("Shares to mint:", shares);
-        console.log("Required amounts:");
-        console.log("  - Amount0:", amount0, "wei", isEthPool ? "(ETH)" : "");
-        console.log("  - Amount1:", amount1, "wei");
-        console.log("");
 
-        // Verify yield sources are configured
+        // Verify yield sources are configured FIRST (before preview)
         address yieldSource0 = alphix.getCurrencyYieldSource(poolKey.currency0);
         address yieldSource1 = alphix.getCurrencyYieldSource(poolKey.currency1);
         console.log("Yield Sources:");
@@ -74,22 +66,42 @@ contract AddRHLiquidityScript is Script {
         console.log("  - Currency1:", yieldSource1 == address(0) ? "NOT SET" : _addressToString(yieldSource1));
         console.log("");
 
-        if (yieldSource0 == address(0) && yieldSource1 == address(0)) {
-            console.log("WARNING: No yield sources configured!");
+        // Warn if either yield source is missing (not just both)
+        if (yieldSource0 == address(0) || yieldSource1 == address(0)) {
+            if (yieldSource0 == address(0)) {
+                console.log("WARNING: Yield source for currency0 is not configured!");
+            }
+            if (yieldSource1 == address(0)) {
+                console.log("WARNING: Yield source for currency1 is not configured!");
+            }
             console.log("Run 04_ConfigureReHypothecation.s.sol first.");
             return;
         }
 
+        // Preview required amounts (after yield source validation)
+        (uint256 amount0, uint256 amount1) = alphix.previewAddReHypothecatedLiquidity(shares);
+
+        console.log("Shares to mint:", shares);
+        console.log("Required amounts:");
+        console.log("  - Amount0:", amount0, "wei", isEthPool ? "(ETH)" : "");
+        console.log("  - Amount1:", amount1, "wei");
+        console.log("");
+
         vm.startBroadcast();
 
         // Approve tokens (for ERC20 pools, approve both; for ETH pools, only approve token1)
+        // Note: Reset to 0 first for USDT-style tokens that require zero allowance before setting new value
         console.log("Step 1: Approving tokens...");
         if (!isEthPool && amount0 > 0) {
-            IERC20(Currency.unwrap(poolKey.currency0)).approve(hookAddr, amount0 + 1);
+            IERC20 token0 = IERC20(Currency.unwrap(poolKey.currency0));
+            token0.approve(hookAddr, 0);
+            token0.approve(hookAddr, amount0 + 1);
             console.log("  - Approved token0");
         }
         if (amount1 > 0) {
-            IERC20(Currency.unwrap(poolKey.currency1)).approve(hookAddr, amount1 + 1);
+            IERC20 token1 = IERC20(Currency.unwrap(poolKey.currency1));
+            token1.approve(hookAddr, 0);
+            token1.approve(hookAddr, amount1 + 1);
             console.log("  - Approved token1");
         }
 
@@ -105,15 +117,15 @@ contract AddRHLiquidityScript is Script {
 
         vm.stopBroadcast();
 
-        // Verify
-        uint256 userShares = alphix.balanceOf(msg.sender);
+        // Verify (use tx.origin since msg.sender is the script contract, not the broadcaster)
+        uint256 userShares = alphix.balanceOf(tx.origin);
 
         console.log("");
         console.log("===========================================");
         console.log("LIQUIDITY ADDED SUCCESSFULLY");
         console.log("===========================================");
         console.log("Shares minted:", shares);
-        console.log("Total shares owned:", userShares);
+        console.log("Total shares owned by broadcaster:", userShares);
         console.log("");
         console.log("Your tokens are now earning yield in ERC-4626 vaults!");
         console.log("JIT liquidity will be provided during swaps.");

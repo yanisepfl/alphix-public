@@ -46,11 +46,6 @@ contract AlphixETH is Alphix {
     error UnauthorizedETHSender();
 
     /**
-     * @dev Thrown when ETH transfer fails.
-     */
-    error ETHTransferFailed();
-
-    /**
      * @dev Thrown when pool is not an ETH pool (currency0 must be native).
      */
     error NotAnETHPool();
@@ -301,7 +296,10 @@ contract AlphixETH is Alphix {
 
         // Withdraw ETH directly from yield source to recipient
         uint256 sharesRedeemed = IAlphix4626WrapperWeth(state.yieldSource).withdrawETH(amount, recipient, address(this));
-        state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
+        // Safe: subtraction only executes when sharesOwned > sharesRedeemed (explicit guard)
+        unchecked {
+            state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
+        }
     }
 
     /**
@@ -342,7 +340,10 @@ contract AlphixETH is Alphix {
             if (state.yieldSource != address(0)) {
                 uint256 sharesRedeemed =
                     IAlphix4626WrapperWeth(state.yieldSource).withdrawETH(amount, address(this), address(this));
-                state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
+                // Safe: subtraction only executes when sharesOwned > sharesRedeemed (explicit guard)
+                unchecked {
+                    state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
+                }
             }
 
             poolManager.settle{value: amount}();

@@ -66,13 +66,16 @@ contract ConfigureReHypothecationScript is Script {
         bool hasTickRange = false;
         envVar = string.concat("JIT_TICK_LOWER_", network);
         try vm.envInt(envVar) returns (int256 val) {
-            // Safe: tick values fit in int24
+            // Validate tick values fit in int24 range
+            require(val >= type(int24).min && val <= type(int24).max, "JIT_TICK_LOWER out of int24 range");
             // forge-lint: disable-next-line(unsafe-typecast)
             tickLower = int24(val);
             envVar = string.concat("JIT_TICK_UPPER_", network);
             try vm.envInt(envVar) returns (int256 val2) {
+                require(val2 >= type(int24).min && val2 <= type(int24).max, "JIT_TICK_UPPER out of int24 range");
                 // forge-lint: disable-next-line(unsafe-typecast)
                 tickUpper = int24(val2);
+                require(tickLower < tickUpper, "Invalid tick range: tickLower must be < tickUpper");
                 hasTickRange = true;
             } catch {}
         } catch {}

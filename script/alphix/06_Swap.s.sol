@@ -85,13 +85,14 @@ contract SwapScript is Script {
         bool sellingEth = isEthPool && zeroForOne;
         if (!sellingEth) {
             console.log("Approving input token...");
-            IERC20(tokenIn).approve(routerAddr, amountIn + 1);
+            IERC20(tokenIn).approve(routerAddr, amountIn);
         }
 
         // Build swap params
+        // Validate amountIn fits in int256 before casting
+        require(amountIn <= uint256(type(int256).max), "amountIn exceeds int256 max");
         SwapParams memory params = SwapParams({
             zeroForOne: zeroForOne,
-            // Safe: amountIn fits in int256
             // forge-lint: disable-next-line(unsafe-typecast)
             amountSpecified: -int256(amountIn), // Negative for exact input
             sqrtPriceLimitX96: zeroForOne ? MIN_PRICE_LIMIT : MAX_PRICE_LIMIT

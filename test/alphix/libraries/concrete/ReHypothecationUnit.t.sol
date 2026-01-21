@@ -185,40 +185,6 @@ contract ReHypothecationUnitTest is Test {
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
-                               getShareUnit TESTS
-    ═══════════════════════════════════════════════════════════════════════════ */
-
-    function test_getShareUnit_nullYieldSource() public view {
-        uint256 unit = harness.getShareUnit(address(0));
-        assertEq(unit, 1e18, "Null yield source should return DEFAULT_RATE_PRECISION");
-    }
-
-    function test_getShareUnit_validVault() public view {
-        uint256 unit = harness.getShareUnit(address(vaultA));
-        assertEq(unit, 1e18, "18 decimal vault should return 1e18");
-    }
-
-    /* ═══════════════════════════════════════════════════════════════════════════
-                              getCurrentRate TESTS
-    ═══════════════════════════════════════════════════════════════════════════ */
-
-    function test_getCurrentRate_nullYieldSource() public view {
-        (uint256 rate, uint256 shareUnit) = harness.getCurrentRate(address(0));
-        assertEq(rate, 1e18, "Null yield source rate should be DEFAULT_RATE_PRECISION");
-        assertEq(shareUnit, 1e18, "Null yield source shareUnit should be DEFAULT_RATE_PRECISION");
-    }
-
-    function test_getCurrentRate_validVault() public {
-        // Deposit some tokens first to have a rate
-        tokenA.approve(address(vaultA), 100e18);
-        vaultA.deposit(100e18, address(this));
-
-        (uint256 rate, uint256 shareUnit) = harness.getCurrentRate(address(vaultA));
-        assertEq(shareUnit, 1e18, "Share unit should be 1e18 for 18 decimal vault");
-        assertEq(rate, 1e18, "Rate should be 1:1 initially");
-    }
-
-    /* ═══════════════════════════════════════════════════════════════════════════
                           getAmountInYieldSource TESTS
     ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -368,14 +334,6 @@ contract ReHypothecationTestHarness {
         returns (uint256)
     {
         return ReHypothecationLib.withdrawFromYieldSourceTo(yieldSource, amount, recipient);
-    }
-
-    function getShareUnit(address yieldSource) external view returns (uint256) {
-        return ReHypothecationLib.getShareUnit(yieldSource);
-    }
-
-    function getCurrentRate(address yieldSource) external view returns (uint256, uint256) {
-        return ReHypothecationLib.getCurrentRate(yieldSource);
     }
 
     function getAmountInYieldSource(address yieldSource, uint256 sharesOwned) external view returns (uint256) {

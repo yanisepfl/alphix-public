@@ -120,7 +120,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         uint256 aliceTokenId = _addLiquidityForUser(alice, testKey, minTick, maxTick, initialLiquidity);
         vm.stopPrank();
 
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolConfig = hook.getPoolConfig();
+        assertTrue(poolConfig.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -178,7 +179,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         _addLiquidityForUser(alice, testKey, minTick, maxTick, baseLiquidity);
         vm.stopPrank();
 
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolConfig = hook.getPoolConfig();
+        assertTrue(poolConfig.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
         vm.warp(block.timestamp + params.minPeriod + 1);
 
@@ -437,7 +439,8 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         _addLiquidityForUser(alice, testKey, minTick, maxTick, normalLiquidity);
         vm.stopPrank();
 
-        hook.getPoolConfig(); // Assert pool is configured
+        IAlphix.PoolConfig memory poolConfig = hook.getPoolConfig();
+        assertTrue(poolConfig.isConfigured, "Pool should be configured");
         DynamicFeeLib.PoolParams memory params = hook.getPoolParams();
 
         vm.warp(block.timestamp + 7 days);

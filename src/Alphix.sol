@@ -315,12 +315,28 @@ contract Alphix is
         // Get current fee from PoolManager
         (,,, uint24 currentFee) = poolManager.getSlot0(_poolId);
 
-        // Compute new fee
+        // Capture old target ratio for event
+        uint256 oldTargetRatio = _targetRatio;
+
+        // Compute new fee using current target ratio
         (uint24 newFee, DynamicFeeLib.OobState memory newOobState) = DynamicFeeLib.computeNewFee(
             currentFee, currentRatio, _targetRatio, _globalMaxAdjRate, _poolParams, _oobState
         );
 
+        // Compute new target ratio using EMA
+        uint256 newTargetRatio = DynamicFeeLib.ema(currentRatio, _targetRatio, _poolParams.lookbackPeriod);
+
+        // Clamp to maxCurrentRatio to prevent extreme values
+        if (newTargetRatio > _poolParams.maxCurrentRatio) {
+            newTargetRatio = _poolParams.maxCurrentRatio;
+        }
+
+        if (newTargetRatio == 0) {
+            newTargetRatio = 1;
+        }
+
         // Update state
+        _targetRatio = newTargetRatio;
         _oobState = newOobState;
         _lastFeeUpdate = block.timestamp;
 
@@ -329,7 +345,7 @@ contract Alphix is
             poolManager.updateDynamicLPFee(_poolKey, newFee);
         }
 
-        emit FeeUpdated(_poolId, currentFee, newFee, _targetRatio, currentRatio, _targetRatio);
+        emit FeeUpdated(_poolId, currentFee, newFee, oldTargetRatio, currentRatio, newTargetRatio);
     }
 
     /// @inheritdoc IAlphix
@@ -804,7 +820,10 @@ contract Alphix is
         if (state.yieldSource == address(0)) revert YieldSourceNotConfigured(currency);
 
         uint256 sharesRedeemed = ReHypothecationLib.withdrawFromYieldSourceTo(state.yieldSource, amount, recipient);
-        state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
+        // Safe: subtraction only executes when sharesOwned > sharesRedeemed (explicit guard)
+        unchecked {
+            state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
+        }
     }
 
     /* JIT LIQUIDITY INTERNAL FUNCTIONS */

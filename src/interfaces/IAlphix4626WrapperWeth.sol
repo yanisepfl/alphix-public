@@ -14,7 +14,7 @@ interface IAlphix4626WrapperWeth is IERC4626 {
     /* EVENTS */
 
     /**
-     * @notice Emitted when native ETH is deposited (wrapped to WETH and supplied to Aave).
+     * @notice Emitted when native ETH is deposited (wrapped to WETH and supplied to underlying vault).
      * @param caller The address that initiated the deposit.
      * @param receiver The address that received the shares.
      * @param ethAmount The amount of ETH deposited.
@@ -68,7 +68,7 @@ interface IAlphix4626WrapperWeth is IERC4626 {
      * @param receiver The address that will receive the ETH.
      * @param owner The address that owns the shares.
      * @return shares The amount of shares burned.
-     * @dev Withdraws WETH from Aave and unwraps to ETH before sending.
+     * @dev Withdraws WETH from underlying vault and unwraps to ETH before sending.
      *      Emits {WithdrawETH} on success.
      */
     function withdrawETH(uint256 assets, address receiver, address owner) external returns (uint256 shares);
@@ -79,7 +79,7 @@ interface IAlphix4626WrapperWeth is IERC4626 {
      * @param receiver The address that will receive the ETH.
      * @param owner The address that owns the shares.
      * @return assets The amount of assets withdrawn.
-     * @dev Withdraws WETH from Aave and unwraps to ETH before sending.
+     * @dev Withdraws WETH from underlying vault and unwraps to ETH before sending.
      *      Emits {WithdrawETH} on success.
      */
     function redeemETH(uint256 shares, address receiver, address owner) external returns (uint256 assets);
