@@ -561,7 +561,8 @@ contract Alphix is
             uint160 sqrtPriceLowerX96 = TickMath.getSqrtPriceAtTick(_reHypothecationConfig.tickLower);
             uint160 sqrtPriceUpperX96 = TickMath.getSqrtPriceAtTick(_reHypothecationConfig.tickUpper);
 
-            uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(sqrtPriceLowerX96, sqrtPriceUpperX96, amount0);
+            // where amount0 is fully utilized at the current price (token0 exists between current and upper)
+            uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(currentSqrtPriceX96, sqrtPriceUpperX96, amount0);
             if (liquidity == 0) return (0, 0);
 
             (uint256 amt0, uint256 amt1) = LiquidityAmounts.getAmountsForLiquidity(
@@ -599,7 +600,8 @@ contract Alphix is
             uint160 sqrtPriceLowerX96 = TickMath.getSqrtPriceAtTick(_reHypothecationConfig.tickLower);
             uint160 sqrtPriceUpperX96 = TickMath.getSqrtPriceAtTick(_reHypothecationConfig.tickUpper);
 
-            uint128 liquidity = LiquidityAmounts.getLiquidityForAmount1(sqrtPriceLowerX96, sqrtPriceUpperX96, amount1);
+            // where amount1 is fully utilized at the current price (token1 exists between lower and current)
+            uint128 liquidity = LiquidityAmounts.getLiquidityForAmount1(sqrtPriceLowerX96, currentSqrtPriceX96, amount1);
             if (liquidity == 0) return (0, 0);
 
             (uint256 amt0, uint256 amt1) = LiquidityAmounts.getAmountsForLiquidity(

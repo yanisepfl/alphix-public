@@ -16,6 +16,7 @@ import {TickBitmap} from "v4-core/src/libraries/TickBitmap.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 import {Alphix} from "../../src/Alphix.sol";
+import {IAlphix} from "../../src/interfaces/IAlphix.sol";
 import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
 
 /**
@@ -234,6 +235,10 @@ contract CreatePoolScript is Script {
 
         vm.stopBroadcast();
 
+        // Step 4: Verify everything went according to plan
+        console.log("Step 4: Verifying pool state...");
+        _verifyPoolState(alphix, poolKey, poolId, cfg);
+
         console.log("");
         console.log("===========================================");
         console.log("POOL CREATION SUCCESSFUL");
@@ -247,15 +252,43 @@ contract CreatePoolScript is Script {
         console.log("===========================================");
     }
 
+    function _verifyPoolState(Alphix alphix, PoolKey memory poolKey, PoolId poolId, Config memory cfg) internal view {
+        // 1. Verify hook is unpaused
+        require(!alphix.paused(), "VERIFY FAILED: Hook should be unpaused after initializePool");
+        console.log("  [OK] Hook is unpaused");
+
+        // 2. Verify pool is configured
+        IAlphix.PoolConfig memory storedConfig = alphix.getPoolConfig();
+        require(storedConfig.isConfigured, "VERIFY FAILED: Pool should be configured");
+        console.log("  [OK] Pool is configured");
+
+        // 3. Verify initial fee matches
+        require(storedConfig.initialFee == cfg.initialFee, "VERIFY FAILED: Initial fee mismatch");
+        console.log("  [OK] Initial fee:", storedConfig.initialFee, "bps");
+
+        // 4. Verify target ratio matches
+        require(storedConfig.initialTargetRatio == cfg.targetRatio, "VERIFY FAILED: Target ratio mismatch");
+        console.log("  [OK] Target ratio:", storedConfig.initialTargetRatio);
+
+        // 5. Verify pool key is stored correctly
+        PoolId storedPoolId = alphix.getPoolId();
+        require(PoolId.unwrap(storedPoolId) == PoolId.unwrap(poolId), "VERIFY FAILED: Pool ID mismatch");
+        console.log("  [OK] Pool ID stored correctly");
+
+        // 6. Verify hook address in pool key
+        require(address(poolKey.hooks) == address(alphix), "VERIFY FAILED: Hook address mismatch in pool key");
+        console.log("  [OK] Hook address in pool key");
+    }
+
     function _defaultPoolParams() internal pure returns (DynamicFeeLib.PoolParams memory) {
         return DynamicFeeLib.PoolParams({
-            minFee: 1,
-            maxFee: 100001,
-            baseMaxFeeDelta: 50,
+            minFee: 1, // 0.0001%
+            maxFee: 1001, // 0.1001%
+            baseMaxFeeDelta: 10,
             lookbackPeriod: 30,
-            minPeriod: 1 days,
+            minPeriod: 172_800, // 2 days
             ratioTolerance: 5e15,
-            linearSlope: 1e18,
+            linearSlope: 5e17,
             maxCurrentRatio: 1e21,
             upperSideFactor: 1e18,
             lowerSideFactor: 2e18

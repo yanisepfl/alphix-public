@@ -14,7 +14,7 @@ import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManage
  *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier (e.g., BASE_SEPOLIA)
- * - ALPHIX_MANAGER_{NETWORK}: Initial admin address (will have ADMIN_ROLE)
+ * - ACCESS_MANAGER_ADMIN_{NETWORK}: Initial admin address (will have ADMIN_ROLE)
  *
  * After Deployment:
  * - Copy the deployed address to ACCESS_MANAGER in .env
@@ -24,7 +24,7 @@ contract DeployAccessManagerScript is Script {
         string memory network = vm.envString("DEPLOYMENT_NETWORK");
         require(bytes(network).length > 0, "DEPLOYMENT_NETWORK not set");
 
-        string memory adminEnvVar = string.concat("ALPHIX_MANAGER_", network);
+        string memory adminEnvVar = string.concat("ACCESS_MANAGER_ADMIN_", network);
         address initialAdmin = vm.envAddress(adminEnvVar);
         require(initialAdmin != address(0), string.concat(adminEnvVar, " not set"));
 

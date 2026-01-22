@@ -23,7 +23,7 @@ import {AlphixETH} from "../../src/AlphixETH.sol";
  * - DEPLOYMENT_NETWORK: Network identifier
  * - POOL_MANAGER_{NETWORK}: Uniswap V4 PoolManager address
  * - CREATE2_DEPLOYER_{NETWORK}: CREATE2 factory address
- * - ALPHIX_MANAGER_{NETWORK}: Initial owner address (must be tx sender)
+ * - ALPHIX_OWNER_{NETWORK}: Initial owner address of the AlphixETH hook
  * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
  * - TOKEN_NAME_{NETWORK}: ERC20 share token name (default: "Alphix ETH LP Shares")
  * - TOKEN_SYMBOL_{NETWORK}: ERC20 share token symbol (default: "ALPHIX-ETH-LP")
@@ -40,7 +40,7 @@ contract DeployAlphixETHScript is Script {
         string network;
         address poolManagerAddr;
         address create2DeployerAddr;
-        address alphixManager;
+        address alphixOwner;
         address accessManager;
         string tokenName;
         string tokenSymbol;
@@ -65,9 +65,9 @@ contract DeployAlphixETHScript is Script {
         data.create2DeployerAddr = vm.envAddress(envVar);
         require(data.create2DeployerAddr != address(0), string.concat(envVar, " not set"));
 
-        envVar = string.concat("ALPHIX_MANAGER_", data.network);
-        data.alphixManager = vm.envAddress(envVar);
-        require(data.alphixManager != address(0), string.concat(envVar, " not set"));
+        envVar = string.concat("ALPHIX_OWNER_", data.network);
+        data.alphixOwner = vm.envAddress(envVar);
+        require(data.alphixOwner != address(0), string.concat(envVar, " not set"));
 
         envVar = string.concat("ACCESS_MANAGER_", data.network);
         data.accessManager = vm.envAddress(envVar);
@@ -93,27 +93,22 @@ contract DeployAlphixETHScript is Script {
         console.log("Network:", data.network);
         console.log("PoolManager:", data.poolManagerAddr);
         console.log("CREATE2 Deployer:", data.create2DeployerAddr);
-        console.log("Alphix Manager:", data.alphixManager);
+        console.log("Alphix Owner:", data.alphixOwner);
         console.log("AccessManager:", data.accessManager);
         console.log("Token Name:", data.tokenName);
         console.log("Token Symbol:", data.tokenSymbol);
         console.log("");
 
-        // All 14 hook permissions enabled
+        // Hook permissions matching Alphix.getHookPermissions() (AlphixETH inherits from Alphix)
         data.flags = uint160(
-            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
-                | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-                | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-                | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_ADD_LIQUIDITY_RETURNS_DELTA_FLAG
-                | Hooks.AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG
+            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
         );
 
         console.log("Mining hook address with required flags...");
 
         IPoolManager poolManager = IPoolManager(data.poolManagerAddr);
         bytes memory constructorArgs =
-            abi.encode(poolManager, data.alphixManager, data.accessManager, data.tokenName, data.tokenSymbol);
+            abi.encode(poolManager, data.alphixOwner, data.accessManager, data.tokenName, data.tokenSymbol);
 
         (data.hookAddress, data.salt) =
             HookMiner.find(data.create2DeployerAddr, data.flags, type(AlphixETH).creationCode, constructorArgs);
@@ -124,7 +119,7 @@ contract DeployAlphixETHScript is Script {
         vm.startBroadcast();
 
         AlphixETH alphix = new AlphixETH{salt: data.salt}(
-            poolManager, data.alphixManager, data.accessManager, data.tokenName, data.tokenSymbol
+            poolManager, data.alphixOwner, data.accessManager, data.tokenName, data.tokenSymbol
         );
 
         vm.stopBroadcast();
