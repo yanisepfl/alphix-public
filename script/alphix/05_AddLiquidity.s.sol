@@ -231,18 +231,16 @@ contract AddLiquidityScript is Script {
         if (isEthPool) {
             actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP));
             params = new bytes[](3);
-            params[0] = abi.encode(
-                c.poolKey, c.tickLower, c.tickUpper, c.liquidity, amount0Max, amount1Max, msg.sender, ""
-            );
+            params[0] =
+                abi.encode(c.poolKey, c.tickLower, c.tickUpper, c.liquidity, amount0Max, amount1Max, msg.sender, "");
             params[1] = abi.encode(c.poolKey.currency0, c.poolKey.currency1);
             params[2] = abi.encode(Currency.wrap(address(0)), msg.sender);
             posm.modifyLiquidities{value: amount0Max}(abi.encode(actions, params), block.timestamp + 60);
         } else {
             actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
             params = new bytes[](2);
-            params[0] = abi.encode(
-                c.poolKey, c.tickLower, c.tickUpper, c.liquidity, amount0Max, amount1Max, msg.sender, ""
-            );
+            params[0] =
+                abi.encode(c.poolKey, c.tickLower, c.tickUpper, c.liquidity, amount0Max, amount1Max, msg.sender, "");
             params[1] = abi.encode(c.poolKey.currency0, c.poolKey.currency1);
             posm.modifyLiquidities(abi.encode(actions, params), block.timestamp + 60);
         }

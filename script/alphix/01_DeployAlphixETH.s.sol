@@ -100,9 +100,7 @@ contract DeployAlphixETHScript is Script {
         console.log("");
 
         // Hook permissions matching Alphix.getHookPermissions() (AlphixETH inherits from Alphix)
-        data.flags = uint160(
-            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-        );
+        data.flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG);
 
         console.log("Mining hook address with required flags...");
 
