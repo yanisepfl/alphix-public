@@ -3,7 +3,8 @@ pragma solidity ^0.8.26;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
@@ -42,6 +43,7 @@ library Commands {
 
 contract SwapUniversalRouterScript is Script {
     using CurrencyLibrary for Currency;
+    using SafeERC20 for IERC20;
 
     IPermit2 constant PERMIT2 = IPermit2(0x000000000022D473030F116dDEE9F6B43aC78BA3);
 
@@ -79,12 +81,18 @@ contract SwapUniversalRouterScript is Script {
         envVar = string.concat("SWAP_AMOUNT_IN_", cfg.network);
         cfg.amountIn = vm.envUint(envVar);
         require(cfg.amountIn > 0, "SWAP_AMOUNT_IN must be > 0");
+        require(
+            cfg.amountIn <= type(uint128).max, string.concat("SWAP_AMOUNT_IN_", cfg.network, " exceeds uint128 max")
+        );
 
         envVar = string.concat("SWAP_ZERO_FOR_ONE_", cfg.network);
         cfg.zeroForOne = vm.envBool(envVar);
 
         envVar = string.concat("SWAP_MIN_OUTPUT_", cfg.network);
         cfg.minOutput = vm.envUint(envVar);
+        require(
+            cfg.minOutput <= type(uint128).max, string.concat("SWAP_MIN_OUTPUT_", cfg.network, " exceeds uint128 max")
+        );
         if (cfg.minOutput == 0) {
             console.log("WARNING: SWAP_MIN_OUTPUT_%s is 0 - no slippage protection", cfg.network);
         }
@@ -135,7 +143,7 @@ contract SwapUniversalRouterScript is Script {
 
     function _approveToken(address token, address router, uint256 amount) internal {
         console.log("Approving input token via Permit2...");
-        IERC20(token).approve(address(PERMIT2), amount);
+        IERC20(token).forceApprove(address(PERMIT2), amount);
         // forge-lint: disable-next-line(unsafe-typecast)
         PERMIT2.approve(token, router, uint160(amount), uint48(block.timestamp + 1 hours));
     }

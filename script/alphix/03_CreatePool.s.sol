@@ -133,8 +133,20 @@ contract CreatePoolScript is Script {
             string.concat("SQRT_PRICE_", cfg.network, " outside TickMath bounds")
         );
         cfg.sqrtPrice = uint160(rawSqrtPrice);
+
+        // Amount validation - ensure at least one amount is non-zero for initial liquidity
         cfg.amount0 = vm.envUint(string.concat("AMOUNT0_", cfg.network));
         cfg.amount1 = vm.envUint(string.concat("AMOUNT1_", cfg.network));
+        require(cfg.amount0 > 0 || cfg.amount1 > 0, "At least one of AMOUNT0 or AMOUNT1 must be > 0");
+        // Validate amounts fit in uint160 for Permit2 approvals
+        require(
+            cfg.amount0 <= type(uint160).max,
+            string.concat("AMOUNT0_", cfg.network, " exceeds uint160 max for Permit2 approval")
+        );
+        require(
+            cfg.amount1 <= type(uint160).max,
+            string.concat("AMOUNT1_", cfg.network, " exceeds uint160 max for Permit2 approval")
+        );
 
         // Liquidity range validation (must be > 0 and fit in int24 after cast)
         uint256 rawLiquidityRange = vm.envUint(string.concat("LIQUIDITY_RANGE_", cfg.network));
@@ -163,6 +175,16 @@ contract CreatePoolScript is Script {
         liq.tickLower = (compressed - int24(uint24(cfg.liquidityRange))) * cfg.tickSpacing;
         // forge-lint: disable-next-line(unsafe-typecast)
         liq.tickUpper = (compressed + int24(uint24(cfg.liquidityRange))) * cfg.tickSpacing;
+
+        // Validate computed ticks are within TickMath bounds
+        require(
+            liq.tickLower >= TickMath.MIN_TICK,
+            "Computed tickLower below MIN_TICK - reduce LIQUIDITY_RANGE or adjust SQRT_PRICE"
+        );
+        require(
+            liq.tickUpper <= TickMath.MAX_TICK,
+            "Computed tickUpper above MAX_TICK - reduce LIQUIDITY_RANGE or adjust SQRT_PRICE"
+        );
 
         // Calculate liquidity
         liq.liquidity = LiquidityAmounts.getLiquidityForAmounts(

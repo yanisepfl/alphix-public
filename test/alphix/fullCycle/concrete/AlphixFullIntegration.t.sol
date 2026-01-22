@@ -951,7 +951,7 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
         vm.stopPrank();
 
         // Week 4 final operations
-        uint24 week4Fee = _executeWeek4Operations(week3Fee, newParams);
+        uint24 week4Fee = _executeWeek4Operations(newParams);
 
         // Final validation and directional checks
         _executeFinalValidation(week1Fee, week2Fee, week3Fee, week4Fee);
@@ -1111,15 +1111,9 @@ contract AlphixFullIntegrationTest is BaseAlphixTest {
 
     /**
      * @notice Helper for week 4 operations to avoid stack too deep
-     * @param week3Fee Unused - kept for API consistency, could be used for fee progression assertions
      * @param newParams Pool parameters to use for minPeriod calculations
      */
-    function _executeWeek4Operations(uint24 week3Fee, DynamicFeeLib.PoolParams memory newParams)
-        internal
-        returns (uint24 week4Fee)
-    {
-        // Silence unused parameter warning - kept for potential future fee progression tests
-        week3Fee;
+    function _executeWeek4Operations(DynamicFeeLib.PoolParams memory newParams) internal returns (uint24 week4Fee) {
         // Day 27: Test pool pause/unpause
         vm.warp(block.timestamp + 1 days);
 

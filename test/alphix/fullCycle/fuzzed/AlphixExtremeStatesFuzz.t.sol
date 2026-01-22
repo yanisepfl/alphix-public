@@ -398,9 +398,11 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
                 uint256 feeChange = currentFee > previousFee ? currentFee - previousFee : previousFee - currentFee;
                 uint256 maxPossibleChange = uint256(params.maxFee) - uint256(params.minFee);
 
-                // Fee change should not be at maximum since streak just reset to 1
+                // Fee change should be strictly less than 50% of max range when streak resets
+                // This is a meaningful bound: streak=1 can't cause extreme fee swings
                 assertTrue(
-                    feeChange < maxPossibleChange, "Fee change after alternation should be moderate (streak reset)"
+                    feeChange < maxPossibleChange / 2,
+                    "Fee change after alternation should be < 50% of range (streak reset to 1)"
                 );
             }
 
@@ -482,11 +484,12 @@ contract AlphixExtremeStatesFuzzTest is BaseAlphixTest {
         assertGe(feeRecovered, params.minFee, "Recovered fee bounded");
         assertLe(feeRecovered, params.maxFee, "Recovered fee bounded");
 
-        // Verify crisis typically increases fee (though EMA behavior may vary)
-        // At minimum, verify system responds to crisis with fee adjustment
+        // Verify system responds to crisis: fee should change from normal state
+        // Either crisis raises fee (expected for ratio imbalance) or recovery lowers it
+        // At minimum, the system should not be static through a crisis event
         assertTrue(
-            feeCrisis >= feeNormal || feeRecovered <= params.maxFee,
-            "System should respond to crisis with fee changes while staying bounded"
+            feeCrisis != feeNormal || feeRecovered != feeNormal,
+            "Fee should change during crisis or recovery (system not static)"
         );
 
         IAlphix.PoolConfig memory poolConfigAfter = hook.getPoolConfig();
