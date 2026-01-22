@@ -361,8 +361,15 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         int24 narrowLower = -100 * defaultTickSpacing;
         int24 narrowUpper = 100 * defaultTickSpacing;
 
-        vm.startPrank(yieldManager);
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        AlphixETH(payable(address(hook))).pause();
+        vm.prank(yieldManager);
         AlphixETH(payable(address(hook))).setTickRange(narrowLower, narrowUpper);
+        vm.prank(owner);
+        AlphixETH(payable(address(hook))).unpause();
+
+        vm.startPrank(yieldManager);
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
         vm.stopPrank();
@@ -392,8 +399,15 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         int24 asymLower = -200 * defaultTickSpacing;
         int24 asymUpper = 50 * defaultTickSpacing;
 
-        vm.startPrank(yieldManager);
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        AlphixETH(payable(address(hook))).pause();
+        vm.prank(yieldManager);
         AlphixETH(payable(address(hook))).setTickRange(asymLower, asymUpper);
+        vm.prank(owner);
+        AlphixETH(payable(address(hook))).unpause();
+
+        vm.startPrank(yieldManager);
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
         vm.stopPrank();
@@ -608,8 +622,16 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
     }
 
     function _configureReHypo() internal {
-        vm.startPrank(yieldManager);
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        AlphixETH(payable(address(hook))).pause();
+        vm.prank(yieldManager);
         AlphixETH(payable(address(hook))).setTickRange(fullRangeLower, fullRangeUpper);
+        vm.prank(owner);
+        AlphixETH(payable(address(hook))).unpause();
+
+        // setYieldSource requires whenNotPaused
+        vm.startPrank(yieldManager);
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
         vm.stopPrank();

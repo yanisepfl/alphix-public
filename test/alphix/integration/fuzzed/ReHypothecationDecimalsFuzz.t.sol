@@ -676,8 +676,16 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
         int24 fullRangeLower = TickMath.minUsableTick(testKey.tickSpacing);
         int24 fullRangeUpper = TickMath.maxUsableTick(testKey.tickSpacing);
 
-        vm.startPrank(owner);
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        Alphix(address(testHook)).pause();
+        vm.prank(owner);
         Alphix(address(testHook)).setTickRange(fullRangeLower, fullRangeUpper);
+        vm.prank(owner);
+        Alphix(address(testHook)).unpause();
+
+        // setYieldSource requires whenNotPaused
+        vm.startPrank(owner);
         Alphix(address(testHook)).setYieldSource(testCurrency0, address(testVault0));
         Alphix(address(testHook)).setYieldSource(testCurrency1, address(testVault1));
         vm.stopPrank();

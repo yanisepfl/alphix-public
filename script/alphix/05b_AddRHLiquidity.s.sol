@@ -28,6 +28,8 @@ import {AlphixETH} from "../../src/AlphixETH.sol";
  * - DEPLOYMENT_NETWORK: Network identifier
  * - ALPHIX_HOOK_{NETWORK}: Alphix hook address
  * - RH_SHARES_{NETWORK}: Number of shares to mint (in wei, 18 decimals)
+ * - RH_AMOUNT0_MAX_{NETWORK}: Maximum amount of token0 willing to spend (safety limit)
+ * - RH_AMOUNT1_MAX_{NETWORK}: Maximum amount of token1 willing to spend (safety limit)
  *
  * Note: Token amounts are calculated automatically using previewAddReHypothecatedLiquidity()
  */
@@ -45,6 +47,14 @@ contract AddRHLiquidityScript is Script {
         envVar = string.concat("RH_SHARES_", network);
         uint256 shares = vm.envUint(envVar);
         require(shares > 0, "RH_SHARES must be > 0");
+
+        envVar = string.concat("RH_AMOUNT0_MAX_", network);
+        uint256 amount0Max = vm.envUint(envVar);
+        require(amount0Max > 0, string.concat(envVar, " not set"));
+
+        envVar = string.concat("RH_AMOUNT1_MAX_", network);
+        uint256 amount1Max = vm.envUint(envVar);
+        require(amount1Max > 0, string.concat(envVar, " not set"));
 
         Alphix alphix = Alphix(hookAddr);
         PoolKey memory poolKey = alphix.getPoolKey();
@@ -85,7 +95,14 @@ contract AddRHLiquidityScript is Script {
         console.log("Required amounts:");
         console.log("  - Amount0:", amount0, "wei", isEthPool ? "(ETH)" : "");
         console.log("  - Amount1:", amount1, "wei");
+        console.log("Max limits:");
+        console.log("  - Amount0 max:", amount0Max, "wei");
+        console.log("  - Amount1 max:", amount1Max, "wei");
         console.log("");
+
+        // Safety check: ensure required amounts don't exceed max limits
+        require(amount0 <= amount0Max, "Amount0 exceeds RH_AMOUNT0_MAX limit");
+        require(amount1 <= amount1Max, "Amount1 exceeds RH_AMOUNT1_MAX limit");
 
         vm.startBroadcast();
 

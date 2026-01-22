@@ -77,9 +77,14 @@ contract ReHypothecationInvariantsTest is StdInvariant, BaseAlphixTest {
         int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
         int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
 
+        // setTickRange requires whenPaused
+        Alphix(address(hook)).pause();
+        Alphix(address(hook)).setTickRange(tickLower, tickUpper);
+        Alphix(address(hook)).unpause();
+
+        // setYieldSource requires whenNotPaused
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
-        Alphix(address(hook)).setTickRange(tickLower, tickUpper);
 
         vm.stopPrank();
 

@@ -372,15 +372,20 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        vm.startPrank(yieldManager);
-        // Set yield sources
-        hook.setYieldSource(currency0, address(vault0));
-        hook.setYieldSource(currency1, address(vault1));
-
-        // Set tick range
+        // Set tick range (requires whenPaused)
         int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
         int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.prank(owner);
+        hook.pause();
+        vm.prank(yieldManager);
         hook.setTickRange(tickLower, tickUpper);
+        vm.prank(owner);
+        hook.unpause();
+
+        // Set yield sources (requires whenNotPaused)
+        vm.startPrank(yieldManager);
+        hook.setYieldSource(currency0, address(vault0));
+        hook.setYieldSource(currency1, address(vault1));
         vm.stopPrank();
     }
 

@@ -200,8 +200,13 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
         _addRegularLp(1000e18);
 
         // Configure with FULL RANGE
-        vm.startPrank(yieldManager);
+        vm.prank(owner);
+        Alphix(address(hook)).pause();
+        vm.prank(yieldManager);
         Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
+        vm.prank(owner);
+        Alphix(address(hook)).unpause();
+        vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();
@@ -244,8 +249,13 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
         _addRegularLp(1000e18);
 
         // Start with FULL RANGE
-        vm.startPrank(yieldManager);
+        vm.prank(owner);
+        Alphix(address(hook)).pause();
+        vm.prank(yieldManager);
         Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
+        vm.prank(owner);
+        Alphix(address(hook)).unpause();
+        vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();
@@ -485,8 +495,13 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
     }
 
     function _configureReHypo() internal {
-        vm.startPrank(yieldManager);
+        vm.prank(owner);
+        Alphix(address(hook)).pause();
+        vm.prank(yieldManager);
         Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
+        vm.prank(owner);
+        Alphix(address(hook)).unpause();
+        vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();

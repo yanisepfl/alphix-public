@@ -404,7 +404,7 @@ contract Alphix is
     }
 
     /// @inheritdoc IReHypothecation
-    function setTickRange(int24 tickLower, int24 tickUpper) external override restricted poolConfigured whenNotPaused {
+    function setTickRange(int24 tickLower, int24 tickUpper) external override restricted poolConfigured whenPaused {
         ReHypothecationLib.validateTickRange(tickLower, tickUpper, _poolKey.tickSpacing);
         _reHypothecationConfig.tickLower = tickLower;
         _reHypothecationConfig.tickUpper = tickUpper;

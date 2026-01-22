@@ -348,13 +348,20 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Setup yield sources
+        // Set tick range (requires whenPaused)
+        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.prank(owner);
+        hook.pause();
+        vm.prank(yieldManager);
+        hook.setTickRange(tickLower, tickUpper);
+        vm.prank(owner);
+        hook.unpause();
+
+        // Setup yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
         hook.setYieldSource(key.currency1, address(tokenVault));
-        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
-        hook.setTickRange(tickLower, tickUpper);
         vm.stopPrank();
 
         // Add liquidity with ETH
@@ -395,13 +402,20 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Setup yield sources
+        // Set tick range (requires whenPaused)
+        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.prank(owner);
+        hook.pause();
+        vm.prank(yieldManager);
+        hook.setTickRange(tickLower, tickUpper);
+        vm.prank(owner);
+        hook.unpause();
+
+        // Setup yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
         hook.setYieldSource(key.currency1, address(tokenVault));
-        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
-        hook.setTickRange(tickLower, tickUpper);
         vm.stopPrank();
 
         // Add liquidity
@@ -484,12 +498,15 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Set only tick range, not yield sources
-        vm.startPrank(yieldManager);
+        // Set only tick range (requires whenPaused), not yield sources
         int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
         int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.prank(owner);
+        hook.pause();
+        vm.prank(yieldManager);
         hook.setTickRange(tickLower_, tickUpper_);
-        vm.stopPrank();
+        vm.prank(owner);
+        hook.unpause();
 
         // Mint tokens and try to add liquidity without yield source
         MockERC20(Currency.unwrap(key.currency1)).mint(user1, 100e18);
@@ -585,16 +602,22 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
+        // Set tick range (requires whenPaused)
+        int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
+        int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.prank(owner);
+        hook.pause();
+        vm.prank(yieldManager);
+        hook.setTickRange(tickLower_, tickUpper_);
+        vm.prank(owner);
+        hook.unpause();
+
+        // Set yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         // Set ETH yield source
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
         // Set token yield source
         hook.setYieldSource(key.currency1, address(tokenVault));
-
-        // Set tick range
-        int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
-        hook.setTickRange(tickLower_, tickUpper_);
         vm.stopPrank();
     }
 

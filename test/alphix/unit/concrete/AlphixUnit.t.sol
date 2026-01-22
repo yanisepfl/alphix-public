@@ -462,12 +462,33 @@ contract AlphixUnitTest is BaseAlphixTest {
         int24 newLower = -200;
         int24 newUpper = 200;
 
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        hook.pause();
         vm.prank(yieldManager);
         hook.setTickRange(newLower, newUpper);
+        vm.prank(owner);
+        hook.unpause();
 
         IReHypothecation.ReHypothecationConfig memory config = hook.getReHypothecationConfig();
         assertEq(config.tickLower, newLower, "Lower tick should be updated");
         assertEq(config.tickUpper, newUpper, "Upper tick should be updated");
+    }
+
+    function test_setTickRange_revertsWhenNotPaused() public {
+        address yieldManager = makeAddr("yieldManager");
+
+        vm.startPrank(owner);
+        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
+        vm.stopPrank();
+
+        int24 newLower = -200;
+        int24 newUpper = 200;
+
+        // Hook is NOT paused - should revert with ExpectedPause()
+        vm.prank(yieldManager);
+        vm.expectRevert(abi.encodeWithSignature("ExpectedPause()"));
+        hook.setTickRange(newLower, newUpper);
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -566,12 +587,19 @@ contract AlphixUnitTest is BaseAlphixTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Setup first yield source and deposit
-        vm.startPrank(yieldManager);
-        hook.setYieldSource(currency0, address(vault0));
+        // Set tick range (requires whenPaused)
         int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
         int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.prank(owner);
+        hook.pause();
+        vm.prank(yieldManager);
         hook.setTickRange(tickLower, tickUpper);
+        vm.prank(owner);
+        hook.unpause();
+
+        // Setup yield sources (requires whenNotPaused)
+        vm.startPrank(yieldManager);
+        hook.setYieldSource(currency0, address(vault0));
         hook.setYieldSource(currency1, address(vault1));
         vm.stopPrank();
 
@@ -825,14 +853,20 @@ contract AlphixUnitTest is BaseAlphixTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
+        // Set tick range (requires whenPaused)
+        int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
+        int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.prank(owner);
+        hook.pause();
+        vm.prank(yieldManager);
+        hook.setTickRange(tickLower_, tickUpper_);
+        vm.prank(owner);
+        hook.unpause();
+
+        // Set yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(currency0, address(vault0));
         hook.setYieldSource(currency1, address(vault1));
-
-        // Set tick range
-        int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
-        hook.setTickRange(tickLower_, tickUpper_);
         vm.stopPrank();
     }
 

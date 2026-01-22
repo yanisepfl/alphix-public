@@ -606,8 +606,15 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         int24 narrowLower = -100;
         int24 narrowUpper = 100;
 
-        vm.startPrank(yieldManager);
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        Alphix(address(hook)).pause();
+        vm.prank(yieldManager);
         Alphix(address(hook)).setTickRange(narrowLower, narrowUpper);
+        vm.prank(owner);
+        Alphix(address(hook)).unpause();
+
+        vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();
@@ -907,8 +914,15 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         int24 narrowLower = -20;
         int24 narrowUpper = 20;
 
-        vm.startPrank(yieldManager);
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        Alphix(address(hook)).pause();
+        vm.prank(yieldManager);
         Alphix(address(hook)).setTickRange(narrowLower, narrowUpper);
+        vm.prank(owner);
+        Alphix(address(hook)).unpause();
+
+        vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();
@@ -976,6 +990,9 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         // The change should be much smaller than when JIT is in range
         // When in range, a 1e18 swap causes significant balance changes
         // When out of range, it should cause minimal/no changes
+        // Allow small tolerance for potential rounding (1e15 = 0.001 tokens with 18 decimals)
+        assertLt(change0, 1e15, "Yield source0 should not change significantly when JIT out of range");
+        assertLt(change1, 1e15, "Yield source1 should not change significantly when JIT out of range");
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -1025,8 +1042,16 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
     }
 
     function _configureReHypo() internal {
-        vm.startPrank(yieldManager);
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        Alphix(address(hook)).pause();
+        vm.prank(yieldManager);
         Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
+        vm.prank(owner);
+        Alphix(address(hook)).unpause();
+
+        // setYieldSource requires whenNotPaused
+        vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
         vm.stopPrank();

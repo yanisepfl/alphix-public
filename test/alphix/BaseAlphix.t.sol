@@ -467,6 +467,24 @@ abstract contract BaseAlphixTest is Test, Deployers {
     }
 
     /**
+     * @notice Helper to set tick range with required pause/unpause
+     * @dev setTickRange requires whenPaused modifier, this helper handles the pause/unpause flow
+     *      Caller must have yield manager role to call setTickRange
+     * @param _hook The Alphix hook to configure
+     * @param _tickLower Lower tick boundary
+     * @param _tickUpper Upper tick boundary
+     */
+    function _setTickRangeWithPause(Alphix _hook, int24 _tickLower, int24 _tickUpper) internal {
+        address hookOwner = _hook.owner();
+        vm.prank(hookOwner);
+        _hook.pause();
+        // Caller (msg.sender in vm context) should have yield manager role
+        _hook.setTickRange(_tickLower, _tickUpper);
+        vm.prank(hookOwner);
+        _hook.unpause();
+    }
+
+    /**
      * @notice Create a new Uniswap pool bound to a given hook without configuring it.
      * @param d0 Decimals for token0
      * @param d1 Decimals for token1

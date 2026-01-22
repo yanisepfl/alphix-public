@@ -491,8 +491,13 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
             return;
         }
 
+        // setTickRange requires whenPaused
+        vm.prank(owner);
+        hook.pause();
         vm.prank(yieldManager);
         hook.setTickRange(tickLower, tickUpper);
+        vm.prank(owner);
+        hook.unpause();
 
         IReHypothecation.ReHypothecationConfig memory config = hook.getReHypothecationConfig();
         assertEq(config.tickLower, tickLower, "Lower tick mismatch");
