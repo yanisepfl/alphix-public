@@ -7,6 +7,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 
 /* OZ IMPORTS */
@@ -45,8 +46,10 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         params.minFee = 1;
         params.maxFee = LPFeeLibrary.MAX_LP_FEE;
 
+        int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(newKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(newKey, fee, INITIAL_TARGET_RATIO, params);
+        freshHook.initializePool(newKey, fee, INITIAL_TARGET_RATIO, params, tickLower, tickUpper);
 
         assertEq(freshHook.getFee(), fee);
     }
@@ -62,8 +65,10 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
 
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
+        int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(newKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(newKey, INITIAL_FEE, ratio, defaultPoolParams);
+        freshHook.initializePool(newKey, INITIAL_FEE, ratio, defaultPoolParams, tickLower, tickUpper);
 
         // Pool should be initialized - verify by checking pool ID is set
         assertTrue(PoolId.unwrap(freshHook.getPoolId()) != bytes32(0));
@@ -80,8 +85,10 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
 
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
+        int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(newKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
 
         // Verify initialization succeeded
         PoolKey memory cachedKey = freshHook.getPoolKey();
@@ -106,8 +113,10 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
 
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
+        int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(newKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
 
         PoolKey memory cachedKey = freshHook.getPoolKey();
         assertEq(cachedKey.tickSpacing, tickSpacing);
@@ -223,8 +232,10 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         // Use a fee within the provided range
         uint24 initialFee = uint24(bound(uint256(minFee), minFee, maxFee));
 
+        int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(newKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(newKey, initialFee, INITIAL_TARGET_RATIO, params);
+        freshHook.initializePool(newKey, initialFee, INITIAL_TARGET_RATIO, params, tickLower, tickUpper);
 
         // Verify initialization
         assertEq(freshHook.getFee(), initialFee);
@@ -255,8 +266,10 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
 
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
+        int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(newKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, params);
+        freshHook.initializePool(newKey, INITIAL_FEE, INITIAL_TARGET_RATIO, params, tickLower, tickUpper);
 
         // Verify initialization
         assertEq(freshHook.getFee(), INITIAL_FEE);

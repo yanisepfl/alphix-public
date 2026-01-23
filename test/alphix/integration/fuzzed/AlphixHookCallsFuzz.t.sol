@@ -78,8 +78,10 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         // Initialize pool
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(freshKey, initialFee, targetRatio, defaultPoolParams);
+        freshHook.initializePool(freshKey, initialFee, targetRatio, defaultPoolParams, tickLower, tickUpper);
 
         // Verify configuration
         IAlphix.PoolConfig memory cfg = freshHook.getPoolConfig();

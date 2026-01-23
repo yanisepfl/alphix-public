@@ -155,12 +155,16 @@ interface IAlphix {
      * @param _initialFee The initial fee of the pool to initialize.
      * @param _initialTargetRatio The initial target ratio of the pool to initialize.
      * @param _poolParams The pool parameters for the dynamic fee algorithm.
+     * @param _tickLower Lower tick boundary for JIT liquidity position (immutable after init).
+     * @param _tickUpper Upper tick boundary for JIT liquidity position (immutable after init).
      */
     function initializePool(
         PoolKey calldata key,
         uint24 _initialFee,
         uint256 _initialTargetRatio,
-        DynamicFeeLib.PoolParams calldata _poolParams
+        DynamicFeeLib.PoolParams calldata _poolParams,
+        int24 _tickLower,
+        int24 _tickUpper
     ) external;
 
     /**

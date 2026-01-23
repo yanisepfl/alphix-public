@@ -10,6 +10,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 
 /* LOCAL IMPORTS */
@@ -28,6 +29,26 @@ import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConst
 contract PoolParamsBehaviorChangeTest is BaseAlphixTest {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
+
+    /**
+     * @notice Struct to hold lookback test context and avoid stack too deep errors
+     */
+    struct LookbackTestContext {
+        Alphix shortHook;
+        Alphix longHook;
+        PoolKey shortLookbackKey;
+        PoolKey longLookbackKey;
+        PoolId shortLookbackPoolId;
+        PoolId longLookbackPoolId;
+        int24 shortTickLower;
+        int24 shortTickUpper;
+        int24 longTickLower;
+        int24 longTickUpper;
+        uint24 shortFirstFee;
+        uint24 longFirstFee;
+        uint24 shortThirdFee;
+        uint24 longThirdFee;
+    }
 
     /* ORIGINAL PARAMETERS */
     DynamicFeeLib.PoolParams public originalParams;
@@ -638,21 +659,43 @@ contract PoolParamsBehaviorChangeTest is BaseAlphixTest {
      *      which results in MORE fee adjustment (larger divergence from target).
      */
     function test_lookbackPeriod_affectsConvergenceRate() public {
+        LookbackTestContext memory ctx;
+
         // Deploy two fresh hook+logic stacks
-        Alphix shortHook = _deployFreshAlphixStack();
-        Alphix longHook = _deployFreshAlphixStack();
+        ctx.shortHook = _deployFreshAlphixStack();
+        ctx.longHook = _deployFreshAlphixStack();
 
         // Create pools for each hook
-        (PoolKey memory shortLookbackKey, PoolId shortLookbackPoolId) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, shortHook);
-        (PoolKey memory longLookbackKey, PoolId longLookbackPoolId) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, longHook);
+        (ctx.shortLookbackKey, ctx.shortLookbackPoolId) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, ctx.shortHook);
+        (ctx.longLookbackKey, ctx.longLookbackPoolId) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, ctx.longHook);
 
         // Configure pools with different lookback parameters
+        ctx.shortTickLower = TickMath.minUsableTick(ctx.shortLookbackKey.tickSpacing);
+        ctx.shortTickUpper = TickMath.maxUsableTick(ctx.shortLookbackKey.tickSpacing);
+        ctx.longTickLower = TickMath.minUsableTick(ctx.longLookbackKey.tickSpacing);
+        ctx.longTickUpper = TickMath.maxUsableTick(ctx.longLookbackKey.tickSpacing);
         vm.prank(owner);
-        shortHook.initializePool(shortLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams);
+        ctx.shortHook
+            .initializePool(
+                ctx.shortLookbackKey,
+                INITIAL_FEE,
+                INITIAL_TARGET_RATIO,
+                shortLookbackParams,
+                ctx.shortTickLower,
+                ctx.shortTickUpper
+            );
         vm.prank(owner);
-        longHook.initializePool(longLookbackKey, INITIAL_FEE, INITIAL_TARGET_RATIO, longLookbackParams);
+        ctx.longHook
+            .initializePool(
+                ctx.longLookbackKey,
+                INITIAL_FEE,
+                INITIAL_TARGET_RATIO,
+                longLookbackParams,
+                ctx.longTickLower,
+                ctx.longTickUpper
+            );
 
         // Wait for cooldown and apply first poke
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
@@ -662,56 +705,52 @@ contract PoolParamsBehaviorChangeTest is BaseAlphixTest {
 
         // First update - should produce identical fees (lookback only affects EMA)
         vm.prank(owner);
-        shortHook.poke(deviatedRatio);
+        ctx.shortHook.poke(deviatedRatio);
         vm.prank(owner);
-        longHook.poke(deviatedRatio);
+        ctx.longHook.poke(deviatedRatio);
 
-        (,,, uint24 shortFirstFee) = poolManager.getSlot0(shortLookbackPoolId);
-        (,,, uint24 longFirstFee) = poolManager.getSlot0(longLookbackPoolId);
+        (,,, ctx.shortFirstFee) = poolManager.getSlot0(ctx.shortLookbackPoolId);
+        (,,, ctx.longFirstFee) = poolManager.getSlot0(ctx.longLookbackPoolId);
 
         // Second update - differences should start to emerge
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
         vm.prank(owner);
-        shortHook.poke(deviatedRatio);
+        ctx.shortHook.poke(deviatedRatio);
         vm.prank(owner);
-        longHook.poke(deviatedRatio);
+        ctx.longHook.poke(deviatedRatio);
 
-        poolManager.getSlot0(shortLookbackPoolId); // Assert state accessible
-        poolManager.getSlot0(longLookbackPoolId); // Assert state accessible
+        poolManager.getSlot0(ctx.shortLookbackPoolId); // Assert state accessible
+        poolManager.getSlot0(ctx.longLookbackPoolId); // Assert state accessible
 
         // Third update - differences should be more pronounced
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
         vm.prank(owner);
-        shortHook.poke(deviatedRatio);
+        ctx.shortHook.poke(deviatedRatio);
         vm.prank(owner);
-        longHook.poke(deviatedRatio);
+        ctx.longHook.poke(deviatedRatio);
 
-        (,,, uint24 shortThirdFee) = poolManager.getSlot0(shortLookbackPoolId);
-        (,,, uint24 longThirdFee) = poolManager.getSlot0(longLookbackPoolId);
+        (,,, ctx.shortThirdFee) = poolManager.getSlot0(ctx.shortLookbackPoolId);
+        (,,, ctx.longThirdFee) = poolManager.getSlot0(ctx.longLookbackPoolId);
 
         // Verify convergence behavior:
         // First fees should be identical (algorithm design)
-        assertEq(shortFirstFee, longFirstFee, "First fees should be identical");
+        assertEq(ctx.shortFirstFee, ctx.longFirstFee, "First fees should be identical");
 
         // Calculate total progression from initial fee for both pools
         uint256 shortTotalProgression =
-            shortThirdFee > INITIAL_FEE ? shortThirdFee - INITIAL_FEE : INITIAL_FEE - shortThirdFee;
+            ctx.shortThirdFee > INITIAL_FEE ? ctx.shortThirdFee - INITIAL_FEE : INITIAL_FEE - ctx.shortThirdFee;
         uint256 longTotalProgression =
-            longThirdFee > INITIAL_FEE ? longThirdFee - INITIAL_FEE : INITIAL_FEE - longThirdFee;
+            ctx.longThirdFee > INITIAL_FEE ? ctx.longThirdFee - INITIAL_FEE : INITIAL_FEE - ctx.longThirdFee;
 
         // Long lookback should show LARGER fee changes because target converges slower,
         // maintaining larger divergence from target which triggers larger fee adjustments
         assertTrue(longTotalProgression >= shortTotalProgression, "Long lookback should show larger fee adjustments");
 
         // Both should show progression from initial fee (long more than short)
-        assertTrue(longThirdFee >= INITIAL_FEE, "Long lookback should increase fee");
+        assertTrue(ctx.longThirdFee >= INITIAL_FEE, "Long lookback should increase fee");
 
         // Verify parameter setup is correct
         assertTrue(shortLookbackParams.lookbackPeriod < longLookbackParams.lookbackPeriod, "Setup verification");
-
-        // Silence unused variable warning
-        shortHook = shortHook;
-        longHook = longHook;
     }
 
     /**
@@ -1056,10 +1095,18 @@ contract PoolParamsBehaviorChangeTest is BaseAlphixTest {
         (PoolKey memory longKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, longHook);
 
+        int24 shortKeyTickLower = TickMath.minUsableTick(shortKey.tickSpacing);
+        int24 shortKeyTickUpper = TickMath.maxUsableTick(shortKey.tickSpacing);
+        int24 longKeyTickLower = TickMath.minUsableTick(longKey.tickSpacing);
+        int24 longKeyTickUpper = TickMath.maxUsableTick(longKey.tickSpacing);
         vm.prank(owner);
-        shortHook.initializePool(shortKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams);
+        shortHook.initializePool(
+            shortKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams, shortKeyTickLower, shortKeyTickUpper
+        );
         vm.prank(owner);
-        longHook.initializePool(longKey, INITIAL_FEE, INITIAL_TARGET_RATIO, longLookbackParams);
+        longHook.initializePool(
+            longKey, INITIAL_FEE, INITIAL_TARGET_RATIO, longLookbackParams, longKeyTickLower, longKeyTickUpper
+        );
 
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
 
@@ -1118,8 +1165,12 @@ contract PoolParamsBehaviorChangeTest is BaseAlphixTest {
         (PoolKey memory testKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 testKeyTickLower = TickMath.minUsableTick(testKey.tickSpacing);
+        int24 testKeyTickUpper = TickMath.maxUsableTick(testKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams);
+        freshHook.initializePool(
+            testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, shortLookbackParams, testKeyTickLower, testKeyTickUpper
+        );
 
         vm.warp(block.timestamp + shortLookbackParams.minPeriod + 1);
 

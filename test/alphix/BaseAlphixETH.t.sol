@@ -7,6 +7,7 @@ import {Test} from "forge-std/Test.sol";
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
@@ -162,8 +163,10 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
         // Initialize pool (Uniswap side)
         poolManager.initialize(key, Constants.SQRT_PRICE_1_1);
 
-        // Initialize pool (Alphix side)
-        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        // Initialize pool (Alphix side) with full-range tick bounds
+        int24 initTickLower = TickMath.minUsableTick(defaultTickSpacing);
+        int24 initTickUpper = TickMath.maxUsableTick(defaultTickSpacing);
+        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, initTickLower, initTickUpper);
 
         vm.stopPrank();
     }
@@ -315,10 +318,9 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
         // Grant yield manager role
         am.grantRole(YIELD_MANAGER_ROLE, yieldManagerAddr, 0);
 
-        // Assign yield manager role to specific functions on AlphixETH hook
-        bytes4[] memory yieldManagerSelectors = new bytes4[](2);
+        // Assign yield manager role to setYieldSource function on AlphixETH hook
+        bytes4[] memory yieldManagerSelectors = new bytes4[](1);
         yieldManagerSelectors[0] = AlphixETH(payable(hookAddr)).setYieldSource.selector;
-        yieldManagerSelectors[1] = AlphixETH(payable(hookAddr)).setTickRange.selector;
         am.setTargetFunctionRole(hookAddr, yieldManagerSelectors, YIELD_MANAGER_ROLE);
     }
 
@@ -347,7 +349,28 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
         AlphixETH _hook
     ) internal returns (PoolKey memory k, PoolId id) {
         (k, id) = _newUninitializedEthPoolWithHook(tokenDecimals, spacing, initialPrice, _hook);
+        int24 tickLower_ = TickMath.minUsableTick(spacing);
+        int24 tickUpper_ = TickMath.maxUsableTick(spacing);
         vm.prank(_hook.owner());
-        _hook.initializePool(k, fee, ratio, defaultPoolParams);
+        _hook.initializePool(k, fee, ratio, defaultPoolParams, tickLower_, tickUpper_);
+    }
+
+    /**
+     * @notice Create and initialize an ETH pool in Alphix with custom tick range.
+     * @dev Used by tests that need specific JIT tick ranges.
+     */
+    function _initEthPoolWithHookAndTickRange(
+        uint24 fee,
+        uint256 ratio,
+        uint8 tokenDecimals,
+        int24 spacing,
+        uint160 initialPrice,
+        AlphixETH _hook,
+        int24 _tickLower,
+        int24 _tickUpper
+    ) internal returns (PoolKey memory k, PoolId id) {
+        (k, id) = _newUninitializedEthPoolWithHook(tokenDecimals, spacing, initialPrice, _hook);
+        vm.prank(_hook.owner());
+        _hook.initializePool(k, fee, ratio, defaultPoolParams, _tickLower, _tickUpper);
     }
 }

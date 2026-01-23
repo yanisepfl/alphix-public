@@ -16,6 +16,7 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* OZ IMPORTS */
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -597,39 +598,64 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
     /**
      * @notice Test that swap works when price moves outside JIT tick range
-     * @dev JIT should not participate when price is outside configured range
+     * @dev JIT should not participate when price is outside configured range.
+     *      Deploys a fresh hook with narrow tick range at initialization time.
      */
     function test_edge_swapOutsideJITTickRange() public {
-        _addRegularLp(1000e18);
-
         // Configure JIT with narrow tick range around current price
         int24 narrowLower = -100;
         int24 narrowUpper = 100;
 
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        Alphix(address(hook)).pause();
-        vm.prank(yieldManager);
-        Alphix(address(hook)).setTickRange(narrowLower, narrowUpper);
-        vm.prank(owner);
-        Alphix(address(hook)).unpause();
+        // Deploy a fresh hook with narrow tick range set at initialization
+        (Alphix freshHook, AccessManager freshAccessManager) = _deployFreshAlphixStackFull();
+        (PoolKey memory freshKey,) = _initPoolWithHookAndTickRange(
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            freshHook,
+            narrowLower,
+            narrowUpper
+        );
 
-        vm.startPrank(yieldManager);
-        Alphix(address(hook)).setYieldSource(currency0, address(vault0));
-        Alphix(address(hook)).setYieldSource(currency1, address(vault1));
+        // Create fresh vaults for the new pool's currencies
+        MockYieldVault freshVault0 = new MockYieldVault(IERC20(Currency.unwrap(freshKey.currency0)));
+        MockYieldVault freshVault1 = new MockYieldVault(IERC20(Currency.unwrap(freshKey.currency1)));
+
+        // Setup yield manager role for fresh hook
+        vm.startPrank(owner);
+        _setupYieldManagerRole(yieldManager, freshAccessManager, address(freshHook));
         vm.stopPrank();
 
-        _addReHypoLiquidity(alice, 100e18);
+        // Configure yield sources for fresh hook
+        vm.startPrank(yieldManager);
+        freshHook.setYieldSource(freshKey.currency0, address(freshVault0));
+        freshHook.setYieldSource(freshKey.currency1, address(freshVault1));
+        vm.stopPrank();
+
+        // Mint fresh pool tokens to alice and bob so they can participate
+        MockERC20(Currency.unwrap(freshKey.currency0)).mint(alice, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(freshKey.currency1)).mint(alice, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(freshKey.currency0)).mint(bob, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(freshKey.currency1)).mint(bob, INITIAL_TOKEN_AMOUNT);
+
+        // Add regular LP to the fresh pool
+        _addRegularLpToPool(freshKey, 1000e18);
+
+        // Add rehypo liquidity using fresh hook
+        _addReHypoLiquidityToHook(alice, 100e18, freshHook, freshKey);
 
         // Do a large swap to push price outside narrow JIT range
         uint256 largePriceMovingSwap = 200e18;
         vm.startPrank(bob);
-        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), largePriceMovingSwap);
+        MockERC20(Currency.unwrap(freshKey.currency0)).approve(address(swapRouter), largePriceMovingSwap);
         swapRouter.swapExactTokensForTokens({
             amountIn: largePriceMovingSwap,
             amountOutMin: 0,
             zeroForOne: true,
-            poolKey: key,
+            poolKey: freshKey,
             hookData: Constants.ZERO_BYTES,
             receiver: bob,
             deadline: block.timestamp + 100
@@ -639,22 +665,22 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         // Now the price is likely outside JIT range
         // Do another swap - should still work (uses regular LP)
         uint256 nextSwap = 10e18;
-        uint256 bobToken1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(bob);
+        uint256 bobToken1Before = MockERC20(Currency.unwrap(freshKey.currency1)).balanceOf(bob);
 
         vm.startPrank(bob);
-        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), nextSwap);
+        MockERC20(Currency.unwrap(freshKey.currency0)).approve(address(swapRouter), nextSwap);
         swapRouter.swapExactTokensForTokens({
             amountIn: nextSwap,
             amountOutMin: 0,
             zeroForOne: true,
-            poolKey: key,
+            poolKey: freshKey,
             hookData: Constants.ZERO_BYTES,
             receiver: bob,
             deadline: block.timestamp + 100
         });
         vm.stopPrank();
 
-        uint256 output = MockERC20(Currency.unwrap(currency1)).balanceOf(bob) - bobToken1Before;
+        uint256 output = MockERC20(Currency.unwrap(freshKey.currency1)).balanceOf(bob) - bobToken1Before;
         assertGt(output, 0, "Swap should work even when JIT out of range");
     }
 
@@ -905,39 +931,64 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
     /**
      * @notice Test that JIT position out of range doesn't affect yield source balances
-     * @dev When price is outside JIT tick range, JIT should NOT participate in swaps
+     * @dev When price is outside JIT tick range, JIT should NOT participate in swaps.
+     *      Deploys a fresh hook with VERY narrow tick range at initialization time.
      */
     function test_edge_jitOutOfRange_noBalanceChange() public {
-        _addRegularLp(1000e18);
-
         // Configure JIT with VERY narrow tick range around current price (tick 0)
         int24 narrowLower = -20;
         int24 narrowUpper = 20;
 
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        Alphix(address(hook)).pause();
-        vm.prank(yieldManager);
-        Alphix(address(hook)).setTickRange(narrowLower, narrowUpper);
-        vm.prank(owner);
-        Alphix(address(hook)).unpause();
+        // Deploy a fresh hook with narrow tick range set at initialization
+        (Alphix freshHook, AccessManager freshAccessManager) = _deployFreshAlphixStackFull();
+        (PoolKey memory freshKey,) = _initPoolWithHookAndTickRange(
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18,
+            18,
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            freshHook,
+            narrowLower,
+            narrowUpper
+        );
 
-        vm.startPrank(yieldManager);
-        Alphix(address(hook)).setYieldSource(currency0, address(vault0));
-        Alphix(address(hook)).setYieldSource(currency1, address(vault1));
+        // Create fresh vaults for the new pool's currencies
+        MockYieldVault freshVault0 = new MockYieldVault(IERC20(Currency.unwrap(freshKey.currency0)));
+        MockYieldVault freshVault1 = new MockYieldVault(IERC20(Currency.unwrap(freshKey.currency1)));
+
+        // Setup yield manager role for fresh hook
+        vm.startPrank(owner);
+        _setupYieldManagerRole(yieldManager, freshAccessManager, address(freshHook));
         vm.stopPrank();
 
-        _addReHypoLiquidity(alice, 100e18);
+        // Configure yield sources for fresh hook
+        vm.startPrank(yieldManager);
+        freshHook.setYieldSource(freshKey.currency0, address(freshVault0));
+        freshHook.setYieldSource(freshKey.currency1, address(freshVault1));
+        vm.stopPrank();
+
+        // Mint fresh pool tokens to alice and bob so they can participate
+        MockERC20(Currency.unwrap(freshKey.currency0)).mint(alice, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(freshKey.currency1)).mint(alice, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(freshKey.currency0)).mint(bob, INITIAL_TOKEN_AMOUNT);
+        MockERC20(Currency.unwrap(freshKey.currency1)).mint(bob, INITIAL_TOKEN_AMOUNT);
+
+        // Add regular LP to the fresh pool
+        _addRegularLpToPool(freshKey, 1000e18);
+
+        // Add rehypo liquidity using fresh hook
+        _addReHypoLiquidityToHook(alice, 100e18, freshHook, freshKey);
 
         // First, do a LARGE swap to push price FAR outside the narrow JIT range
         uint256 largePriceMovingSwap = 300e18;
         vm.startPrank(bob);
-        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), largePriceMovingSwap);
+        MockERC20(Currency.unwrap(freshKey.currency0)).approve(address(swapRouter), largePriceMovingSwap);
         swapRouter.swapExactTokensForTokens({
             amountIn: largePriceMovingSwap,
             amountOutMin: 0,
             zeroForOne: true,
-            poolKey: key,
+            poolKey: freshKey,
             hookData: Constants.ZERO_BYTES,
             receiver: bob,
             deadline: block.timestamp + 100
@@ -946,8 +997,8 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // Now price should be outside the narrow JIT range
         // Record yield source balances
-        uint256 yieldSource0Before = Alphix(address(hook)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1Before = Alphix(address(hook)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0Before = freshHook.getAmountInYieldSource(freshKey.currency0);
+        uint256 yieldSource1Before = freshHook.getAmountInYieldSource(freshKey.currency1);
 
         console2.log("Yield source0 before second swap:", yieldSource0Before);
         console2.log("Yield source1 before second swap:", yieldSource1Before);
@@ -955,20 +1006,20 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         // Do another swap while price is out of JIT range
         uint256 smallSwap = 1e18;
         vm.startPrank(bob);
-        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), smallSwap);
+        MockERC20(Currency.unwrap(freshKey.currency0)).approve(address(swapRouter), smallSwap);
         swapRouter.swapExactTokensForTokens({
             amountIn: smallSwap,
             amountOutMin: 0,
             zeroForOne: true,
-            poolKey: key,
+            poolKey: freshKey,
             hookData: Constants.ZERO_BYTES,
             receiver: bob,
             deadline: block.timestamp + 100
         });
         vm.stopPrank();
 
-        uint256 yieldSource0After = Alphix(address(hook)).getAmountInYieldSource(currency0);
-        uint256 yieldSource1After = Alphix(address(hook)).getAmountInYieldSource(currency1);
+        uint256 yieldSource0After = freshHook.getAmountInYieldSource(freshKey.currency0);
+        uint256 yieldSource1After = freshHook.getAmountInYieldSource(freshKey.currency1);
 
         console2.log("Yield source0 after second swap:", yieldSource0After);
         console2.log("Yield source1 after second swap:", yieldSource1After);
@@ -1042,14 +1093,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
     }
 
     function _configureReHypo() internal {
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        Alphix(address(hook)).pause();
-        vm.prank(yieldManager);
-        Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
-        vm.prank(owner);
-        Alphix(address(hook)).unpause();
-
+        // Note: Tick range (full range) is already set at pool initialization time in BaseAlphixTest.setUp()
         // setYieldSource requires whenNotPaused
         vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
@@ -1064,6 +1108,53 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
         Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        vm.stopPrank();
+    }
+
+    function _addRegularLpToPool(PoolKey memory poolKey, uint256 amount) internal {
+        int24 poolTickLower = TickMath.minUsableTick(poolKey.tickSpacing);
+        int24 poolTickUpper = TickMath.maxUsableTick(poolKey.tickSpacing);
+
+        vm.startPrank(owner);
+
+        MockERC20(Currency.unwrap(poolKey.currency0)).approve(address(permit2), type(uint256).max);
+        MockERC20(Currency.unwrap(poolKey.currency1)).approve(address(permit2), type(uint256).max);
+        permit2.approve(
+            Currency.unwrap(poolKey.currency0),
+            address(positionManager),
+            type(uint160).max,
+            uint48(block.timestamp + 100)
+        );
+        permit2.approve(
+            Currency.unwrap(poolKey.currency1),
+            address(positionManager),
+            type(uint160).max,
+            uint48(block.timestamp + 100)
+        );
+
+        positionManager.mint(
+            poolKey,
+            poolTickLower,
+            poolTickUpper,
+            amount,
+            amount,
+            amount * 2,
+            owner,
+            block.timestamp + 60,
+            Constants.ZERO_BYTES
+        );
+        vm.stopPrank();
+    }
+
+    function _addReHypoLiquidityToHook(address user, uint256 shares, Alphix targetHook, PoolKey memory poolKey)
+        internal
+    {
+        (uint256 amount0, uint256 amount1) = targetHook.previewAddReHypothecatedLiquidity(shares);
+
+        vm.startPrank(user);
+        MockERC20(Currency.unwrap(poolKey.currency0)).approve(address(targetHook), amount0);
+        MockERC20(Currency.unwrap(poolKey.currency1)).approve(address(targetHook), amount1);
+        targetHook.addReHypothecatedLiquidity(shares);
         vm.stopPrank();
     }
 

@@ -366,8 +366,10 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(freshKey, fee, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.initializePool(freshKey, fee, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
 
         assertEq(freshHook.getFee(), fee, "Fee should match");
     }
@@ -385,8 +387,10 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
-        freshHook.initializePool(freshKey, INITIAL_FEE, ratio, defaultPoolParams);
+        freshHook.initializePool(freshKey, INITIAL_FEE, ratio, defaultPoolParams, tickLower, tickUpper);
 
         // Pool should be initialized
         assertTrue(PoolId.unwrap(freshHook.getPoolId()) != bytes32(0), "Pool should be initialized");
@@ -405,13 +409,15 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAlphix.InvalidInitialFee.selector, fee, defaultPoolParams.minFee, defaultPoolParams.maxFee
             )
         );
-        freshHook.initializePool(freshKey, fee, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.initializePool(freshKey, fee, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
     }
 
     /**
@@ -427,13 +433,15 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAlphix.InvalidInitialFee.selector, fee, defaultPoolParams.minFee, defaultPoolParams.maxFee
             )
         );
-        freshHook.initializePool(freshKey, fee, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.initializePool(freshKey, fee, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
     }
 
     /**
@@ -449,9 +457,11 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, ratio));
-        freshHook.initializePool(freshKey, INITIAL_FEE, ratio, defaultPoolParams);
+        freshHook.initializePool(freshKey, INITIAL_FEE, ratio, defaultPoolParams, tickLower, tickUpper);
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -459,14 +469,14 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
     ═══════════════════════════════════════════════════════════════════════════ */
 
     /**
-     * @notice Fuzz test setTickRange with valid tick ranges
+     * @notice Fuzz test initializePool with valid tick ranges
+     * @dev Tick range is now set immutably at initializePool time
      */
-    function testFuzz_setTickRange_valid(int24 tickLowerRaw, int24 tickUpperRaw) public {
-        address yieldManager = makeAddr("yieldManager");
+    function testFuzz_initializePool_withTickRange_valid(int24 tickLowerRaw, int24 tickUpperRaw) public {
+        Alphix freshHook = _deployFreshAlphixStack();
 
-        vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
-        vm.stopPrank();
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         // Get usable tick bounds for this spacing
         int24 tickSpacing = defaultTickSpacing;
@@ -491,15 +501,10 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
             return;
         }
 
-        // setTickRange requires whenPaused
         vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower, tickUpper);
-        vm.prank(owner);
-        hook.unpause();
+        freshHook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
 
-        IReHypothecation.ReHypothecationConfig memory config = hook.getReHypothecationConfig();
+        IReHypothecation.ReHypothecationConfig memory config = freshHook.getReHypothecationConfig();
         assertEq(config.tickLower, tickLower, "Lower tick mismatch");
         assertEq(config.tickUpper, tickUpper, "Upper tick mismatch");
     }

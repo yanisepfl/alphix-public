@@ -89,9 +89,11 @@ contract AlphixUnitTest is BaseAlphixTest {
         hook.pause();
 
         // Now try to initialize again - should fail with PoolAlreadyConfigured
+        int24 tickLower = TickMath.minUsableTick(key.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(key.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(IAlphix.PoolAlreadyConfigured.selector);
-        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
     }
 
     function test_initializePool_revertsOnFeeBelowMin() public {
@@ -100,13 +102,15 @@ contract AlphixUnitTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAlphix.InvalidInitialFee.selector, 0, defaultPoolParams.minFee, defaultPoolParams.maxFee
             )
         );
-        freshHook.initializePool(freshKey, 0, INITIAL_TARGET_RATIO, defaultPoolParams); // Fee 0 is below min
+        freshHook.initializePool(freshKey, 0, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper); // Fee 0 is below min
     }
 
     function test_initializePool_revertsOnFeeAboveMax() public {
@@ -116,13 +120,15 @@ contract AlphixUnitTest is BaseAlphixTest {
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         uint24 badFee = uint24(defaultPoolParams.maxFee + 1);
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAlphix.InvalidInitialFee.selector, badFee, defaultPoolParams.minFee, defaultPoolParams.maxFee
             )
         );
-        freshHook.initializePool(freshKey, badFee, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.initializePool(freshKey, badFee, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
     }
 
     function test_initializePool_revertsOnInvalidTargetRatio_zero() public {
@@ -131,9 +137,11 @@ contract AlphixUnitTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, 0));
-        freshHook.initializePool(freshKey, INITIAL_FEE, 0, defaultPoolParams); // Zero ratio is invalid
+        freshHook.initializePool(freshKey, INITIAL_FEE, 0, defaultPoolParams, tickLower, tickUpper); // Zero ratio is invalid
     }
 
     function test_initializePool_revertsOnInvalidTargetRatio_exceedsMax() public {
@@ -143,9 +151,11 @@ contract AlphixUnitTest is BaseAlphixTest {
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         uint256 badRatio = defaultPoolParams.maxCurrentRatio + 1;
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, badRatio));
-        freshHook.initializePool(freshKey, INITIAL_FEE, badRatio, defaultPoolParams);
+        freshHook.initializePool(freshKey, INITIAL_FEE, badRatio, defaultPoolParams, tickLower, tickUpper);
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -452,43 +462,36 @@ contract AlphixUnitTest is BaseAlphixTest {
                               TICK RANGE TESTS
     ═══════════════════════════════════════════════════════════════════════════ */
 
-    function test_setTickRange_succeeds() public {
-        address yieldManager = makeAddr("yieldManager");
-
-        vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
-        vm.stopPrank();
-
-        int24 newLower = -200;
-        int24 newUpper = 200;
-
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(newLower, newUpper);
-        vm.prank(owner);
-        hook.unpause();
-
+    function test_tickRange_isSetAtInitialization() public {
+        // Tick range is now set immutably at initializePool time
         IReHypothecation.ReHypothecationConfig memory config = hook.getReHypothecationConfig();
-        assertEq(config.tickLower, newLower, "Lower tick should be updated");
-        assertEq(config.tickUpper, newUpper, "Upper tick should be updated");
+
+        // Default setUp initializes with full-range ticks
+        int24 expectedLower = TickMath.minUsableTick(defaultTickSpacing);
+        int24 expectedUpper = TickMath.maxUsableTick(defaultTickSpacing);
+
+        assertEq(config.tickLower, expectedLower, "Tick lower should be set at init");
+        assertEq(config.tickUpper, expectedUpper, "Tick upper should be set at init");
     }
 
-    function test_setTickRange_revertsWhenNotPaused() public {
-        address yieldManager = makeAddr("yieldManager");
+    function test_tickRange_canBeCustomizedAtInit() public {
+        // Deploy fresh hook and initialize with custom tick range
+        Alphix freshHook = _deployFreshAlphixStack();
 
-        vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
-        vm.stopPrank();
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
-        int24 newLower = -200;
-        int24 newUpper = 200;
+        int24 customLower = -200;
+        int24 customUpper = 200;
 
-        // Hook is NOT paused - should revert with ExpectedPause()
-        vm.prank(yieldManager);
-        vm.expectRevert(abi.encodeWithSignature("ExpectedPause()"));
-        hook.setTickRange(newLower, newUpper);
+        vm.prank(owner);
+        freshHook.initializePool(
+            freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, customLower, customUpper
+        );
+
+        IReHypothecation.ReHypothecationConfig memory config = freshHook.getReHypothecationConfig();
+        assertEq(config.tickLower, customLower, "Custom lower tick should be set");
+        assertEq(config.tickUpper, customUpper, "Custom upper tick should be set");
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -587,16 +590,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Set tick range (requires whenPaused)
-        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower, tickUpper);
-        vm.prank(owner);
-        hook.unpause();
-
+        // Tick range is already set at initializePool time (full range by default)
         // Setup yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(currency0, address(vault0));
@@ -853,16 +847,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Set tick range (requires whenPaused)
-        int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower_, tickUpper_);
-        vm.prank(owner);
-        hook.unpause();
-
+        // Tick range is already set at initializePool time (full range by default)
         // Set yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(currency0, address(vault0));

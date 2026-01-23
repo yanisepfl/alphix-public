@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Alphix} from "../../src/Alphix.sol";
 import {AlphixETH} from "../../src/AlphixETH.sol";

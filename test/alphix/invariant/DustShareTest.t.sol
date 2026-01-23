@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {console} from "forge-std/Test.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {BaseAlphixTest} from "../BaseAlphix.t.sol";
@@ -23,13 +22,7 @@ contract DustShareTest is BaseAlphixTest {
 
         _setupYieldManagerRole(owner, accessManager, address(hook));
 
-        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
-
-        // setTickRange requires whenPaused
-        Alphix(address(hook)).pause();
-        Alphix(address(hook)).setTickRange(tickLower, tickUpper);
-        Alphix(address(hook)).unpause();
+        // Tick range is already set at initializePool time (full range by default)
 
         // setYieldSource requires whenNotPaused
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));

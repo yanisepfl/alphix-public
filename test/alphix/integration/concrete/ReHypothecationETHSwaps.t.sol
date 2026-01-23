@@ -15,8 +15,10 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 /* OZ IMPORTS */
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 /* SOLMATE IMPORTS */
+import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixETHTest} from "../../BaseAlphixETH.t.sol";
@@ -353,28 +355,76 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
 
     /**
      * @notice Test with narrow rehypo tick range
+     * @dev Deploys a fresh hook with narrow tick range set at initialization time
      */
     function test_swap_narrowReHypoRange() public {
-        _addRegularLp(100 ether);
-
         // Configure narrow tick range (around current price)
         int24 narrowLower = -100 * defaultTickSpacing;
         int24 narrowUpper = 100 * defaultTickSpacing;
 
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        AlphixETH(payable(address(hook))).pause();
-        vm.prank(yieldManager);
-        AlphixETH(payable(address(hook))).setTickRange(narrowLower, narrowUpper);
-        vm.prank(owner);
-        AlphixETH(payable(address(hook))).unpause();
+        // Deploy fresh hook with narrow tick range at initialization
+        (AlphixETH freshHook, AccessManager freshAccessManager) = _deployFreshAlphixEthStackFull();
 
-        vm.startPrank(yieldManager);
-        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
-        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
+        // Create and initialize ETH pool with narrow tick range
+        PoolKey memory narrowKey;
+        (narrowKey,) = _initEthPoolWithHookAndTickRange(
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18, // token decimals
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            freshHook,
+            narrowLower,
+            narrowUpper
+        );
+
+        // Get the token from the pool key
+        MockERC20 narrowToken = MockERC20(Currency.unwrap(narrowKey.currency1));
+        narrowToken.mint(alice, INITIAL_TOKEN_AMOUNT);
+        narrowToken.mint(owner, INITIAL_TOKEN_AMOUNT);
+
+        // Setup yield manager role for the fresh hook
+        address freshYieldManager = makeAddr("freshYieldManager");
+        vm.startPrank(owner);
+        _setupYieldManagerRole(freshYieldManager, freshAccessManager, address(freshHook));
         vm.stopPrank();
 
-        _addReHypoLiquidity(alice, 10e18);
+        // Deploy fresh vaults for this hook's token
+        MockYieldVault freshTokenVault = new MockYieldVault(IERC20(address(narrowToken)));
+
+        // Configure yield sources for the fresh hook
+        vm.startPrank(freshYieldManager);
+        freshHook.setYieldSource(Currency.wrap(address(0)), address(wethVault));
+        freshHook.setYieldSource(narrowKey.currency1, address(freshTokenVault));
+        vm.stopPrank();
+
+        // Add regular LP to the new pool
+        int24 fullRangeLower_ = TickMath.minUsableTick(defaultTickSpacing);
+        int24 fullRangeUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.startPrank(owner);
+        narrowToken.approve(address(permit2), type(uint256).max);
+        permit2.approve(
+            address(narrowToken), address(positionManager), type(uint160).max, uint48(block.timestamp + 100)
+        );
+        positionManager.mint(
+            narrowKey,
+            fullRangeLower_,
+            fullRangeUpper_,
+            100e18,
+            100 ether,
+            1000e18,
+            owner,
+            block.timestamp + 60,
+            Constants.ZERO_BYTES
+        );
+        vm.stopPrank();
+
+        // Add rehypo liquidity
+        (uint256 amount0, uint256 amount1) = freshHook.previewAddReHypothecatedLiquidity(10e18);
+        vm.startPrank(alice);
+        narrowToken.approve(address(freshHook), amount1);
+        freshHook.addReHypothecatedLiquidity{value: amount0}(10e18);
+        vm.stopPrank();
 
         // Test swap
         vm.prank(alice);
@@ -382,7 +432,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
             amountIn: 1 ether,
             amountOutMin: 0,
             zeroForOne: true,
-            poolKey: key,
+            poolKey: narrowKey,
             hookData: Constants.ZERO_BYTES,
             receiver: alice,
             deadline: block.timestamp + 100
@@ -391,28 +441,74 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
 
     /**
      * @notice Test with asymmetric rehypo tick range
+     * @dev Deploys a fresh hook with asymmetric tick range set at initialization time
      */
     function test_swap_asymmetricReHypoRange() public {
-        _addRegularLp(100 ether);
-
         // Configure asymmetric tick range
         int24 asymLower = -200 * defaultTickSpacing;
         int24 asymUpper = 50 * defaultTickSpacing;
 
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        AlphixETH(payable(address(hook))).pause();
-        vm.prank(yieldManager);
-        AlphixETH(payable(address(hook))).setTickRange(asymLower, asymUpper);
-        vm.prank(owner);
-        AlphixETH(payable(address(hook))).unpause();
+        // Deploy fresh hook with asymmetric tick range at initialization
+        (AlphixETH freshHook, AccessManager freshAccessManager) = _deployFreshAlphixEthStackFull();
 
-        vm.startPrank(yieldManager);
-        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
-        AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));
+        // Create and initialize ETH pool with asymmetric tick range
+        PoolKey memory asymKey;
+        (asymKey,) = _initEthPoolWithHookAndTickRange(
+            INITIAL_FEE,
+            INITIAL_TARGET_RATIO,
+            18, // token decimals
+            defaultTickSpacing,
+            Constants.SQRT_PRICE_1_1,
+            freshHook,
+            asymLower,
+            asymUpper
+        );
+
+        // Get the token from the pool key
+        MockERC20 asymToken = MockERC20(Currency.unwrap(asymKey.currency1));
+        asymToken.mint(alice, INITIAL_TOKEN_AMOUNT);
+        asymToken.mint(owner, INITIAL_TOKEN_AMOUNT);
+
+        // Setup yield manager role for the fresh hook
+        address freshYieldManager = makeAddr("freshYieldManager");
+        vm.startPrank(owner);
+        _setupYieldManagerRole(freshYieldManager, freshAccessManager, address(freshHook));
         vm.stopPrank();
 
-        _addReHypoLiquidity(alice, 10e18);
+        // Deploy fresh vaults for this hook's token
+        MockYieldVault freshTokenVault = new MockYieldVault(IERC20(address(asymToken)));
+
+        // Configure yield sources for the fresh hook
+        vm.startPrank(freshYieldManager);
+        freshHook.setYieldSource(Currency.wrap(address(0)), address(wethVault));
+        freshHook.setYieldSource(asymKey.currency1, address(freshTokenVault));
+        vm.stopPrank();
+
+        // Add regular LP to the new pool
+        int24 fullRangeLower_ = TickMath.minUsableTick(defaultTickSpacing);
+        int24 fullRangeUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
+        vm.startPrank(owner);
+        asymToken.approve(address(permit2), type(uint256).max);
+        permit2.approve(address(asymToken), address(positionManager), type(uint160).max, uint48(block.timestamp + 100));
+        positionManager.mint(
+            asymKey,
+            fullRangeLower_,
+            fullRangeUpper_,
+            100e18,
+            100 ether,
+            1000e18,
+            owner,
+            block.timestamp + 60,
+            Constants.ZERO_BYTES
+        );
+        vm.stopPrank();
+
+        // Add rehypo liquidity
+        (uint256 amount0, uint256 amount1) = freshHook.previewAddReHypothecatedLiquidity(10e18);
+        vm.startPrank(alice);
+        asymToken.approve(address(freshHook), amount1);
+        freshHook.addReHypothecatedLiquidity{value: amount0}(10e18);
+        vm.stopPrank();
 
         // Test swap in both directions
         vm.prank(alice);
@@ -420,19 +516,19 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
             amountIn: 1 ether,
             amountOutMin: 0,
             zeroForOne: true,
-            poolKey: key,
+            poolKey: asymKey,
             hookData: Constants.ZERO_BYTES,
             receiver: alice,
             deadline: block.timestamp + 100
         });
 
         vm.startPrank(alice);
-        token.approve(address(swapRouter), 1e18);
+        asymToken.approve(address(swapRouter), 1e18);
         swapRouter.swapExactTokensForTokens({
             amountIn: 1e18,
             amountOutMin: 0,
             zeroForOne: false,
-            poolKey: key,
+            poolKey: asymKey,
             hookData: Constants.ZERO_BYTES,
             receiver: alice,
             deadline: block.timestamp + 100
@@ -622,15 +718,10 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
     }
 
     function _configureReHypo() internal {
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        AlphixETH(payable(address(hook))).pause();
-        vm.prank(yieldManager);
-        AlphixETH(payable(address(hook))).setTickRange(fullRangeLower, fullRangeUpper);
-        vm.prank(owner);
-        AlphixETH(payable(address(hook))).unpause();
+        // Note: Tick range is already set to full range at pool initialization time
+        // (see BaseAlphixETHTest.setUp which initializes with minUsableTick/maxUsableTick)
 
-        // setYieldSource requires whenNotPaused
+        // Configure yield sources
         vm.startPrank(yieldManager);
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(0)), address(wethVault));
         AlphixETH(payable(address(hook))).setYieldSource(Currency.wrap(address(token)), address(tokenVault));

@@ -57,11 +57,6 @@ interface IReHypothecation is IERC20 {
     event YieldSourceUpdated(Currency indexed currency, address oldYieldSource, address newYieldSource);
 
     /**
-     * @dev Emitted when tick range is updated.
-     */
-    event TickRangeUpdated(int24 tickLower, int24 tickUpper);
-
-    /**
      * @dev Emitted when rehypothecated liquidity is added.
      */
     event ReHypothecatedLiquidityAdded(address indexed sender, uint256 shares, uint256 amount0, uint256 amount1);
@@ -128,33 +123,6 @@ interface IReHypothecation is IERC20 {
      * @param yieldSource The ERC-4626 vault address.
      */
     function setYieldSource(Currency currency, address yieldSource) external;
-
-    /**
-     * @notice Set tick range for the JIT liquidity position.
-     * @dev IMPORTANT: This function requires the protocol to be paused.
-     *      Gated by YIELD_MANAGER_ROLE via AccessManager.
-     *
-     *      SAFE RANGE CHANGE PROCEDURE:
-     *      Prerequisites (before pausing):
-     *      - Current tick must be OUT of current rehypo range
-     *      - Yield sources must be one-sided (one has 0 tokens, other has all)
-     *      - This is the natural state after sustained directional trading
-     *
-     *      Steps:
-     *      1. Pause the protocol
-     *      2. Check current tick and yield source balances
-     *      3. Choose a new range such that current price remains OUTSIDE it:
-     *         - If price is BELOW new range (tick < newLower): ensure token0 balance > 0
-     *         - If price is ABOVE new range (tick >= newUpper): ensure token1 balance > 0
-     *      4. Call setTickRange
-     *      5. Unpause the protocol
-     *
-     *      WARNING: Setting a range where price is IN-range can cause JIT to get stuck.
-     *
-     * @param tickLower Lower tick boundary (must be aligned to tickSpacing).
-     * @param tickUpper Upper tick boundary (must be aligned to tickSpacing).
-     */
-    function setTickRange(int24 tickLower, int24 tickUpper) external;
 
     /* VIEW FUNCTIONS */
 

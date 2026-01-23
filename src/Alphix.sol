@@ -235,7 +235,9 @@ contract Alphix is
         PoolKey calldata key,
         uint24 _initialFee,
         uint256 _initialTargetRatio,
-        DynamicFeeLib.PoolParams calldata params
+        DynamicFeeLib.PoolParams calldata params,
+        int24 _tickLower,
+        int24 _tickUpper
     ) external override onlyOwner nonReentrant whenPaused poolUnconfigured {
         // Store pool params
         _setPoolParams(params);
@@ -258,6 +260,11 @@ contract Alphix is
         _poolConfig = PoolConfig({initialFee: _initialFee, initialTargetRatio: _initialTargetRatio, isConfigured: true});
         _targetRatio = _initialTargetRatio;
         _lastFeeUpdate = block.timestamp;
+
+        // Set JIT tick range (immutable after initialization)
+        ReHypothecationLib.validateTickRange(_tickLower, _tickUpper, key.tickSpacing);
+        _reHypothecationConfig.tickLower = _tickLower;
+        _reHypothecationConfig.tickUpper = _tickUpper;
 
         // Update fee in PoolManager
         poolManager.updateDynamicLPFee(key, _initialFee);
@@ -401,14 +408,6 @@ contract Alphix is
         state.yieldSource = newYieldSource;
 
         emit YieldSourceUpdated(currency, oldYieldSource, newYieldSource);
-    }
-
-    /// @inheritdoc IReHypothecation
-    function setTickRange(int24 tickLower, int24 tickUpper) external override restricted poolConfigured whenPaused {
-        ReHypothecationLib.validateTickRange(tickLower, tickUpper, _poolKey.tickSpacing);
-        _reHypothecationConfig.tickLower = tickLower;
-        _reHypothecationConfig.tickUpper = tickUpper;
-        emit TickRangeUpdated(tickLower, tickUpper);
     }
 
     /* REHYPOTHECATION - LIQUIDITY OPERATIONS */

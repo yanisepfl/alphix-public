@@ -8,7 +8,7 @@ import {Alphix} from "../../src/Alphix.sol";
 
 /**
  * @title Configure ReHypothecation
- * @notice Sets up yield sources and JIT tick range for rehypothecation
+ * @notice Sets up yield sources for rehypothecation
  * @dev This script configures the rehypothecation infrastructure for an Alphix hook
  *
  * DEPLOYMENT ORDER: 4 (Optional - after pool creation)
@@ -18,7 +18,9 @@ import {Alphix} from "../../src/Alphix.sol";
  * Actions Performed:
  * 1. Set yield source for currency0 (ERC-4626 vault)
  * 2. Set yield source for currency1 (ERC-4626 vault)
- * 3. Set JIT tick range for liquidity provision
+ *
+ * NOTE: JIT tick range is now set immutably during initializePool() in script 03.
+ *       It cannot be changed after pool initialization.
  *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
@@ -27,8 +29,6 @@ import {Alphix} from "../../src/Alphix.sol";
  * Optional (set what you want to configure):
  * - YIELD_SOURCE_0_{NETWORK}: ERC-4626 vault for currency0
  * - YIELD_SOURCE_1_{NETWORK}: ERC-4626 vault for currency1
- * - JIT_TICK_LOWER_{NETWORK}: Lower tick for JIT liquidity
- * - JIT_TICK_UPPER_{NETWORK}: Upper tick for JIT liquidity
  *
  * Note for ETH Pools:
  * - YIELD_SOURCE_0 must implement IAlphix4626WrapperWeth (with depositETH/withdrawETH)
@@ -61,34 +61,14 @@ contract ConfigureReHypothecationScript is Script {
             yieldSource1 = addr;
         } catch {}
 
-        int24 tickLower;
-        int24 tickUpper;
-        bool hasTickRange = false;
-        envVar = string.concat("JIT_TICK_LOWER_", network);
-        try vm.envInt(envVar) returns (int256 val) {
-            // Validate tick values fit in int24 range
-            require(val >= type(int24).min && val <= type(int24).max, "JIT_TICK_LOWER out of int24 range");
-            // forge-lint: disable-next-line(unsafe-typecast)
-            tickLower = int24(val);
-            envVar = string.concat("JIT_TICK_UPPER_", network);
-            try vm.envInt(envVar) returns (int256 val2) {
-                require(val2 >= type(int24).min && val2 <= type(int24).max, "JIT_TICK_UPPER out of int24 range");
-                // forge-lint: disable-next-line(unsafe-typecast)
-                tickUpper = int24(val2);
-                require(tickLower < tickUpper, "Invalid tick range: tickLower must be < tickUpper");
-                hasTickRange = true;
-            } catch {}
-        } catch {}
-
         // Check if there's anything to do
-        if (yieldSource0 == address(0) && yieldSource1 == address(0) && !hasTickRange) {
+        if (yieldSource0 == address(0) && yieldSource1 == address(0)) {
             console.log("===========================================");
             console.log("NO CONFIGURATION SET");
             console.log("===========================================");
             console.log("Set at least one of:");
             console.log("  - YIELD_SOURCE_0_%s", network);
             console.log("  - YIELD_SOURCE_1_%s", network);
-            console.log("  - JIT_TICK_LOWER_%s and JIT_TICK_UPPER_%s", network, network);
             console.log("===========================================");
             return;
         }
@@ -106,25 +86,12 @@ contract ConfigureReHypothecationScript is Script {
         if (yieldSource1 != address(0)) {
             console.log("  - Yield Source 1:", yieldSource1);
         }
-        if (hasTickRange) {
-            console.log("  - JIT Tick Lower:");
-            console.logInt(int256(tickLower));
-            console.log("  - JIT Tick Upper:");
-            console.logInt(int256(tickUpper));
-        }
         console.log("");
 
         Alphix alphix = Alphix(hookAddr);
         PoolKey memory poolKey = alphix.getPoolKey();
 
         vm.startBroadcast();
-
-        // Set tick range first (if specified)
-        if (hasTickRange) {
-            console.log("Setting JIT tick range...");
-            alphix.setTickRange(tickLower, tickUpper);
-            console.log("  - Done");
-        }
 
         // Set yield sources (if specified)
         if (yieldSource0 != address(0)) {

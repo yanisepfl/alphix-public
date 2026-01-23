@@ -8,6 +8,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 
 /* LOCAL IMPORTS */
@@ -53,8 +54,10 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
         (PoolKey memory freshKey,) =
             _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(newOwner);
-        freshHook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        freshHook.initializePool(freshKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
 
         // Old owner now unauthorized for owner-only functions - create another fresh hook for this test
         Alphix anotherHook = _deployFreshAlphixStack();
@@ -68,9 +71,13 @@ contract AccessAndOwnershipTest is BaseAlphixTest {
         anotherHook.acceptOwnership();
 
         // Old owner should be unauthorized
+        int24 anotherTickLower = TickMath.minUsableTick(anotherKey.tickSpacing);
+        int24 anotherTickUpper = TickMath.maxUsableTick(anotherKey.tickSpacing);
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, owner));
-        anotherHook.initializePool(anotherKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        anotherHook.initializePool(
+            anotherKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, anotherTickLower, anotherTickUpper
+        );
     }
 
     /**

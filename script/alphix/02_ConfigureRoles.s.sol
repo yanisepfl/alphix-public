@@ -17,7 +17,7 @@ import {Roles} from "./libraries/Roles.sol";
  * SENDER REQUIREMENTS: Must be run by AccessManager admin
  *
  * Actions Performed:
- * 1. Grant YIELD_MANAGER_ROLE permissions on Alphix functions (setYieldSource, setTickRange)
+ * 1. Grant YIELD_MANAGER_ROLE permissions on Alphix functions (setYieldSource)
  * 2. Grant YIELD_MANAGER_ROLE to specified address
  * 3. Grant FEE_POKER_ROLE permissions on poke() function
  * 4. Grant FEE_POKER_ROLE to specified address
@@ -77,9 +77,8 @@ contract ConfigureRolesScript is Script {
 
         // Step 1: Set up YIELD_MANAGER_ROLE permissions
         console.log("Step 1: Setting up YIELD_MANAGER_ROLE permissions...");
-        bytes4[] memory yieldManagerSelectors = new bytes4[](2);
+        bytes4[] memory yieldManagerSelectors = new bytes4[](1);
         yieldManagerSelectors[0] = alphix.setYieldSource.selector;
-        yieldManagerSelectors[1] = alphix.setTickRange.selector;
         accessManager.setTargetFunctionRole(hookAddr, yieldManagerSelectors, Roles.YIELD_MANAGER_ROLE);
         console.log("  - Function permissions set");
 

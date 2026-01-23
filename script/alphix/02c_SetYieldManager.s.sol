@@ -10,7 +10,7 @@ import {Roles} from "./libraries/Roles.sol";
 /**
  * @title Set Yield Manager Role
  * @notice Grants or updates the YIELD_MANAGER_ROLE to a new address
- * @dev Use this script to change who can call setYieldSource() and setTickRange()
+ * @dev Use this script to change who can call setYieldSource()
  *
  * DEPLOYMENT ORDER: 2c (After initial setup, can be run anytime)
  *
@@ -55,14 +55,12 @@ contract SetYieldManagerScript is Script {
 
         vm.startBroadcast();
 
-        // Set up YIELD_MANAGER_ROLE permissions on setYieldSource() and setTickRange()
+        // Set up YIELD_MANAGER_ROLE permissions on setYieldSource()
         console.log("Step 1: Setting function permissions for YIELD_MANAGER_ROLE...");
-        bytes4[] memory yieldManagerSelectors = new bytes4[](2);
+        bytes4[] memory yieldManagerSelectors = new bytes4[](1);
         yieldManagerSelectors[0] = alphix.setYieldSource.selector;
-        yieldManagerSelectors[1] = alphix.setTickRange.selector;
         accessManager.setTargetFunctionRole(hookAddr, yieldManagerSelectors, Roles.YIELD_MANAGER_ROLE);
         console.log("  - setYieldSource() restricted to YIELD_MANAGER_ROLE");
-        console.log("  - setTickRange() restricted to YIELD_MANAGER_ROLE");
 
         // Grant YIELD_MANAGER_ROLE to the new address
         console.log("Step 2: Granting YIELD_MANAGER_ROLE...");

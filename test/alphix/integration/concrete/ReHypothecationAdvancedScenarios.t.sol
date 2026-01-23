@@ -199,13 +199,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
     function test_fullRangeJIT_alwaysParticipates() public {
         _addRegularLp(1000e18);
 
-        // Configure with FULL RANGE
-        vm.prank(owner);
-        Alphix(address(hook)).pause();
-        vm.prank(yieldManager);
-        Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
-        vm.prank(owner);
-        Alphix(address(hook)).unpause();
+        // Tick range is already set at initializePool time (full range by default)
         vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
@@ -248,13 +242,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
     function test_fullRangeJIT_vs_narrowRange_participation() public {
         _addRegularLp(1000e18);
 
-        // Start with FULL RANGE
-        vm.prank(owner);
-        Alphix(address(hook)).pause();
-        vm.prank(yieldManager);
-        Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
-        vm.prank(owner);
-        Alphix(address(hook)).unpause();
+        // Tick range is already set at initializePool time (full range by default)
         vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
@@ -495,12 +483,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
     }
 
     function _configureReHypo() internal {
-        vm.prank(owner);
-        Alphix(address(hook)).pause();
-        vm.prank(yieldManager);
-        Alphix(address(hook)).setTickRange(fullRangeLower, fullRangeUpper);
-        vm.prank(owner);
-        Alphix(address(hook)).unpause();
+        // Tick range is already set at initializePool time (full range by default)
         vm.startPrank(yieldManager);
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));

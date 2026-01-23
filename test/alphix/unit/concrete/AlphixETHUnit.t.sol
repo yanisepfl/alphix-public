@@ -11,7 +11,6 @@ import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
-import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -348,16 +347,7 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Set tick range (requires whenPaused)
-        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower, tickUpper);
-        vm.prank(owner);
-        hook.unpause();
-
+        // Tick range is already set at initializePool time (full range by default)
         // Setup yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
@@ -402,16 +392,7 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Set tick range (requires whenPaused)
-        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower, tickUpper);
-        vm.prank(owner);
-        hook.unpause();
-
+        // Tick range is already set at initializePool time (full range by default)
         // Setup yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
@@ -492,21 +473,8 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
 
     function test_depositToYieldSourceEth_revertsWhenNotConfigured() public {
         // Don't set up yield sources
-        // Tick range is needed for addReHypothecatedLiquidity
-        address yieldManager = makeAddr("yieldManager");
-        vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
-        vm.stopPrank();
-
-        // Set only tick range (requires whenPaused), not yield sources
-        int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower_, tickUpper_);
-        vm.prank(owner);
-        hook.unpause();
+        // Tick range is already set at initializePool time (full range by default)
+        // Yield sources are NOT configured, so addReHypothecatedLiquidity should revert
 
         // Mint tokens and try to add liquidity without yield source
         MockERC20(Currency.unwrap(key.currency1)).mint(user1, 100e18);
@@ -602,16 +570,7 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Set tick range (requires whenPaused)
-        int24 tickLower_ = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper_ = TickMath.maxUsableTick(defaultTickSpacing);
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower_, tickUpper_);
-        vm.prank(owner);
-        hook.unpause();
-
+        // Tick range is already set at initializePool time (full range by default)
         // Set yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         // Set ETH yield source

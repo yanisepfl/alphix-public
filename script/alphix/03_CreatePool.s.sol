@@ -42,6 +42,8 @@ import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
  * - LIQUIDITY_RANGE_{NETWORK}: Range in tick spacings around current price
  * - INITIAL_FEE_{NETWORK}: Initial dynamic fee in bps
  * - TARGET_RATIO_{NETWORK}: Initial target ratio
+ * - JIT_TICK_LOWER_{NETWORK}: Lower tick for JIT liquidity (immutable after init)
+ * - JIT_TICK_UPPER_{NETWORK}: Upper tick for JIT liquidity (immutable after init)
  *
  * After Execution:
  * - Pool is created and initialized
@@ -67,6 +69,8 @@ contract CreatePoolScript is Script {
         uint256 liquidityRange;
         uint24 initialFee;
         uint256 targetRatio;
+        int24 jitTickLower;
+        int24 jitTickUpper;
     }
 
     struct LiqData {
@@ -163,6 +167,24 @@ contract CreatePoolScript is Script {
         require(rawInitialFee <= type(uint24).max, string.concat("INITIAL_FEE_", cfg.network, " exceeds uint24 max"));
         cfg.initialFee = uint24(rawInitialFee);
         cfg.targetRatio = vm.envUint(string.concat("TARGET_RATIO_", cfg.network));
+
+        // JIT tick range (required - immutable after pool initialization)
+        envVar = string.concat("JIT_TICK_LOWER_", cfg.network);
+        int256 rawJitLower = vm.envInt(envVar);
+        require(
+            rawJitLower >= type(int24).min && rawJitLower <= type(int24).max,
+            string.concat(envVar, " out of int24 range")
+        );
+        cfg.jitTickLower = int24(rawJitLower);
+
+        envVar = string.concat("JIT_TICK_UPPER_", cfg.network);
+        int256 rawJitUpper = vm.envInt(envVar);
+        require(
+            rawJitUpper >= type(int24).min && rawJitUpper <= type(int24).max,
+            string.concat(envVar, " out of int24 range")
+        );
+        cfg.jitTickUpper = int24(rawJitUpper);
+        require(cfg.jitTickLower < cfg.jitTickUpper, "Invalid JIT tick range: JIT_TICK_LOWER must be < JIT_TICK_UPPER");
     }
 
     function _computeLiquidity(Config memory cfg) internal pure returns (LiqData memory liq) {
@@ -225,9 +247,13 @@ contract CreatePoolScript is Script {
         console.log("Step 1: Initializing Uniswap V4 pool...");
         posm.initializePool(poolKey, cfg.sqrtPrice);
 
-        // Step 2: Initialize Alphix
+        // Step 2: Initialize Alphix (with JIT tick range - immutable after init)
         console.log("Step 2: Initializing Alphix dynamic fee system...");
-        alphix.initializePool(poolKey, cfg.initialFee, cfg.targetRatio, poolParams);
+        console.log("  - JIT Tick Lower:");
+        console.logInt(int256(cfg.jitTickLower));
+        console.log("  - JIT Tick Upper:");
+        console.logInt(int256(cfg.jitTickUpper));
+        alphix.initializePool(poolKey, cfg.initialFee, cfg.targetRatio, poolParams, cfg.jitTickLower, cfg.jitTickUpper);
 
         // Step 3: Add liquidity
         console.log("Step 3: Adding initial liquidity...");

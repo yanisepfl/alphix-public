@@ -93,8 +93,7 @@ Each pool is configured with parameters including:
 |------|-----|-------------|
 | ADMIN_ROLE | 0 | Full access, ownership |
 | FEE_POKER_ROLE | 1 | Call `poke()` to update fees |
-| REGISTRAR_ROLE | 2 | Reserved |
-| YIELD_MANAGER_ROLE | 3 | Configure yield sources and tick ranges |
+| YIELD_MANAGER_ROLE | 2 | Configure yield sources |
 
 ## Security
 

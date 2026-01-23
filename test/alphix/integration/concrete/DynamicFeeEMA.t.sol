@@ -7,7 +7,6 @@ import {Vm} from "forge-std/Vm.sol";
 /* LOCAL IMPORTS */
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 import {Alphix} from "../../../../src/Alphix.sol";
-import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";

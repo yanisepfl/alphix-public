@@ -72,7 +72,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 constant INITIAL_TARGET_RATIO = 5e17; // 50%
     uint256 constant UNIT = 1e18;
     uint64 constant FEE_POKER_ROLE = 1;
-    uint64 constant YIELD_MANAGER_ROLE = 3;
+    uint64 constant YIELD_MANAGER_ROLE = 2;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
@@ -146,8 +146,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Initialize pool (Uniswap side)
         poolManager.initialize(key, Constants.SQRT_PRICE_1_1);
 
-        // Initialize pool (Alphix side)
-        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        // Initialize pool (Alphix side) with full-range tick bounds
+        int24 initTickLower = TickMath.minUsableTick(defaultTickSpacing);
+        int24 initTickUpper = TickMath.maxUsableTick(defaultTickSpacing);
+        hook.initializePool(key, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, initTickLower, initTickUpper);
 
         // Seed initial liquidity
         _seedInitialLiquidity();
@@ -320,8 +322,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
         _poolId = _key.toId();
 
         poolManager.initialize(_key, Constants.SQRT_PRICE_1_1);
+        int24 tickLower_ = TickMath.minUsableTick(tickSpacing);
+        int24 tickUpper_ = TickMath.maxUsableTick(tickSpacing);
         vm.prank(owner);
-        _hook.initializePool(_key, initialFee, targetRatio, defaultPoolParams);
+        _hook.initializePool(_key, initialFee, targetRatio, defaultPoolParams, tickLower_, tickUpper_);
         return (_key, _poolId);
     }
 
@@ -344,8 +348,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
         _poolId = _key.toId();
 
         poolManager.initialize(_key, Constants.SQRT_PRICE_1_1);
+        int24 tickLower_ = TickMath.minUsableTick(tickSpacing);
+        int24 tickUpper_ = TickMath.maxUsableTick(tickSpacing);
         vm.prank(owner);
-        _hook.initializePool(_key, initialFee, targetRatio, poolParams);
+        _hook.initializePool(_key, initialFee, targetRatio, poolParams, tickLower_, tickUpper_);
         return (_key, _poolId);
     }
 
@@ -459,29 +465,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // Grant yield manager role
         am.grantRole(YIELD_MANAGER_ROLE, yieldManagerAddr, 0);
 
-        // Assign yield manager role to specific functions on Alphix hook
-        bytes4[] memory yieldManagerSelectors = new bytes4[](2);
+        // Assign yield manager role to setYieldSource function on Alphix hook
+        bytes4[] memory yieldManagerSelectors = new bytes4[](1);
         yieldManagerSelectors[0] = Alphix(hookAddr).setYieldSource.selector;
-        yieldManagerSelectors[1] = Alphix(hookAddr).setTickRange.selector;
         am.setTargetFunctionRole(hookAddr, yieldManagerSelectors, YIELD_MANAGER_ROLE);
-    }
-
-    /**
-     * @notice Helper to set tick range with required pause/unpause
-     * @dev setTickRange requires whenPaused modifier, this helper handles the pause/unpause flow
-     *      Caller must have yield manager role to call setTickRange
-     * @param _hook The Alphix hook to configure
-     * @param _tickLower Lower tick boundary
-     * @param _tickUpper Upper tick boundary
-     */
-    function _setTickRangeWithPause(Alphix _hook, int24 _tickLower, int24 _tickUpper) internal {
-        address hookOwner = _hook.owner();
-        vm.prank(hookOwner);
-        _hook.pause();
-        // Caller (msg.sender in vm context) should have yield manager role
-        _hook.setTickRange(_tickLower, _tickUpper);
-        vm.prank(hookOwner);
-        _hook.unpause();
     }
 
     /**
@@ -524,8 +511,10 @@ abstract contract BaseAlphixTest is Test, Deployers {
         Alphix _hook
     ) internal returns (PoolKey memory k, PoolId id) {
         (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, _hook);
+        int24 tickLower_ = TickMath.minUsableTick(spacing);
+        int24 tickUpper_ = TickMath.maxUsableTick(spacing);
         vm.prank(_hook.owner());
-        _hook.initializePool(k, fee, ratio, defaultPoolParams);
+        _hook.initializePool(k, fee, ratio, defaultPoolParams, tickLower_, tickUpper_);
     }
 
     /**
@@ -550,8 +539,39 @@ abstract contract BaseAlphixTest is Test, Deployers {
         DynamicFeeLib.PoolParams memory poolParams
     ) internal returns (PoolKey memory k, PoolId id) {
         (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, _hook);
+        int24 tickLower_ = TickMath.minUsableTick(spacing);
+        int24 tickUpper_ = TickMath.maxUsableTick(spacing);
         vm.prank(_hook.owner());
-        _hook.initializePool(k, fee, ratio, poolParams);
+        _hook.initializePool(k, fee, ratio, poolParams, tickLower_, tickUpper_);
+    }
+
+    /**
+     * @notice Create and initialize a pool in Alphix with custom tick range.
+     * @dev Used by tests that need specific JIT tick ranges.
+     * @param fee Initial dynamic LP fee
+     * @param ratio Initial target ratio
+     * @param d0 Decimals for token0
+     * @param d1 Decimals for token1
+     * @param spacing Tick spacing for the pool
+     * @param initialPrice Sqrt price at initialization (X96)
+     * @param _hook Hook to bind in the PoolKey (IHooks)
+     * @param _tickLower Lower tick boundary for JIT liquidity
+     * @param _tickUpper Upper tick boundary for JIT liquidity
+     */
+    function _initPoolWithHookAndTickRange(
+        uint24 fee,
+        uint256 ratio,
+        uint8 d0,
+        uint8 d1,
+        int24 spacing,
+        uint160 initialPrice,
+        Alphix _hook,
+        int24 _tickLower,
+        int24 _tickUpper
+    ) internal returns (PoolKey memory k, PoolId id) {
+        (k, id) = _newUninitializedPoolWithHook(d0, d1, spacing, initialPrice, _hook);
+        vm.prank(_hook.owner());
+        _hook.initializePool(k, fee, ratio, defaultPoolParams, _tickLower, _tickUpper);
     }
 
     /**

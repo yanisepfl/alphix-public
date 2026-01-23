@@ -8,7 +8,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -372,16 +371,7 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
         vm.stopPrank();
 
-        // Set tick range (requires whenPaused)
-        int24 tickLower = TickMath.minUsableTick(defaultTickSpacing);
-        int24 tickUpper = TickMath.maxUsableTick(defaultTickSpacing);
-        vm.prank(owner);
-        hook.pause();
-        vm.prank(yieldManager);
-        hook.setTickRange(tickLower, tickUpper);
-        vm.prank(owner);
-        hook.unpause();
-
+        // Tick range is already set at initializePool time (full range by default)
         // Set yield sources (requires whenNotPaused)
         vm.startPrank(yieldManager);
         hook.setYieldSource(currency0, address(vault0));

@@ -612,7 +612,9 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
         poolManager.initialize(testKey, sqrtPriceX96);
 
         // Initialize pool in Alphix
-        testHook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams);
+        int24 tickLower = TickMath.minUsableTick(testKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(testKey.tickSpacing);
+        testHook.initializePool(testKey, INITIAL_FEE, INITIAL_TARGET_RATIO, defaultPoolParams, tickLower, tickUpper);
 
         // Deploy yield vaults with the correct underlying tokens
         testVault0 = new MockYieldVault(IERC20(Currency.unwrap(testCurrency0)));
@@ -673,16 +675,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
     }
 
     function _configureTestPoolReHypo() internal {
-        int24 fullRangeLower = TickMath.minUsableTick(testKey.tickSpacing);
-        int24 fullRangeUpper = TickMath.maxUsableTick(testKey.tickSpacing);
-
-        // setTickRange requires whenPaused
-        vm.prank(owner);
-        Alphix(address(testHook)).pause();
-        vm.prank(owner);
-        Alphix(address(testHook)).setTickRange(fullRangeLower, fullRangeUpper);
-        vm.prank(owner);
-        Alphix(address(testHook)).unpause();
+        // Tick range is already set at initializePool time (full range by default)
 
         // setYieldSource requires whenNotPaused
         vm.startPrank(owner);
