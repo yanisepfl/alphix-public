@@ -143,14 +143,14 @@ contract CreatePoolScript is Script {
         cfg.amount0 = vm.envUint(string.concat("AMOUNT0_", cfg.network));
         cfg.amount1 = vm.envUint(string.concat("AMOUNT1_", cfg.network));
         require(cfg.amount0 > 0 || cfg.amount1 > 0, "At least one of AMOUNT0 or AMOUNT1 must be > 0");
-        // Validate amounts fit in uint160 for Permit2 approvals
+        // Validate amounts fit in uint160 for Permit2 approvals (reserve +1 for approval headroom)
         require(
-            cfg.amount0 <= type(uint160).max,
-            string.concat("AMOUNT0_", cfg.network, " exceeds uint160 max for Permit2 approval")
+            cfg.amount0 < type(uint160).max,
+            string.concat("AMOUNT0_", cfg.network, " must be < uint160 max (reserved +1 for Permit2)")
         );
         require(
-            cfg.amount1 <= type(uint160).max,
-            string.concat("AMOUNT1_", cfg.network, " exceeds uint160 max for Permit2 approval")
+            cfg.amount1 < type(uint160).max,
+            string.concat("AMOUNT1_", cfg.network, " must be < uint160 max (reserved +1 for Permit2)")
         );
 
         // Liquidity range validation (must be > 0 and fit in int24 after cast)

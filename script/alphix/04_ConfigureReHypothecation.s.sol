@@ -89,6 +89,13 @@ contract ConfigureReHypothecationScript is Script {
         console.log("");
 
         Alphix alphix = Alphix(hookAddr);
+
+        // Ensure pool is configured before proceeding
+        if (!alphix.getPoolConfig().isConfigured) {
+            console.log("Error: Pool not configured yet. Run 03_CreatePool.s.sol first.");
+            revert("Pool not configured");
+        }
+
         PoolKey memory poolKey = alphix.getPoolKey();
 
         vm.startBroadcast();

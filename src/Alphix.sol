@@ -239,6 +239,9 @@ contract Alphix is
         int24 _tickLower,
         int24 _tickUpper
     ) external override onlyOwner nonReentrant whenPaused poolUnconfigured {
+        // Validate that the pool key references this hook
+        if (address(key.hooks) != address(this)) revert HookMismatch();
+
         // Store pool params
         _setPoolParams(params);
 
@@ -419,11 +422,12 @@ contract Alphix is
         virtual
         override
         whenNotPaused
+        poolConfigured
         nonReentrant
         returns (BalanceDelta delta)
     {
         if (shares == 0) revert ZeroShares();
-        if (msg.value > 0) revert UnexpectedETH();
+        if (msg.value > 0) revert InvalidMsgValue();
 
         // Calculate amounts with rounding up (protocol-favorable for deposits)
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForDeposit(shares);
@@ -456,6 +460,7 @@ contract Alphix is
         virtual
         override
         whenNotPaused
+        poolConfigured
         nonReentrant
         returns (BalanceDelta delta)
     {

@@ -201,10 +201,14 @@ Located in `script/alphix/`.
 | `00_DeployAccessManager.s.sol` | Deploy OpenZeppelin AccessManager |
 | `01_DeployAlphix.s.sol` | Deploy Alphix hook (ERC20/ERC20 pools) |
 | `01_DeployAlphixETH.s.sol` | Deploy AlphixETH hook (ETH/ERC20 pools) |
-| `02_ConfigureAndUnpause.s.sol` | Configure roles and unpause |
+| `02_ConfigureRoles.s.sol` | Configure AccessManager roles |
+| `02b_SetFeePoker.s.sol` | Grant FEE_POKER_ROLE to an address |
+| `02c_SetYieldManager.s.sol` | Grant YIELD_MANAGER_ROLE to an address |
 | `03_CreatePool.s.sol` | Create Uniswap V4 pool with initial liquidity |
-| `04_ConfigureReHypothecation.s.sol` | Set yield sources and JIT tick range |
-| `05_AddRHLiquidity.s.sol` | Add rehypothecated liquidity |
+| `04_ConfigureReHypothecation.s.sol` | Set yield sources for currencies |
+| `05_AddLiquidity.s.sol` | Add normal V4 liquidity |
+| `05b_AddRHLiquidity.s.sol` | Add rehypothecated liquidity |
+| `05c_RemoveRHLiquidity.s.sol` | Remove rehypothecated liquidity |
 | `06_Swap.s.sol` | Execute swaps (testnet - PoolSwapTest) |
 | `06b_SwapUniversalRouter.s.sol` | Execute swaps (mainnet - Universal Router) |
 | `07_PokeFee.s.sol` | Update dynamic fee |

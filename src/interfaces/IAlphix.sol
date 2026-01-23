@@ -143,9 +143,9 @@ interface IAlphix {
     error InvalidCurrentRatio(uint256 ratio);
 
     /**
-     * @dev Thrown when ETH is sent to a non-ETH pool.
+     * @dev Thrown when the pool key's hook address doesn't match this contract.
      */
-    error UnexpectedETH();
+    error HookMismatch();
 
     /* ADMIN FUNCTIONS */
 
