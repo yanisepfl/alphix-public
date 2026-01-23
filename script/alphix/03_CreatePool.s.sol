@@ -29,6 +29,21 @@ import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
  * ARCHITECTURE: Single-Pool-Per-Hook Design
  * Each Alphix Hook manages exactly ONE pool. This script creates THE pool for the hook.
  *
+ * CRITICAL: SQRT_PRICE AND JIT TICK RANGE ALIGNMENT
+ * ─────────────────────────────────────────────────────────────────────────────────
+ * For balanced JIT liquidity, SQRT_PRICE must be at the GEOMETRIC CENTER of the
+ * JIT tick range. If misaligned, token requirements will be highly skewed
+ * (e.g., 74:1 instead of 1:1 for a tight 2-tick range).
+ *
+ * Use this Python helper to calculate aligned values:
+ *   import math
+ *   def jit_range_to_sqrt_price(tick_lower, tick_upper):
+ *       center_tick = (tick_lower + tick_upper) / 2
+ *       return int(math.sqrt(1.0001 ** center_tick) * (2**96))
+ *
+ * See .env.example for detailed documentation.
+ * ─────────────────────────────────────────────────────────────────────────────────
+ *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
  * - POSITION_MANAGER_{NETWORK}: Uniswap V4 PositionManager address
@@ -36,7 +51,7 @@ import {DynamicFeeLib} from "../../src/libraries/DynamicFee.sol";
  * - TOKEN0_{NETWORK}: First token address (must be < TOKEN1, or address(0) for ETH)
  * - TOKEN1_{NETWORK}: Second token address (must be > TOKEN0)
  * - TICK_SPACING_{NETWORK}: Tick spacing for the pool (e.g., 60)
- * - SQRT_PRICE_{NETWORK}: Starting sqrtPriceX96
+ * - SQRT_PRICE_{NETWORK}: Starting sqrtPriceX96 (MUST be centered in JIT range!)
  * - AMOUNT0_{NETWORK}: Initial token0 amount in wei
  * - AMOUNT1_{NETWORK}: Initial token1 amount in wei
  * - LIQUIDITY_RANGE_{NETWORK}: Range in tick spacings around current price
@@ -185,6 +200,10 @@ contract CreatePoolScript is Script {
         );
         cfg.jitTickUpper = int24(rawJitUpper);
         require(cfg.jitTickLower < cfg.jitTickUpper, "Invalid JIT tick range: JIT_TICK_LOWER must be < JIT_TICK_UPPER");
+
+        // Validate JIT ticks are aligned with tick spacing
+        require(cfg.jitTickLower % cfg.tickSpacing == 0, "JIT_TICK_LOWER must be divisible by TICK_SPACING");
+        require(cfg.jitTickUpper % cfg.tickSpacing == 0, "JIT_TICK_UPPER must be divisible by TICK_SPACING");
     }
 
     function _computeLiquidity(Config memory cfg) internal pure returns (LiqData memory liq) {
@@ -237,6 +256,9 @@ contract CreatePoolScript is Script {
 
         IPositionManager posm = IPositionManager(cfg.positionManagerAddr);
         Alphix alphix = Alphix(cfg.hookAddr);
+
+        // Check and warn about JIT alignment
+        _checkJitAlignment(cfg);
 
         vm.startBroadcast();
 
@@ -304,6 +326,84 @@ contract CreatePoolScript is Script {
         // 6. Verify hook address in pool key
         require(address(poolKey.hooks) == address(alphix), "VERIFY FAILED: Hook address mismatch in pool key");
         console.log("  [OK] Hook address in pool key");
+    }
+
+    /**
+     * @dev Check if sqrtPrice is well-centered in the JIT tick range and warn if not.
+     *      For balanced JIT liquidity, sqrtPrice should be at the geometric center.
+     *      This check is skipped for wide ranges (> 200 tick spacings) where centering is less critical.
+     */
+    function _checkJitAlignment(Config memory cfg) internal pure {
+        // Skip asymmetry check for wide ranges (e.g., full range positions)
+        // Centering only matters for tight JIT ranges where small deviations cause large asymmetry
+        int24 rangeWidth = cfg.jitTickUpper - cfg.jitTickLower;
+        int24 widthInSpacings = rangeWidth / cfg.tickSpacing;
+        if (widthInSpacings > 200) {
+            // Wide range - centering check not applicable
+            return;
+        }
+
+        // Get sqrtPrice at JIT boundaries
+        uint160 sqrtPriceLower = TickMath.getSqrtPriceAtTick(cfg.jitTickLower);
+        uint160 sqrtPriceUpper = TickMath.getSqrtPriceAtTick(cfg.jitTickUpper);
+
+        // Calculate distances from current sqrtPrice to boundaries
+        uint256 distToLower = cfg.sqrtPrice > sqrtPriceLower ? cfg.sqrtPrice - sqrtPriceLower : 0;
+        uint256 distToUpper = sqrtPriceUpper > cfg.sqrtPrice ? sqrtPriceUpper - cfg.sqrtPrice : 0;
+
+        // Check if sqrtPrice is inside the JIT range
+        require(
+            cfg.sqrtPrice >= sqrtPriceLower && cfg.sqrtPrice <= sqrtPriceUpper,
+            "SQRT_PRICE is OUTSIDE the JIT tick range! JIT liquidity will be 100% one-sided."
+        );
+
+        // Calculate asymmetry ratio (how far from center)
+        // A perfectly centered price has ratio = 100 (i.e., 1.00x)
+        // We revert if ratio > 110 (more than 10% imbalance)
+        if (distToLower > 0 && distToUpper > 0) {
+            uint256 ratio =
+                distToLower > distToUpper ? (distToLower * 100) / distToUpper : (distToUpper * 100) / distToLower;
+
+            if (ratio > 110) {
+                // More than 10% imbalance - show error and revert
+                console.log("");
+                console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                console.log("ERROR: SQRT_PRICE is NOT centered in JIT tick range!");
+                console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                console.log("  Current SQRT_PRICE:", cfg.sqrtPrice);
+                console.log("  JIT sqrtPrice lower:", sqrtPriceLower);
+                console.log("  JIT sqrtPrice upper:", sqrtPriceUpper);
+                console.log("  Asymmetry ratio:", ratio, "% (max allowed: 110%)");
+                console.log("");
+                console.log("  This means JIT liquidity will have unbalanced token requirements!");
+                console.log("");
+                console.log("  For balanced liquidity, use this sqrtPrice instead:");
+                // Geometric mean for ideal center
+                uint256 idealSqrtPrice = _sqrt(uint256(sqrtPriceLower) * uint256(sqrtPriceUpper));
+                console.log("  Ideal SQRT_PRICE:", idealSqrtPrice);
+                console.log("");
+                console.log("  Or adjust JIT_TICK_LOWER and JIT_TICK_UPPER to be centered");
+                console.log("  around the current tick implied by SQRT_PRICE.");
+                console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                console.log("");
+
+                revert("SQRT_PRICE must be centered in JIT tick range (max 10% asymmetry allowed)");
+            }
+        }
+    }
+
+    /**
+     * @dev Integer square root using Babylonian method.
+     */
+    function _sqrt(uint256 x) internal pure returns (uint256) {
+        if (x == 0) return 0;
+        uint256 z = (x + 1) / 2;
+        uint256 y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+        return y;
     }
 
     function _defaultPoolParams() internal pure returns (DynamicFeeLib.PoolParams memory) {

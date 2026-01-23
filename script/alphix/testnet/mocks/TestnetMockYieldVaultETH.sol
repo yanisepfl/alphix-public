@@ -73,11 +73,12 @@ contract TestnetMockYieldVaultETH is ERC4626, IAlphix4626WrapperWeth {
     function depositETH(address receiver) external payable override returns (uint256 shares) {
         require(msg.value > 0, "Must send ETH");
 
+        // Calculate shares BEFORE wrapping ETH (otherwise totalAssets increases first,
+        // causing previewDeposit to return 0 when totalSupply is 0)
+        shares = previewDeposit(msg.value);
+
         // Wrap ETH -> WETH
         weth.deposit{value: msg.value}();
-
-        // Calculate shares based on current exchange rate
-        shares = previewDeposit(msg.value);
 
         // Mint shares to receiver
         _mint(receiver, shares);
