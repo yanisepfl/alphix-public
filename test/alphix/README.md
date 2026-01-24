@@ -1,6 +1,6 @@
 # Alphix Protocol Test Suite
 
-Comprehensive test suite for the Alphix protocol - a Uniswap V4 Hook with upgradeable logic.
+Comprehensive test suite for the Alphix protocol - a Uniswap V4 Dynamic Fee Hook with JIT Liquidity Rehypothecation.
 
 ## Overview
 
@@ -17,32 +17,36 @@ test/alphix/
 ├── integration/          # Component integration tests
 │   ├── concrete/        # Deterministic integration tests
 │   │   ├── AccessAndOwnership.t.sol
-│   │   ├── AlphixDeployment.t.sol
-│   │   ├── AlphixHookCalls.t.sol
-│   │   ├── AlphixLogicDeployment.t.sol
-│   │   ├── AlphixLogicHookCalls.t.sol
-│   │   ├── AlphixLogicPoolManagement.t.sol
-│   │   ├── AlphixPoolManagement.t.sol
-│   │   ├── PoolTypeParamsBehaviorChange.t.sol
-│   │   └── RegistryDeployment.t.sol
+│   │   ├── AlphixETHHookCallsExtended.t.sol
+│   │   ├── DynamicFeeBehavior.t.sol
+│   │   ├── DynamicFeeEMA.t.sol
+│   │   ├── JITTickRangeEdgeCases.t.sol
+│   │   ├── PoolParamsBehaviorChange.t.sol
+│   │   ├── ReHypothecationAdvancedScenarios.t.sol
+│   │   ├── ReHypothecationETHSwaps.t.sol
+│   │   ├── ReHypothecationSwapsAccounting.t.sol
+│   │   └── RoundtripReHypothecation.t.sol
 │   └── fuzzed/          # Fuzz-based integration tests
-│       ├── AccessAndOwnershipFuzz.t.sol
+│       ├── AlphixDonateHooksFuzz.t.sol
+│       ├── AlphixETHDeploymentFuzz.t.sol
 │       ├── AlphixHookCallsFuzz.t.sol
-│       ├── AlphixLogicHookCallsFuzz.t.sol
-│       ├── AlphixLogicPoolManagementFuzz.t.sol
-│       ├── AlphixPokeFuzz.t.sol
-│       └── PoolTypeParamsBehaviorChangeFuzz.t.sol
+│       ├── DynamicFeeBehaviorFuzz.t.sol
+│       ├── JITSelfHealingFuzz.t.sol
+│       ├── JITTickRangeFuzz.t.sol
+│       ├── ReHypothecationDecimalsFuzz.t.sol
+│       └── ReHypothecationVaryingPricesFuzz.t.sol
 │
 ├── fullCycle/           # End-to-end lifecycle tests
 │   ├── concrete/
-│   │   ├── AlphixFullIntegration.t.sol      # 30-day scenarios
-│   │   └── AlphixUpgradeability.t.sol       # UUPS upgrades
+│   │   └── AlphixFullIntegration.t.sol      # Multi-day scenarios
 │   └── fuzzed/
-│       ├── AlphixFullIntegrationFuzz.t.sol
-│       └── AlphixUpgradeabilityFuzz.t.sol
+│       ├── AlphixExtremeStatesFuzz.t.sol
+│       └── AlphixFullIntegrationFuzz.t.sol
 │
 ├── invariant/           # Stateful property testing
 │   ├── AlphixInvariants.t.sol
+│   ├── DustShareTest.t.sol
+│   ├── ReHypothecationInvariants.t.sol
 │   ├── handlers/
 │   │   └── AlphixInvariantHandler.sol       # Fuzzer handler
 │   └── README.md                            # Detailed invariant docs
@@ -85,12 +89,13 @@ forge test --match-path "test/alphix/openZeppelin/**/*.sol"
 **Purpose**: Validate how components work together
 
 **Key Validations**:
-- Hook ↔ Logic communication secure
 - Hook ↔ PoolManager integration correct
 - Access control enforced (Ownable2Step, AccessManaged, Roles)
 - State transitions valid (pause, active/inactive)
-- UUPS upgrades authorized properly
 - Parameter changes affect behavior correctly
+- JIT liquidity provisioning works correctly
+- Rehypothecation deposits/withdrawals from yield sources
+- ETH pool handling with WETH wrapping
 
 **Run Command**:
 ```bash
@@ -101,14 +106,14 @@ forge test --match-path "test/alphix/integration/**/*.sol"
 
 ### 3. Full Cycle Tests
 
-**Purpose**: Validate complete protocol lifecycle and upgrades
+**Purpose**: Validate complete protocol lifecycle
 
 **Key Scenarios**:
 - 30-day full cycle with swaps, liquidity, fee adjustments
 - Multi-user coordinated and adversarial behaviors
-- Upgrade preserves state and functionality
 - Fee earnings proportional to liquidity × time
 - High volatility and extreme market conditions
+- Extreme states (liquidity drain, black swan events)
 
 **Run Command**:
 ```bash
@@ -131,11 +136,12 @@ forge test --match-path "test/alphix/fullCycle/**/*.sol"
 - Cooldowns prevent same-block manipulation
 - Zero values never cause division by zero
 - Extreme ratios don't cause overflow
-- Logic contract address always valid
+- Rehypothecation share accounting remains consistent
+- Dust/rounding issues don't accumulate
 
 **Run Command**:
 ```bash
-forge test --match-path test/alphix/invariant/AlphixInvariants.t.sol
+forge test --match-path "test/alphix/invariant/*.t.sol"
 ```
 
 **See**: [invariant/README.md](invariant/README.md) for detailed documentation
@@ -164,7 +170,7 @@ forge test --match-path "test/alphix/integration/**/*.sol"
 forge test --match-path "test/alphix/fullCycle/**/*.sol"
 
 # Invariant tests only
-forge test --match-path test/alphix/invariant/AlphixInvariants.t.sol
+forge test --match-path "test/alphix/invariant/*.t.sol"
 ```
 
 ### Run With Gas Reporting

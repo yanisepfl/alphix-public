@@ -1,14 +1,16 @@
 # Alphix Integration Testing
 
-This directory contains integration tests that validate how Alphix protocol components work together, including hook callbacks, pool management, access control, and cross-contract interactions.
+This directory contains integration tests that validate how Alphix protocol components work together, including hook callbacks, pool management, access control, JIT liquidity, and rehypothecation.
 
 ## Overview
 
 Integration tests ensure that:
-1. **Components interact correctly** - Hook ↔ Logic ↔ PoolManager work together
+1. **Components interact correctly** - Hook ↔ PoolManager work together
 2. **Access control is enforced** - Ownership, roles, and permissions
 3. **State management works** - Pool configurations, fee updates, pause states
-4. **External integrations function** - Uniswap V4, OpenZeppelin contracts
+4. **JIT liquidity functions** - BeforeSwap/AfterSwap liquidity provisioning
+5. **Rehypothecation works** - ERC-4626 yield source deposits/withdrawals
+6. **ETH pools function** - Native ETH handling with WETH wrapping
 
 ## Directory Structure
 
@@ -16,22 +18,25 @@ Integration tests ensure that:
 integration/
 ├── concrete/          # Deterministic integration tests
 │   ├── AccessAndOwnership.t.sol
-│   ├── AlphixDeployment.t.sol
-│   ├── AlphixHookCalls.t.sol
-│   ├── AlphixLogicDeployment.t.sol
-│   ├── AlphixLogicHookCalls.t.sol
-│   ├── AlphixLogicPoolManagement.t.sol
-│   ├── AlphixPoolManagement.t.sol
-│   ├── PoolTypeParamsBehaviorChange.t.sol
-│   └── RegistryDeployment.t.sol
+│   ├── AlphixETHHookCallsExtended.t.sol
+│   ├── DynamicFeeBehavior.t.sol
+│   ├── DynamicFeeEMA.t.sol
+│   ├── JITTickRangeEdgeCases.t.sol
+│   ├── PoolParamsBehaviorChange.t.sol
+│   ├── ReHypothecationAdvancedScenarios.t.sol
+│   ├── ReHypothecationETHSwaps.t.sol
+│   ├── ReHypothecationSwapsAccounting.t.sol
+│   └── RoundtripReHypothecation.t.sol
 │
 └── fuzzed/           # Fuzz-based integration tests
-    ├── AccessAndOwnershipFuzz.t.sol
+    ├── AlphixDonateHooksFuzz.t.sol
+    ├── AlphixETHDeploymentFuzz.t.sol
     ├── AlphixHookCallsFuzz.t.sol
-    ├── AlphixLogicHookCallsFuzz.t.sol
-    ├── AlphixLogicPoolManagementFuzz.t.sol
-    ├── AlphixPokeFuzz.t.sol
-    └── PoolTypeParamsBehaviorChangeFuzz.t.sol
+    ├── DynamicFeeBehaviorFuzz.t.sol
+    ├── JITSelfHealingFuzz.t.sol
+    ├── JITTickRangeFuzz.t.sol
+    ├── ReHypothecationDecimalsFuzz.t.sol
+    └── ReHypothecationVaryingPricesFuzz.t.sol
 ```
 
 ## Concrete Tests (`concrete/`)
@@ -42,129 +47,128 @@ integration/
 **Purpose**: Validates access control, ownership transfers, and role management
 
 **Key Tests**:
-- `test_default_owners()` - Initial ownership setup
-- `test_hook_two_step_ownership_transfer()` - Ownable2Step for Hook
-- `test_logic_two_step_ownership_transfer_and_admin_ops()` - Logic ownership + admin ops
-- `test_access_manager_roles_and_revocation()` - AccessManager role grants/revocations
-- `test_only_hook_can_call_logic_endpoints_despite_ownership_changes()` - Hook-only access preserved
+- Initial ownership setup
+- Ownable2Step transfers for Hook
+- AccessManager role grants/revocations
+- Role-based permission enforcement
 
-**Fuzz Companion**: `AccessAndOwnershipFuzz.t.sol`
-- Ownership transfers to random addresses
-- Role grants with various delays
-- Unauthorized access attempts
-- Pool registration with fuzzed parameters
+### Dynamic Fee Behavior
 
-### Deployment & Initialization
-
-#### `AlphixDeployment.t.sol`
-**Purpose**: Validates Hook deployment, initialization, and configuration
+#### `DynamicFeeBehavior.t.sol`
+**Purpose**: Validates dynamic fee algorithm behavior
 
 **Key Tests**:
-- Constructor validation (zero address checks, invalid params)
-- Initialization (logic setup, pause/unpause)
-- Logic contract management (`setLogic`, upgrade validation)
-- Registry integration
-- Malicious logic rejection
+- Fee computation with various ratios
+- Fee clamping to bounds
+- Cooldown enforcement
+- Out-of-bounds streak behavior
 
-#### `AlphixLogicDeployment.t.sol`
-**Purpose**: Validates Logic contract deployment and UUPS upgrade authorization
-
-**Key Tests**:
-- Constructor and initializer protection
-- Pool type parameter getters
-- Pause/unpause functionality
-- Upgrade authorization (owner-only, interface validation)
-- Mock logic upgrades (with/without reinitializer)
-
-### Hook Callbacks
-
-#### `AlphixHookCalls.t.sol`
-**Purpose**: Validates Hook's integration with Uniswap V4 callbacks
+#### `DynamicFeeEMA.t.sol`
+**Purpose**: Validates EMA (Exponential Moving Average) calculations
 
 **Key Tests**:
-- `test_afterInitialize_dynamic_fee_required()` - Dynamic fee enforcement
-- `test_owner_can_initialize_new_pool_on_hook()` - Pool initialization
-- User operations (add/remove liquidity, swaps)
-- Pause/deactivate state enforcement
+- EMA convergence over time
+- Lookback period effects
+- Target ratio updates
 
-**Fuzz Companion**: `AlphixHookCallsFuzz.t.sol`
+### Pool Parameter Behavior
 
-#### `AlphixLogicHookCalls.t.sol`
-**Purpose**: Validates Logic's hook callback implementations
-
-**Key Tests**:
-- `beforeInitialize` / `afterInitialize` - Pool setup
-- `beforeSwap` / `afterSwap` - Swap callbacks
-- `beforeAddLiquidity` / `afterAddLiquidity` - Liquidity callbacks
-- `beforeRemoveLiquidity` / `afterRemoveLiquidity` - Removal callbacks
-- Non-hook caller rejection
-- Pause state enforcement
-
-**Fuzz Companion**: `AlphixLogicHookCallsFuzz.t.sol`
-
-### Pool Management
-
-#### `AlphixPoolManagement.t.sol`
-**Purpose**: Validates Hook's pool management operations
-
-**Key Tests**:
-- Pool initialization (owner-only, validation)
-- Pool activation/deactivation
-- Fee pokes (cooldown, zero ratio, reentrancy)
-- Global max adjustment rate
-- Pool type bounds
-- Poker role management
-
-#### `AlphixLogicPoolManagement.t.sol`
-**Purpose**: Validates Logic's pool management implementation
-
-**Key Tests**:
-- `activateAndConfigurePool` - Combined activation + configuration
-- `activatePool` / `deactivatePool` - State transitions
-- `computeFeeAndTargetRatio` - Fee computation with ratio clamping
-- `finalizeAfterFeeUpdate` - EMA updates, cooldown enforcement
-- `setPoolTypeParams` - Parameter updates with validation
-
-**Fuzz Companions**:
-- `AlphixLogicPoolManagementFuzz.t.sol`
-- `AlphixPokeFuzz.t.sol`
-
-### Parameter Behavior
-
-#### `PoolTypeParamsBehaviorChange.t.sol`
-**Purpose**: Validates how pool type parameter changes affect fee behavior
+#### `PoolParamsBehaviorChange.t.sol`
+**Purpose**: Validates how pool parameter changes affect fee behavior
 
 **Key Test Categories**:
 - **Baseline Behavior**: Original parameters, below/within tolerance
 - **Parameter Changes**: Fee bounds, cooldown, lookup periods
 - **Sensitivity Testing**: Linear slope, ratio tolerance, side factors
-- **Edge Cases**: Extreme parameters, multiple changes, cooldown bypass prevention
+- **Edge Cases**: Extreme parameters, multiple changes
 
-**Fuzz Companion**: `PoolTypeParamsBehaviorChangeFuzz.t.sol`
-- Extreme ratios with safe calculations
-- Boundary conditions for all parameters
-- Lookback period convergence
-- Fee adjustment sensitivity
+### JIT Liquidity
 
-### Registry
-
-#### `RegistryDeployment.t.sol`
-**Purpose**: Validates Registry contract for automatic deployment tracking
+#### `JITTickRangeEdgeCases.t.sol`
+**Purpose**: Validates JIT liquidity tick range edge cases
 
 **Key Tests**:
-- Constructor and initialization
-- Contract registration (authorized only, overwrites, zero address)
-- Pool registration (duplicates, unauthorized)
-- Getters (`getContract`, `getPoolInfo`, `listPools`)
-- Multi-contract type registration
+- Tick range boundary conditions
+- Price movement across tick ranges
+- Liquidity calculation edge cases
+
+### Rehypothecation
+
+#### `ReHypothecationAdvancedScenarios.t.sol`
+**Purpose**: Complex rehypothecation scenarios
+
+**Key Tests**:
+- Multi-user deposit/withdrawal sequences
+- Share accounting under various conditions
+- Yield accrual and distribution
+
+#### `ReHypothecationETHSwaps.t.sol`
+**Purpose**: ETH pool rehypothecation with swaps
+
+**Key Tests**:
+- ETH wrapping/unwrapping during swaps
+- JIT liquidity with native ETH
+- Fee capture in ETH pools
+
+#### `ReHypothecationSwapsAccounting.t.sol`
+**Purpose**: Validates accounting during swaps with rehypothecation
+
+**Key Tests**:
+- Fee compounding to yield sources
+- Delta resolution after swaps
+- Principal vs fee separation
+
+#### `RoundtripReHypothecation.t.sol`
+**Purpose**: End-to-end deposit → swap → withdraw flows
+
+**Key Tests**:
+- Complete user journey
+- No value leakage
+- Correct share minting/burning
+
+### ETH Pool Integration
+
+#### `AlphixETHHookCallsExtended.t.sol`
+**Purpose**: Extended tests for AlphixETH hook
+
+**Key Tests**:
+- Native ETH handling in hook callbacks
+- WETH wrapper integration
+- ETH refund handling
 
 ## Fuzzed Tests (`fuzzed/`)
 
-All concrete test suites have fuzz companions that:
-- Run 512 iterations with randomized inputs
-- Test boundary conditions and edge cases
-- Validate behavior across random state transitions
-- Ensure robustness against unexpected inputs
+### Hook & Deployment
+
+#### `AlphixHookCallsFuzz.t.sol`
+**Purpose**: Fuzz testing of hook callbacks with random parameters
+
+#### `AlphixETHDeploymentFuzz.t.sol`
+**Purpose**: Fuzz testing of AlphixETH deployment and initialization
+
+#### `AlphixDonateHooksFuzz.t.sol`
+**Purpose**: Fuzz testing of donate hook functionality
+
+### Dynamic Fee
+
+#### `DynamicFeeBehaviorFuzz.t.sol`
+**Purpose**: Fuzz testing of fee behavior with random ratios and parameters
+
+### JIT Liquidity
+
+#### `JITTickRangeFuzz.t.sol`
+**Purpose**: Fuzz testing of JIT tick range calculations
+
+#### `JITSelfHealingFuzz.t.sol`
+**Purpose**: Fuzz testing of JIT self-healing after failed operations
+
+### Rehypothecation
+
+#### `ReHypothecationDecimalsFuzz.t.sol`
+**Purpose**: Fuzz testing with various token decimal combinations
+
+#### `ReHypothecationVaryingPricesFuzz.t.sol`
+**Purpose**: Fuzz testing with varying prices and yield rates
 
 ## Running Integration Tests
 
@@ -185,11 +189,11 @@ forge test --match-path "test/alphix/integration/fuzzed/*.sol"
 
 ### Specific Test Suite
 ```bash
-# Hook callbacks
-forge test --match-path test/alphix/integration/concrete/AlphixHookCalls.t.sol
+# Rehypothecation tests
+forge test --match-path "test/alphix/integration/concrete/ReHypothecation*.sol"
 
-# Pool management
-forge test --match-path test/alphix/integration/concrete/AlphixPoolManagement.t.sol
+# Dynamic fee tests
+forge test --match-path "test/alphix/integration/concrete/DynamicFee*.sol"
 
 # Access control
 forge test --match-path test/alphix/integration/concrete/AccessAndOwnership.t.sol
@@ -202,30 +206,30 @@ forge test --match-path "test/alphix/integration/**/*.sol" -vvv
 
 ## Key Integration Points Tested
 
-### 1. **Hook ↔ Logic Communication**
-- Hook delegates all logic to Logic contract
-- Logic validates Hook is caller
-- State synchronization between contracts
-
-### 2. **Hook ↔ PoolManager Integration**
+### 1. **Hook ↔ PoolManager Integration**
 - Hook callbacks invoked correctly
 - Fee updates propagated to PoolManager
 - Pool state consistency
 
-### 3. **Access Control Integration**
-- Ownable2Step for ownership transfers
-- AccessManaged for Hook/Logic communication
-- Role-based permissions (Poker, Registrar)
+### 2. **JIT Liquidity Flow**
+- BeforeSwap: Add liquidity from yield sources
+- Swap: Execute using JIT liquidity
+- AfterSwap: Remove liquidity, deposit fees to yield sources
 
-### 4. **Registry Integration**
-- Automatic deployment tracking
-- Pool registration on initialization
-- Contract lookup functionality
+### 3. **Rehypothecation Integration**
+- ERC-4626 vault deposits/withdrawals
+- Share minting/burning
+- Fee compounding
+
+### 4. **Access Control Integration**
+- Ownable2Step for ownership transfers
+- AccessManaged for role-based permissions
+- Role-based permissions (Poker, YieldManager)
 
 ### 5. **OpenZeppelin Patterns**
-- UUPS upgradeability
 - Pausable functionality
-- ReentrancyGuard protection
+- ReentrancyGuardTransient protection
+- SafeERC20 usage
 
 ## Test Results
 
@@ -233,13 +237,13 @@ All tests should be passing.
 
 ## Coverage Areas
 
-- **Deployment & Initialization**: All contracts deploy and initialize correctly
 - **Access Control**: Ownership, roles, and permissions enforced
 - **Hook Callbacks**: All Uniswap V4 hooks implemented correctly
-- **Pool Management**: Configuration, activation, deactivation, parameter updates
-- **Fee Computation**: Dynamic fees calculated correctly with pool type parameters
-- **State Management**: Pause, active/inactive, cooldowns
-- **Upgrade Safety**: UUPS upgrades with proper authorization
-- **Registry Tracking**: Automatic deployment and pool registration
+- **Pool Management**: Configuration, activation, parameter updates
+- **Fee Computation**: Dynamic fees calculated correctly with pool parameters
+- **JIT Liquidity**: Correct liquidity provisioning during swaps
+- **Rehypothecation**: ERC-4626 integration, share accounting
+- **ETH Handling**: Native ETH wrapping/unwrapping
+- **State Management**: Pause, cooldowns, tick ranges
 
 These integration tests provide the middle layer of testing between unit tests (isolated components) and full cycle tests (end-to-end scenarios).

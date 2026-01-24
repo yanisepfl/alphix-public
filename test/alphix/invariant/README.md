@@ -12,7 +12,7 @@ Invariant tests are a powerful form of property-based testing that:
 ## Files
 
 ### `AlphixInvariants.t.sol`
-Main test contract defining critical invariants that must always hold:
+Main test contract defining critical invariants for the dynamic fee system:
 
 #### Invariant 1: Fee Bounds
 - `invariant_feesWithinGlobalBounds()` - All fees stay within MIN_FEE and MAX_LP_FEE
@@ -26,58 +26,73 @@ Main test contract defining critical invariants that must always hold:
 - `invariant_trackedPoolsAreValid()` - All tracked pools are properly initialized
 - `invariant_configuredPoolsHaveValidParams()` - Configuration parameters are valid
 
-#### Invariant 4: Pool Type Consistency
-- `invariant_poolTypesAreValid()` - Pool types are within enum bounds (0-2)
-
-#### Invariant 5: Fee Behavior
+#### Invariant 4: Fee Behavior
 - `invariant_feeNeverBelowReasonableMinimum()` - Fees never drop below pool-type minimums
 - `invariant_ghostVariablesConsistent()` - Ghost variable tracking remains consistent
 
-#### Invariant 6: Volume and Liquidity
+#### Invariant 5: Volume and Liquidity
 - `invariant_swapVolumeReasonable()` - Swap volume aligns with call counts
 - `invariant_netLiquidityNonNegative()` - Net liquidity (added - removed) ≥ 0
 
-#### Invariant 7: State Machine Safety
+#### Invariant 6: State Machine Safety
 - `invariant_pauseStateConsistent()` - Pause state is always accessible and valid
 - `invariant_poolManagerFeeConsistency()` - Hook fees match pool manager's reported fees
 
-#### Invariant 8: Mathematical Properties
+#### Invariant 7: Mathematical Properties
 - `invariant_allActiveFeesValid()` - All active pool fees are within MAX_LP_FEE
 - `invariant_initialTargetRatiosValid()` - Initial target ratios are valid and capped
 - `invariant_poolConfigurationsConsistent()` - Pool configs remain consistent after setup
 
-#### Invariant 9: Economic Security
+#### Invariant 8: Economic Security
 - `invariant_feesAlwaysBoundedDespiteManipulation()` - Fees bounded even under MEV attacks
 - `invariant_cooldownPreventsSameBlockManipulation()` - Cooldown prevents rapid manipulation
 
-#### Invariant 10: Edge Cases & Safety
+#### Invariant 9: Edge Cases & Safety
 - `invariant_zeroTargetHandledSafely()` - Zero targets never cause division by zero
 - `invariant_extremeRatiosHandledSafely()` - Extreme ratios don't cause overflow
 - `invariant_timeWarpsSafe()` - Time warps don't break timestamp logic
 
-#### Invariant 11: Streak & OOB Behavior
+#### Invariant 10: Streak & OOB Behavior
 - `invariant_pokeTrackingConsistent()` - Poke operations track changes correctly
 - `invariant_sideFactorsCreateAsymmetry()` - Side factors create asymmetric adjustments
 
-#### Invariant 12: Upgrade Safety
-- `invariant_logicAddressValid()` - Logic contract address is always valid
-- `invariant_hookPermissionsImmutable()` - Hook permissions remain stable
+### `ReHypothecationInvariants.t.sol`
+Invariant tests for the rehypothecation system:
+
+#### Share Accounting Invariants
+- Total shares minted equals sum of user balances
+- Share value never decreases unexpectedly (no value extraction)
+- Protocol-favorable rounding (up for deposits, down for withdrawals)
+
+#### Yield Source Invariants
+- Vault shares owned match expected from deposits
+- Withdrawal amounts never exceed available
+- No assets stranded in intermediate states
+
+#### JIT Liquidity Invariants
+- Position is empty before/after swap (transient only)
+- Delta resolution always balanced
+- No dust accumulation in hook
+
+### `DustShareTest.t.sol`
+Focused tests on dust and rounding edge cases:
+
+- Minimal share amounts don't break accounting
+- First depositor attack prevention
+- Rounding doesn't accumulate over time
+- Zero-value edge cases handled
 
 ### `handlers/AlphixInvariantHandler.sol`
-Handler contract that guides the fuzzer through valid state transitions with **swap and liquidity operations**:
+Handler contract that guides the fuzzer through valid state transitions:
 
 **Handler Functions:**
 - `poke()` - Fuzzed ratio-based fee updates with cooldown handling
-- `swap()` - **Real swap operations** using `IUniswapV4Router04.swapExactTokensForTokens()`
-- `addLiquidity()` - **Real liquidity addition** using `IPositionManager.mint()` via EasyPosm library
-- `removeLiquidity()` - **Real liquidity removal** using `IPositionManager.burn()` via EasyPosm library
+- `swap()` - Real swap operations
+- `addLiquidity()` - Real liquidity addition
+- `removeLiquidity()` - Real liquidity removal
 - `warpTime()` - Time manipulation for cooldown testing (1 hour to 30 days)
 - `configureNewPool()` - Pool configuration testing
 - `pauseContract()` / `unpauseContract()` - Pause state testing
-
-**Position Tracking:**
-- `userPositions[poolId][user]` - Mapping of token IDs for each user per pool
-- Tracks NFT positions for proper liquidity removal
 
 **Ghost Variables (Statistical Tracking):**
 - `ghost_sumOfFees` - Tracks cumulative fees across all pokes
@@ -92,17 +107,29 @@ Handler contract that guides the fuzzer through valid state transitions with **s
 
 ### Basic Run
 ```bash
-forge test --match-path test/alphix/invariant/AlphixInvariants.t.sol
+forge test --match-path "test/alphix/invariant/*.t.sol"
 ```
 
 ### With Increased Runs (more thorough)
 ```bash
-forge test --match-path test/alphix/invariant/AlphixInvariants.t.sol --fuzz-runs 1000
+forge test --match-path "test/alphix/invariant/*.t.sol" --fuzz-runs 1000
 ```
 
 ### With Verbosity
 ```bash
-forge test --match-path test/alphix/invariant/AlphixInvariants.t.sol -vvv
+forge test --match-path "test/alphix/invariant/*.t.sol" -vvv
+```
+
+### Specific Test File
+```bash
+# Dynamic fee invariants
+forge test --match-path test/alphix/invariant/AlphixInvariants.t.sol
+
+# Rehypothecation invariants
+forge test --match-path test/alphix/invariant/ReHypothecationInvariants.t.sol
+
+# Dust/rounding tests
+forge test --match-path test/alphix/invariant/DustShareTest.t.sol
 ```
 
 ### Configuration
