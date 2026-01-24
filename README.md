@@ -233,7 +233,7 @@ forge script script/alphix/01_DeployAlphix.s.sol --rpc-url $RPC_URL --broadcast 
 forge script script/alphix/01_DeployAlphixETH.s.sol --rpc-url $RPC_URL --broadcast --verify
 
 # 4. Configure roles and unpause
-forge script script/alphix/02_ConfigureAndUnpause.s.sol --rpc-url $RPC_URL --broadcast
+forge script script/alphix/02_ConfigureRoles.s.sol --rpc-url $RPC_URL --broadcast
 
 # 5. Create pool with initial liquidity
 forge script script/alphix/03_CreatePool.s.sol --rpc-url $RPC_URL --broadcast
