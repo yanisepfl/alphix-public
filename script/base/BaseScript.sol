@@ -52,7 +52,7 @@ contract BaseScript is Script {
     }
 
     function getCurrencies() public pure returns (Currency, Currency) {
-        require(address(TOKEN0) != address(TOKEN1));
+        require(address(TOKEN0) != address(TOKEN1), "Tokens must be different");
 
         if (TOKEN0 < TOKEN1) {
             return (Currency.wrap(address(TOKEN0)), Currency.wrap(address(TOKEN1)));

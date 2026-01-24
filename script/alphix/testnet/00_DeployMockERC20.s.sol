@@ -52,8 +52,9 @@ contract DeployMockERC20Script is Script {
         require(bytes(tokenSymbol).length > 0, string.concat(envVar, " not set"));
 
         envVar = string.concat("MOCK_TOKEN_DECIMALS_", network);
-        uint8 tokenDecimals = uint8(vm.envUint(envVar));
-        require(tokenDecimals >= 1 && tokenDecimals <= 18, "Decimals must be 1-18");
+        uint256 decimalsRaw = vm.envUint(envVar);
+        require(decimalsRaw >= 1 && decimalsRaw <= 18, "Decimals must be 1-18");
+        uint8 tokenDecimals = uint8(decimalsRaw);
 
         // Optional: initial mint amount
         envVar = string.concat("MOCK_TOKEN_INITIAL_MINT_", network);
@@ -76,7 +77,13 @@ contract DeployMockERC20Script is Script {
         }
         console.log("");
 
-        vm.startBroadcast();
+        // Get the broadcaster address from the private key
+        uint256 privateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(privateKey);
+        console.log("Deployer:", deployer);
+        console.log("");
+
+        vm.startBroadcast(privateKey);
 
         // Deploy the mock token
         TestnetMockERC20 token = new TestnetMockERC20(tokenName, tokenSymbol, tokenDecimals);
@@ -84,7 +91,7 @@ contract DeployMockERC20Script is Script {
 
         // Mint initial supply if specified
         if (initialMint > 0) {
-            token.mint(msg.sender, initialMint);
+            token.mint(deployer, initialMint);
             console.log("Minted %s tokens to deployer", initialMint);
         }
 

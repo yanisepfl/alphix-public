@@ -31,6 +31,10 @@ contract AcceptOwnershipScript is Script {
         address currentOwner = alphix.owner();
         address pendingOwner = alphix.pendingOwner();
 
+        // Get the broadcaster address from the private key
+        uint256 privateKey = vm.envUint("PRIVATE_KEY");
+        address broadcaster = vm.addr(privateKey);
+
         console.log("===========================================");
         console.log("ACCEPTING OWNERSHIP (STEP 2/2)");
         console.log("===========================================");
@@ -39,13 +43,14 @@ contract AcceptOwnershipScript is Script {
         console.log("");
         console.log("Current Owner:", currentOwner);
         console.log("Pending Owner:", pendingOwner);
+        console.log("Broadcaster:", broadcaster);
         console.log("");
 
         require(pendingOwner != address(0), "No pending ownership transfer");
+        require(pendingOwner == broadcaster, "Broadcaster is not pending owner");
 
-        vm.startBroadcast();
+        vm.startBroadcast(privateKey);
 
-        require(pendingOwner == msg.sender, "Caller is not pending owner");
         console.log("Accepting ownership...");
         alphix.acceptOwnership();
         console.log("  - Done");
@@ -54,7 +59,7 @@ contract AcceptOwnershipScript is Script {
 
         // Verify
         address newOwner = alphix.owner();
-        require(newOwner == msg.sender, "Ownership transfer failed");
+        require(newOwner == broadcaster, "Ownership transfer failed");
 
         console.log("");
         console.log("===========================================");

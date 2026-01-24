@@ -134,10 +134,10 @@ contract DeployAlphixScript is Script {
         console.log("  ALPHIX_HOOK_%s=%s", data.network, address(alphix));
         console.log("");
         console.log("NOTES:");
-        console.log("- Hook is PAUSED by default (unpause in step 02)");
+        console.log("- Hook is PAUSED by default (unpaused by initializePool() in step 03)");
         console.log("- This hook is for ERC20/ERC20 pools");
         console.log("");
-        console.log("Next: Run 02_ConfigureAndUnpause.s.sol");
+        console.log("Next: Run 02_ConfigureRoles.s.sol");
         console.log("===========================================");
     }
 }

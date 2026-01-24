@@ -73,18 +73,21 @@ contract RemoveRHLiquidityScript is Script {
         console.log("Shares to burn:", shares);
         console.log("");
 
-        // Preview withdrawal amounts
+        // Preview withdrawal amounts (off-chain estimation only)
         (uint256 amount0, uint256 amount1) = alphix.previewRemoveReHypothecatedLiquidity(shares);
 
         console.log("Expected withdrawal amounts:");
         console.log("  - Amount0:", amount0, "wei", isEthPool ? "(ETH)" : "");
         console.log("  - Amount1:", amount1, "wei");
-        console.log("Minimum limits (slippage protection):");
+        console.log("Minimum limits (off-chain preflight check):");
         console.log("  - Amount0 min:", amount0Min, "wei");
         console.log("  - Amount1 min:", amount1Min, "wei");
         console.log("");
 
-        // Safety check: ensure expected amounts meet minimum requirements
+        // Off-chain preflight check: ensure expected amounts meet minimum requirements
+        // NOTE: This is NOT enforced on-chain - it's a local safety check before broadcasting.
+        // The actual removeReHypothecatedLiquidity() call does not have on-chain slippage protection.
+        // Actual amounts may differ due to price movement between preview and execution.
         require(amount0 >= amount0Min, "Amount0 below RH_REMOVE_AMOUNT0_MIN limit");
         require(amount1 >= amount1Min, "Amount1 below RH_REMOVE_AMOUNT1_MIN limit");
 

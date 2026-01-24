@@ -41,6 +41,10 @@ contract TransferOwnershipScript is Script {
         Alphix alphix = Alphix(hookAddr);
         address currentOwner = alphix.owner();
 
+        // Get the broadcaster address from the private key
+        uint256 privateKey = vm.envUint("PRIVATE_KEY");
+        address broadcaster = vm.addr(privateKey);
+
         console.log("===========================================");
         console.log("TRANSFERRING OWNERSHIP (STEP 1/2)");
         console.log("===========================================");
@@ -48,12 +52,13 @@ contract TransferOwnershipScript is Script {
         console.log("Alphix Hook:", hookAddr);
         console.log("");
         console.log("Current Owner:", currentOwner);
+        console.log("Broadcaster:", broadcaster);
         console.log("New Owner:", newOwner);
         console.log("");
 
-        vm.startBroadcast();
+        require(currentOwner == broadcaster, "Broadcaster is not current owner");
 
-        require(currentOwner == msg.sender, "Caller is not current owner");
+        vm.startBroadcast(privateKey);
         console.log("Initiating ownership transfer...");
         alphix.transferOwnership(newOwner);
         console.log("  - Done");
