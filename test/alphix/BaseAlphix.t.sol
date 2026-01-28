@@ -321,6 +321,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         _key = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing, IHooks(_hook));
         _poolId = _key.toId();
 
+        vm.prank(owner);
         poolManager.initialize(_key, Constants.SQRT_PRICE_1_1);
         int24 tickLower_ = TickMath.minUsableTick(tickSpacing);
         int24 tickUpper_ = TickMath.maxUsableTick(tickSpacing);
@@ -347,6 +348,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         _key = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing, IHooks(_hook));
         _poolId = _key.toId();
 
+        vm.prank(owner);
         poolManager.initialize(_key, Constants.SQRT_PRICE_1_1);
         int24 tickLower_ = TickMath.minUsableTick(tickSpacing);
         int24 tickUpper_ = TickMath.maxUsableTick(tickSpacing);
@@ -487,6 +489,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
         // forge-lint: disable-next-line(named-struct-fields)
         k = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, spacing, IHooks(_hook));
         id = k.toId();
+        vm.prank(_hook.owner());
         poolManager.initialize(k, initialPrice);
     }
 

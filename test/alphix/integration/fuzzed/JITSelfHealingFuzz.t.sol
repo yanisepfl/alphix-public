@@ -412,7 +412,7 @@ contract JITSelfHealingFuzzTest is BaseAlphixTest {
         vm.startPrank(user);
         MockERC20(Currency.unwrap(poolKey.currency0)).approve(address(targetHook), amount0 + 1);
         MockERC20(Currency.unwrap(poolKey.currency1)).approve(address(targetHook), amount1 + 1);
-        targetHook.addReHypothecatedLiquidity(shares);
+        targetHook.addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
     }
 

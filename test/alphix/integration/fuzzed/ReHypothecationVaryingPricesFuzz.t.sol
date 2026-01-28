@@ -226,7 +226,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
             uint256 bobToken1BeforeWithdraw = MockERC20(Currency.unwrap(testCurrency1)).balanceOf(bob);
 
             vm.prank(bob);
-            Alphix(address(testHook)).removeReHypothecatedLiquidity(bobShares);
+            Alphix(address(testHook)).removeReHypothecatedLiquidity(bobShares, 0, 0);
 
             uint256 bobToken0AfterWithdraw = MockERC20(Currency.unwrap(testCurrency0)).balanceOf(bob);
             uint256 bobToken1AfterWithdraw = MockERC20(Currency.unwrap(testCurrency1)).balanceOf(bob);
@@ -254,7 +254,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // Alice withdraws
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
 
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
         assertEq(Alphix(address(testHook)).totalSupply(), 0, "Total supply is zero");
@@ -291,7 +291,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         assertTrue(preview0 > 0 || preview1 > 0, "Should have value in at least one token");
 
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
@@ -322,7 +322,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         assertTrue(preview0 > 0 || preview1 > 0, "Should have value in at least one token");
 
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
@@ -370,7 +370,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // Withdrawal should still work
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(100e18, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
@@ -529,7 +529,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // Verify: User can still withdraw
         // ══════════════════════════════════════════════════════════════════════
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
     }
 
@@ -594,7 +594,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // User can still withdraw
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
     }
 
@@ -644,7 +644,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
         // User can still withdraw (even at total loss)
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
     }
 
@@ -801,7 +801,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         vm.startPrank(user);
         MockERC20(Currency.unwrap(testCurrency0)).approve(address(testHook), amount0);
         MockERC20(Currency.unwrap(testCurrency1)).approve(address(testHook), amount1);
-        Alphix(address(testHook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(testHook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
     }
 

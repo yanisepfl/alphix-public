@@ -16,7 +16,7 @@ contract MockRefundRejecter {
      * @param shares The number of shares to request
      */
     function callAddLiquidity(AlphixETH hook, uint256 shares) external payable {
-        hook.addReHypothecatedLiquidity{value: msg.value}(shares);
+        hook.addReHypothecatedLiquidity{value: msg.value}(shares, 0, 0);
     }
 
     // No receive() or fallback() - will reject ETH refunds

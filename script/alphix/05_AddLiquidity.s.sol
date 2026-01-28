@@ -142,7 +142,7 @@ contract AddLiquidityScript is Script {
         require(c.liquidity > 0, "Computed liquidity is 0 - increase token amounts or adjust range");
     }
 
-    function _logConfig(Config memory c) internal view {
+    function _logConfig(Config memory c) internal pure {
         PoolId poolId = c.poolKey.toId();
         bool isEthPool = c.poolKey.currency0.isAddressZero();
 

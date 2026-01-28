@@ -423,7 +423,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         (uint256 amount0, uint256 amount1) = freshHook.previewAddReHypothecatedLiquidity(10e18);
         vm.startPrank(alice);
         narrowToken.approve(address(freshHook), amount1);
-        freshHook.addReHypothecatedLiquidity{value: amount0}(10e18);
+        freshHook.addReHypothecatedLiquidity{value: amount0}(10e18, 0, 0);
         vm.stopPrank();
 
         // Test swap
@@ -507,7 +507,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         (uint256 amount0, uint256 amount1) = freshHook.previewAddReHypothecatedLiquidity(10e18);
         vm.startPrank(alice);
         asymToken.approve(address(freshHook), amount1);
-        freshHook.addReHypothecatedLiquidity{value: amount0}(10e18);
+        freshHook.addReHypothecatedLiquidity{value: amount0}(10e18, 0, 0);
         vm.stopPrank();
 
         // Test swap in both directions
@@ -733,7 +733,7 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
 
         vm.startPrank(user);
         token.approve(address(hook), amount1);
-        AlphixETH(payable(address(hook))).addReHypothecatedLiquidity{value: amount0}(shares);
+        AlphixETH(payable(address(hook))).addReHypothecatedLiquidity{value: amount0}(shares, 0, 0);
         vm.stopPrank();
     }
 

@@ -41,7 +41,7 @@ contract DustShareTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(user1, amount1Large);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0Large);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1Large);
-        Alphix(address(hook)).addReHypothecatedLiquidity(largeShares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(largeShares, 0, 0);
         vm.stopPrank();
 
         console.log("After large deposit:");
@@ -59,7 +59,7 @@ contract DustShareTest is BaseAlphixTest {
         console.log("  Preview withdraw amount1:", preview1);
 
         vm.prank(user1);
-        Alphix(address(hook)).removeReHypothecatedLiquidity(toWithdraw);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(toWithdraw, 0, 0);
 
         console.log("\nAfter withdrawing all but 1 share:");
         console.log("  Total supply:", Alphix(address(hook)).totalSupply());
@@ -89,7 +89,7 @@ contract DustShareTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(user1, amount1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
 
         console.log("Initial state:");
@@ -104,7 +104,7 @@ contract DustShareTest is BaseAlphixTest {
         while (currentBalance > 1) {
             uint256 toWithdraw = currentBalance - 1;
             vm.prank(user1);
-            Alphix(address(hook)).removeReHypothecatedLiquidity(toWithdraw);
+            Alphix(address(hook)).removeReHypothecatedLiquidity(toWithdraw, 0, 0);
 
             currentBalance = Alphix(address(hook)).balanceOf(user1);
             withdrawCount++;
@@ -133,7 +133,7 @@ contract DustShareTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(user1, amount1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
 
         // User2 deposits
@@ -143,7 +143,7 @@ contract DustShareTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(user2, amount1User2);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0User2);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1User2);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
 
         console.log("Before loss:");
@@ -170,7 +170,7 @@ contract DustShareTest is BaseAlphixTest {
         console.log("  amount1:", preview1);
 
         vm.prank(user1);
-        Alphix(address(hook)).removeReHypothecatedLiquidity(user1Shares);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(user1Shares, 0, 0);
 
         console.log("\nAfter User1 withdrawal:");
         console.log("  Total supply:", Alphix(address(hook)).totalSupply());
@@ -198,7 +198,7 @@ contract DustShareTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(user1, amount1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(largeShares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(largeShares, 0, 0);
         vm.stopPrank();
 
         // Simulate many partial withdrawals to accumulate rounding errors
@@ -211,7 +211,7 @@ contract DustShareTest is BaseAlphixTest {
             if (toWithdraw == 0) break;
 
             vm.prank(user1);
-            Alphix(address(hook)).removeReHypothecatedLiquidity(toWithdraw);
+            Alphix(address(hook)).removeReHypothecatedLiquidity(toWithdraw, 0, 0);
         }
 
         console.log("After many partial withdrawals:");
@@ -255,7 +255,7 @@ contract DustShareTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(user1, amount1Large);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0Large);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1Large);
-        Alphix(address(hook)).addReHypothecatedLiquidity(largeShares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(largeShares, 0, 0);
         vm.stopPrank();
 
         console.log("After User1 large deposit:");
@@ -275,7 +275,7 @@ contract DustShareTest is BaseAlphixTest {
             MockERC20(Currency.unwrap(currency1)).mint(user2, amount1Tiny);
             MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0Tiny);
             MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1Tiny);
-            Alphix(address(hook)).addReHypothecatedLiquidity(tinyShares);
+            Alphix(address(hook)).addReHypothecatedLiquidity(tinyShares, 0, 0);
             vm.stopPrank();
         }
 
@@ -310,7 +310,7 @@ contract DustShareTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency1)).mint(user1, amount1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
 
         // Simulate near-total loss

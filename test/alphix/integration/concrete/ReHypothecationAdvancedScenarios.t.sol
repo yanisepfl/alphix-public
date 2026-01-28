@@ -352,7 +352,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
 
         // Actually remove liquidity
         vm.prank(alice);
-        Alphix(address(hook)).removeReHypothecatedLiquidity(sharesToBurn);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(sharesToBurn, 0, 0);
 
         // Record balances after
         uint256 aliceToken0After = MockERC20(Currency.unwrap(currency0)).balanceOf(alice);
@@ -392,7 +392,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
         vm.startPrank(bob);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), inputAmount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), requiredAmount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
 
         // Bob should have received the shares
@@ -421,7 +421,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
         vm.startPrank(carol);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), requiredAmount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), inputAmount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
 
         assertEq(Alphix(address(hook)).balanceOf(carol), shares, "Carol should have received shares");
@@ -496,7 +496,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
         vm.startPrank(user);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
     }
 

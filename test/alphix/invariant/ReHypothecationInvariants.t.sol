@@ -115,7 +115,7 @@ contract ReHypothecationInvariantsTest is StdInvariant, BaseAlphixTest {
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
 
-        try Alphix(address(hook)).addReHypothecatedLiquidity(shares) {
+        try Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0) {
             addLiquidityCount++;
             ghostTotalDeposited0 += amount0;
             ghostTotalDeposited1 += amount1;
@@ -140,7 +140,7 @@ contract ReHypothecationInvariantsTest is StdInvariant, BaseAlphixTest {
         (uint256 amount0, uint256 amount1) = Alphix(address(hook)).previewRemoveReHypothecatedLiquidity(shares);
 
         vm.prank(user);
-        try Alphix(address(hook)).removeReHypothecatedLiquidity(shares) {
+        try Alphix(address(hook)).removeReHypothecatedLiquidity(shares, 0, 0) {
             removeLiquidityCount++;
             ghostTotalWithdrawn0 += amount0;
             ghostTotalWithdrawn1 += amount1;
@@ -155,12 +155,28 @@ contract ReHypothecationInvariantsTest is StdInvariant, BaseAlphixTest {
 
     /**
      * @notice Handler: Simulate positive yield
+     * @dev Requires meaningful LP shares to exist before generating yield.
+     *      This prevents unrealistic scenarios where yield is generated while
+     *      only dust LP shares exist (which would create ERC4626 inflation-like conditions).
+     *      Real yield sources generate yield proportional to principal, so generating
+     *      10e18 yield on 1 wei of principal is not a realistic test scenario.
      */
     function handlerSimulateYield(uint256 amountSeed, uint256 currencySeed) public {
-        // Only simulate yield if there are deposits
-        if (Alphix(address(hook)).totalSupply() == 0) return;
+        // Only simulate yield if there are meaningful deposits
+        // Requiring at least 1e15 LP shares prevents yield generation when only dust remains
+        // This makes the test realistic: real vaults don't generate massive yield on tiny principal
+        uint256 totalSupply = Alphix(address(hook)).totalSupply();
+        if (totalSupply < 1e15) return;
 
-        uint256 yieldAmount = bound(amountSeed, 1e16, 10e18);
+        // Cap yield to a realistic percentage of the selected vault's assets
+        // Use the vault that will receive yield (based on currencySeed) to avoid exceeding principal
+        uint256 existingAssets0 = Alphix(address(hook)).getAmountInYieldSource(currency0);
+        uint256 existingAssets1 = Alphix(address(hook)).getAmountInYieldSource(currency1);
+        uint256 selectedAssets = (currencySeed % 2 == 0) ? existingAssets0 : existingAssets1;
+        uint256 maxYield = selectedAssets / 2; // Cap at ~50% of selected vault's assets
+        if (maxYield < 1e16) maxYield = 1e16; // Minimum yield for test coverage
+
+        uint256 yieldAmount = bound(amountSeed, 1e16, maxYield > 10e18 ? 10e18 : maxYield);
 
         vm.startPrank(owner);
         if (currencySeed % 2 == 0) {

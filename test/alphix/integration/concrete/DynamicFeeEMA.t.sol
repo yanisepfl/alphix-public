@@ -70,7 +70,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         Alphix freshHook = _deployFreshAlphixStack();
         uint256 initialTargetRatio = 1e18;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             initialTargetRatio,
             18,
@@ -127,7 +127,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         Alphix freshHook = _deployFreshAlphixStack();
         uint256 initialTargetRatio = 1e18;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             initialTargetRatio,
             18,
@@ -181,7 +181,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         Alphix freshHook = _deployFreshAlphixStack();
         uint256 initialTargetRatio = 1e18;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             initialTargetRatio,
             18,
@@ -210,13 +210,8 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == FEE_UPDATED_TOPIC) {
                 // Decode event data (oldFee, newFee, oldTargetRatio, currentRatio, newTargetRatio)
-                (
-                    uint24 oldFee,
-                    uint24 newFee,
-                    uint256 oldTargetRatio,
-                    uint256 emittedCurrentRatio,
-                    uint256 newTargetRatio
-                ) = abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
+                (,, uint256 oldTargetRatio, uint256 emittedCurrentRatio, uint256 newTargetRatio) =
+                    abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
 
                 // Key assertion: old and new target ratios must differ
                 assertTrue(oldTargetRatio != newTargetRatio, "Old and new target ratios should differ");
@@ -238,7 +233,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         uint256 initialTarget = 1e18;
         uint256 constantCurrentRatio = 2e18; // Constant high ratio for all pokes
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             initialTarget,
             18,
@@ -289,7 +284,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         Alphix freshHook = _deployFreshAlphixStack();
         uint256 initialTarget = 1e18;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             initialTarget,
             18,
@@ -339,7 +334,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         uint256 constantCurrentRatio = 2e18;
 
         // Initialize both with same initial state but different lookback params
-        (PoolKey memory shortKey, PoolId shortPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             initialTarget,
             18,
@@ -349,7 +344,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
             shortHook,
             shortLookbackParams
         );
-        (PoolKey memory longKey, PoolId longPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             initialTarget,
             18,
@@ -421,7 +416,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
 
         uint256 initialTarget = 1e18; // Start at 1x
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE, initialTarget, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, clampParams
         );
 
@@ -474,7 +469,7 @@ contract DynamicFeeEMATest is BaseAlphixTest {
         // Start with a small but valid target ratio
         uint256 smallInitialTarget = 1e15; // 0.001 in WAD terms
 
-        (PoolKey memory testKey,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             INITIAL_FEE,
             smallInitialTarget,
             18,

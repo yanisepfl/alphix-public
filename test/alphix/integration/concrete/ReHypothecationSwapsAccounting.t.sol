@@ -293,7 +293,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // Remove small position
         vm.prank(alice);
-        Alphix(address(hook)).removeReHypothecatedLiquidity(10e18);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(10e18, 0, 0);
 
         // Add larger rehypo position (10x)
         _addReHypoLiquidity(alice, 100e18);
@@ -710,7 +710,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // User should still be able to withdraw (even at a loss)
         vm.prank(alice);
-        Alphix(address(hook)).removeReHypothecatedLiquidity(100e18);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(100e18, 0, 0);
 
         // Verify alice received tokens (reduced by loss)
         assertGt(MockERC20(Currency.unwrap(currency0)).balanceOf(alice), INITIAL_TOKEN_AMOUNT * 10 - previewBefore0);
@@ -757,7 +757,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
 
         // Alice withdraws all rehypo
         vm.prank(alice);
-        Alphix(address(hook)).removeReHypothecatedLiquidity(100e18);
+        Alphix(address(hook)).removeReHypothecatedLiquidity(100e18, 0, 0);
 
         // Verify yield sources are now empty
         assertEq(Alphix(address(hook)).getAmountInYieldSource(currency0), 0, "Vault0 should be empty");
@@ -1107,7 +1107,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         vm.startPrank(user);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
     }
 
@@ -1154,7 +1154,7 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
         vm.startPrank(user);
         MockERC20(Currency.unwrap(poolKey.currency0)).approve(address(targetHook), amount0);
         MockERC20(Currency.unwrap(poolKey.currency1)).approve(address(targetHook), amount1);
-        targetHook.addReHypothecatedLiquidity(shares);
+        targetHook.addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
     }
 

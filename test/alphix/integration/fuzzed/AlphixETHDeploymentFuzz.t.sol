@@ -39,6 +39,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
 
+        vm.prank(freshHook.owner());
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
         // Use pool params that accept this fee
@@ -63,6 +64,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
 
+        vm.prank(freshHook.owner());
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
         int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
@@ -83,6 +85,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         Currency newToken = deployEthPoolToken(decimals);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
 
+        vm.prank(freshHook.owner());
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
         int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
@@ -111,6 +114,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
             hooks: IHooks(freshHook)
         });
 
+        vm.prank(freshHook.owner());
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
         int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);
@@ -227,6 +231,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
 
+        vm.prank(freshHook.owner());
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
         // Use a fee within the provided range
@@ -264,6 +269,7 @@ contract AlphixETHDeploymentFuzzTest is BaseAlphixETHTest {
         Currency newToken = deployEthPoolToken(18);
         PoolKey memory newKey = createEthPoolKey(newToken, 20, freshHook);
 
+        vm.prank(freshHook.owner());
         poolManager.initialize(newKey, Constants.SQRT_PRICE_1_1);
 
         int24 tickLower = TickMath.minUsableTick(newKey.tickSpacing);

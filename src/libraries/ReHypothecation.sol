@@ -27,7 +27,8 @@ library ReHypothecationLib {
 
     /* ERRORS */
 
-    error InvalidTickRange(int24 tickLower, int24 tickUpper);
+    error InvalidTickRange();
+    error ZeroSharesReceived();
 
     /* VALIDATION FUNCTIONS */
 
@@ -63,7 +64,7 @@ library ReHypothecationLib {
         if (
             tickLower >= tickUpper || tickLower < TickMath.MIN_TICK || tickUpper > TickMath.MAX_TICK
                 || tickLower % tickSpacing != 0 || tickUpper % tickSpacing != 0
-        ) revert InvalidTickRange(tickLower, tickUpper);
+        ) revert InvalidTickRange();
     }
 
     /* YIELD SOURCE OPERATIONS */
@@ -84,6 +85,7 @@ library ReHypothecationLib {
         address asset = Currency.unwrap(currency);
         IERC20(asset).forceApprove(yieldSource, amount);
         sharesReceived = IERC4626(yieldSource).deposit(amount, address(this));
+        if (sharesReceived == 0) revert ZeroSharesReceived();
     }
 
     /**

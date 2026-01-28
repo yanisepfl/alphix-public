@@ -85,7 +85,7 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
 
         // Add liquidity
         vm.prank(alice);
-        hook.addReHypothecatedLiquidity(sharesToAdd);
+        hook.addReHypothecatedLiquidity(sharesToAdd, 0, 0);
 
         // Verify shares received
         assertEq(hook.balanceOf(alice), sharesToAdd, "Should have correct shares");
@@ -100,7 +100,7 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
 
         // Remove all shares
         vm.prank(alice);
-        hook.removeReHypothecatedLiquidity(sharesToAdd);
+        hook.removeReHypothecatedLiquidity(sharesToAdd, 0, 0);
 
         // Verify no shares remaining
         assertEq(hook.balanceOf(alice), 0, "Should have no shares");
@@ -139,11 +139,11 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
         for (uint256 i = 0; i < numRoundtrips; i++) {
             // Add liquidity
             vm.prank(alice);
-            hook.addReHypothecatedLiquidity(sharesToAdd);
+            hook.addReHypothecatedLiquidity(sharesToAdd, 0, 0);
 
             // Remove liquidity
             vm.prank(alice);
-            hook.removeReHypothecatedLiquidity(sharesToAdd);
+            hook.removeReHypothecatedLiquidity(sharesToAdd, 0, 0);
         }
 
         // Final balance
@@ -174,7 +174,7 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
 
         // Alice adds liquidity
         vm.prank(alice);
-        hook.addReHypothecatedLiquidity(sharesToAdd);
+        hook.addReHypothecatedLiquidity(sharesToAdd, 0, 0);
 
         // Simulate yield accrual (10% yield on both tokens)
         uint256 yield0 = 1e18; // 10% of typical position
@@ -196,7 +196,7 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
 
         // Remove liquidity
         vm.prank(alice);
-        hook.removeReHypothecatedLiquidity(sharesToAdd);
+        hook.removeReHypothecatedLiquidity(sharesToAdd, 0, 0);
 
         // Record balances after withdrawal
         uint256 token0After = IERC20(Currency.unwrap(currency0)).balanceOf(alice);
@@ -220,7 +220,7 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
         (uint256 depositAmount0, uint256 depositAmount1) = hook.previewAddReHypothecatedLiquidity(sharesToAdd);
 
         vm.prank(alice);
-        hook.addReHypothecatedLiquidity(sharesToAdd);
+        hook.addReHypothecatedLiquidity(sharesToAdd, 0, 0);
 
         // Simulate loss (10% loss on both tokens)
         uint256 currentAmount0 = hook.getAmountInYieldSource(currency0);
@@ -244,7 +244,7 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
 
         // Remove liquidity
         vm.prank(alice);
-        hook.removeReHypothecatedLiquidity(sharesToAdd);
+        hook.removeReHypothecatedLiquidity(sharesToAdd, 0, 0);
 
         // Record balances after withdrawal
         uint256 token0After = IERC20(Currency.unwrap(currency0)).balanceOf(alice);
@@ -272,11 +272,11 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
 
         // Alice adds liquidity first
         vm.prank(alice);
-        hook.addReHypothecatedLiquidity(aliceShares);
+        hook.addReHypothecatedLiquidity(aliceShares, 0, 0);
 
         // Bob adds liquidity second
         vm.prank(bob);
-        hook.addReHypothecatedLiquidity(bobShares);
+        hook.addReHypothecatedLiquidity(bobShares, 0, 0);
 
         // Record Alice's tokens before removal
         uint256 aliceToken0Before = IERC20(Currency.unwrap(currency0)).balanceOf(alice);
@@ -286,11 +286,11 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
 
         // Bob removes first
         vm.prank(bob);
-        hook.removeReHypothecatedLiquidity(bobShares);
+        hook.removeReHypothecatedLiquidity(bobShares, 0, 0);
 
         // Then Alice removes
         vm.prank(alice);
-        hook.removeReHypothecatedLiquidity(aliceShares);
+        hook.removeReHypothecatedLiquidity(aliceShares, 0, 0);
 
         // Both should have no shares
         assertEq(hook.balanceOf(alice), 0, "Alice should have no shares");
@@ -323,11 +323,11 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
         }
 
         vm.prank(alice);
-        hook.addReHypothecatedLiquidity(smallShares);
+        hook.addReHypothecatedLiquidity(smallShares, 0, 0);
 
         // Remove shares - should not revert
         vm.prank(alice);
-        hook.removeReHypothecatedLiquidity(smallShares);
+        hook.removeReHypothecatedLiquidity(smallShares, 0, 0);
 
         assertEq(hook.balanceOf(alice), 0, "Should have no shares");
     }
@@ -351,11 +351,11 @@ contract RoundtripReHypothecationTest is BaseAlphixTest {
         }
 
         vm.prank(alice);
-        hook.addReHypothecatedLiquidity(largeShares);
+        hook.addReHypothecatedLiquidity(largeShares, 0, 0);
 
         // Remove shares - should not revert
         vm.prank(alice);
-        hook.removeReHypothecatedLiquidity(largeShares);
+        hook.removeReHypothecatedLiquidity(largeShares, 0, 0);
 
         assertEq(hook.balanceOf(alice), 0, "Should have no shares");
     }

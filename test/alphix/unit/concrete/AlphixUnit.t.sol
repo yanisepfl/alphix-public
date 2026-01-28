@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 /* OZ IMPORTS */
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /* UNISWAP V4 IMPORTS */
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -12,6 +13,8 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -32,6 +35,7 @@ import {MockYieldVault} from "../../../utils/mocks/MockYieldVault.sol";
  */
 contract AlphixUnitTest is BaseAlphixTest {
     using PoolIdLibrary for PoolKey;
+    using StateLibrary for IPoolManager;
 
     MockYieldVault public vault0;
     MockYieldVault public vault1;
@@ -140,7 +144,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
         int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         freshHook.initializePool(freshKey, INITIAL_FEE, 0, defaultPoolParams, tickLower, tickUpper); // Zero ratio is invalid
     }
 
@@ -154,7 +158,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
         int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, badRatio));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         freshHook.initializePool(freshKey, INITIAL_FEE, badRatio, defaultPoolParams, tickLower, tickUpper);
     }
 
@@ -180,7 +184,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         badParams.minFee = 0; // Below MIN_FEE
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector, 0, badParams.maxFee));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector));
         hook.setPoolParams(badParams);
     }
 
@@ -190,7 +194,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         badParams.maxFee = 1000; // minFee > maxFee
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector, 10000, 1000));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector));
         hook.setPoolParams(badParams);
     }
 
@@ -199,9 +203,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         badParams.maxFee = LPFeeLibrary.MAX_LP_FEE + 1;
 
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector, badParams.minFee, LPFeeLibrary.MAX_LP_FEE + 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector));
         hook.setPoolParams(badParams);
     }
 
@@ -348,7 +350,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         vm.warp(block.timestamp + defaultPoolParams.minPeriod + 1);
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         hook.poke(0);
     }
 
@@ -357,7 +359,7 @@ contract AlphixUnitTest is BaseAlphixTest {
 
         uint256 badRatio = defaultPoolParams.maxCurrentRatio + 1;
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, badRatio));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         hook.poke(badRatio);
     }
 
@@ -392,20 +394,20 @@ contract AlphixUnitTest is BaseAlphixTest {
 
         vm.prank(user1);
         vm.expectRevert(IReHypothecation.ZeroShares.selector);
-        hook.addReHypothecatedLiquidity(0);
+        hook.addReHypothecatedLiquidity(0, 0, 0);
     }
 
     function test_removeReHypothecatedLiquidity_revertsOnZeroShares() public {
         vm.prank(user1);
         vm.expectRevert(IReHypothecation.ZeroShares.selector);
-        hook.removeReHypothecatedLiquidity(0);
+        hook.removeReHypothecatedLiquidity(0, 0, 0);
     }
 
     function test_removeReHypothecatedLiquidity_revertsOnInsufficientShares() public {
         // User has no shares, try to remove some
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IReHypothecation.InsufficientShares.selector, 100e18, 0));
-        hook.removeReHypothecatedLiquidity(100e18);
+        vm.expectRevert(abi.encodeWithSelector(IReHypothecation.InsufficientShares.selector));
+        hook.removeReHypothecatedLiquidity(100e18, 0, 0);
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -423,7 +425,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         address eoa = makeAddr("eoa");
 
         vm.prank(yieldManager);
-        vm.expectRevert(abi.encodeWithSelector(IReHypothecation.InvalidYieldSource.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(IReHypothecation.InvalidYieldSource.selector));
         hook.setYieldSource(currency0, eoa);
     }
 
@@ -454,7 +456,7 @@ contract AlphixUnitTest is BaseAlphixTest {
 
         // Trying to clear it should revert with InvalidYieldSource
         vm.prank(yieldManager);
-        vm.expectRevert(abi.encodeWithSelector(IReHypothecation.InvalidYieldSource.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IReHypothecation.InvalidYieldSource.selector));
         hook.setYieldSource(currency0, address(0));
     }
 
@@ -462,7 +464,7 @@ contract AlphixUnitTest is BaseAlphixTest {
                               TICK RANGE TESTS
     ═══════════════════════════════════════════════════════════════════════════ */
 
-    function test_tickRange_isSetAtInitialization() public {
+    function test_tickRange_isSetAtInitialization() public view {
         // Tick range is now set immutably at initializePool time
         IReHypothecation.ReHypothecationConfig memory config = hook.getReHypothecationConfig();
 
@@ -548,13 +550,13 @@ contract AlphixUnitTest is BaseAlphixTest {
     }
 
     function test_computeFeeUpdate_revertsOnInvalidRatio_zero() public {
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         hook.computeFeeUpdate(0);
     }
 
     function test_computeFeeUpdate_revertsOnInvalidRatio_exceedsMax() public {
         uint256 badRatio = defaultPoolParams.maxCurrentRatio + 1;
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, badRatio));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         hook.computeFeeUpdate(badRatio);
     }
 
@@ -605,7 +607,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         vm.startPrank(user1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
-        hook.addReHypothecatedLiquidity(1e18);
+        hook.addReHypothecatedLiquidity(1e18, 0, 0);
         vm.stopPrank();
 
         // Verify shares exist in first yield source
@@ -658,7 +660,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         vm.startPrank(user1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), initialDeposit);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), initialDeposit);
-        hook.addReHypothecatedLiquidity(10e18);
+        hook.addReHypothecatedLiquidity(10e18, 0, 0);
         vm.stopPrank();
 
         // Now preview with existing supply
@@ -679,7 +681,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         vm.startPrank(user1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), initialDeposit);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), initialDeposit);
-        hook.addReHypothecatedLiquidity(10e18);
+        hook.addReHypothecatedLiquidity(10e18, 0, 0);
         vm.stopPrank();
 
         // Now preview with existing supply
@@ -700,7 +702,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         vm.startPrank(user1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), initialDeposit);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), initialDeposit);
-        hook.addReHypothecatedLiquidity(100e18);
+        hook.addReHypothecatedLiquidity(100e18, 0, 0);
         vm.stopPrank();
 
         // Preview with very tiny amount that rounds to 0 shares
@@ -721,7 +723,7 @@ contract AlphixUnitTest is BaseAlphixTest {
         vm.startPrank(user1);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), initialDeposit);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), initialDeposit);
-        hook.addReHypothecatedLiquidity(100e18);
+        hook.addReHypothecatedLiquidity(100e18, 0, 0);
         vm.stopPrank();
 
         // Preview with very tiny amount
@@ -764,8 +766,48 @@ contract AlphixUnitTest is BaseAlphixTest {
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
-                    BEFORE INITIALIZE - ETH POOL REJECTION TEST
+                    BEFORE INITIALIZE - ACCESS CONTROL TESTS
     ═══════════════════════════════════════════════════════════════════════════ */
+
+    /**
+     * @notice Tests that only owner can call poolManager.initialize (Issue #3 fix).
+     * @dev This test verifies the fix for Sherlock audit Issue #3: beforeInitialize
+     *      now checks that sender == owner() to prevent front-running of pool creation.
+     */
+    function test_beforeInitialize_revertsWhenNotOwner() public {
+        // Deploy fresh Alphix hook
+        Alphix freshHook = _deployFreshAlphixStack();
+
+        // Create a valid pool key
+        MockERC20 token0 = new MockERC20("Token0", "TK0", 18);
+        MockERC20 token1 = new MockERC20("Token1", "TK1", 18);
+
+        // Ensure token0 < token1 for proper ordering
+        (address addr0, address addr1) =
+            address(token0) < address(token1) ? (address(token0), address(token1)) : (address(token1), address(token0));
+
+        PoolKey memory newPoolKey = PoolKey({
+            currency0: Currency.wrap(addr0),
+            currency1: Currency.wrap(addr1),
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: defaultTickSpacing,
+            hooks: IHooks(freshHook)
+        });
+
+        // Try to initialize as non-owner (unauthorized user)
+        // This should revert (the error is wrapped by PoolManager)
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        poolManager.initialize(newPoolKey, Constants.SQRT_PRICE_1_1);
+
+        // Verify that owner CAN initialize
+        address hookOwner = freshHook.owner();
+        vm.prank(hookOwner);
+        poolManager.initialize(newPoolKey, Constants.SQRT_PRICE_1_1);
+
+        // Pool should now be initialized at Uniswap level
+        // (Alphix level initialization would be done via initializePool)
+    }
 
     function test_beforeInitialize_revertsOnETHPool() public {
         // Deploy fresh Alphix hook (not AlphixETH)
@@ -785,8 +827,29 @@ contract AlphixUnitTest is BaseAlphixTest {
 
         // This should revert with UnsupportedNativeCurrency
         // The error is wrapped by PoolManager
+        // Must call as owner since beforeInitialize now checks sender == owner first
+        // Note: vm.prank must be called BEFORE vm.expectRevert to avoid
+        // the owner() call being considered as the "next call"
+        address hookOwner = freshHook.owner();
+        vm.prank(hookOwner);
         vm.expectRevert();
         poolManager.initialize(ethPoolKey, Constants.SQRT_PRICE_1_1);
+    }
+
+    /**
+     * @notice Tests that re-initialization reverts with PoolAlreadyInitialized.
+     * @dev Our hook's check fires BEFORE PoolManager's sqrtPriceX96 check.
+     *      This verifies our _poolKey.hooks check is necessary and not redundant.
+     *      Note: The PoolManager wraps hook errors in WrappedError, so we use generic expectRevert.
+     *      Run with -vvv to see the trace showing PoolAlreadyInitialized thrown by our hook.
+     */
+    function test_beforeInitialize_revertsOnReInitialization() public {
+        // Pool is already initialized in setUp
+        // Our hook's check fires BEFORE PoolManager's sqrtPriceX96 check
+        // Must be owner to pass the first check (sender == owner())
+        vm.prank(owner);
+        vm.expectRevert();
+        poolManager.initialize(key, Constants.SQRT_PRICE_1_1);
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -833,6 +896,544 @@ contract AlphixUnitTest is BaseAlphixTest {
 
         // The _computeBeforeSwapJit will return shouldExecute=false
         // when either yield source is address(0) (lines 833-836)
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+                    REMOVE REHYPOTHECATED LIQUIDITY - ZERO AMOUNTS TESTS
+    ═══════════════════════════════════════════════════════════════════════════ */
+
+    function test_removeReHypothecatedLiquidity_revertsWhenBothAmountsRoundToZero() public {
+        _setupYieldSources();
+
+        // Add a large amount of liquidity first
+        uint256 largeDeposit = 1000e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, largeDeposit);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, largeDeposit);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), largeDeposit);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), largeDeposit);
+        hook.addReHypothecatedLiquidity(100e18, 0, 0); // Get 100e18 shares
+        vm.stopPrank();
+
+        // Now try to withdraw with just 1 share - both amounts will round to 0
+        // With 100e18 shares and ~100e18 total assets, 1 share gives ~1e-18 of each asset = 0
+        // This should revert with ZeroAmounts
+        vm.prank(user1);
+        vm.expectRevert(IReHypothecation.ZeroAmounts.selector);
+        hook.removeReHypothecatedLiquidity(1, 0, 0);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+                    SET POOL PARAMS - TARGET RATIO CLAMPING TESTS
+    ═══════════════════════════════════════════════════════════════════════════ */
+
+    function test_setPoolParams_clampsTargetRatioToNewMaxCurrentRatio() public {
+        // First set a high target ratio by poking with a high ratio
+        // Warp past cooldown
+        vm.warp(block.timestamp + defaultPoolParams.minPeriod + 1);
+
+        // Poke with the max allowed ratio to push target ratio high
+        vm.prank(owner);
+        hook.poke(defaultPoolParams.maxCurrentRatio);
+
+        // Now update pool params with a LOWER maxCurrentRatio
+        DynamicFeeLib.PoolParams memory newParams = defaultPoolParams;
+        newParams.maxCurrentRatio = 1e18; // Lower than what target ratio might be
+
+        vm.prank(owner);
+        hook.setPoolParams(newParams);
+
+        // Verify target ratio was clamped: subsequent poke should work with the new range
+        vm.warp(block.timestamp + newParams.minPeriod + 1);
+
+        // This should NOT revert - if target ratio wasn't clamped, fee calculation might fail
+        vm.prank(owner);
+        hook.poke(newParams.maxCurrentRatio);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+                            SLIPPAGE PROTECTION TESTS
+    ═══════════════════════════════════════════════════════════════════════════ */
+
+    function test_addReHypothecatedLiquidity_withinSlippage_succeeds() public {
+        _setupYieldSources();
+
+        // Mint and approve tokens
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Get current price
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+
+        // Add liquidity with slippage check (1% tolerance)
+        hook.addReHypothecatedLiquidity(10e18, sqrtPriceX96, 10000);
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), 10e18, "User should have 10e18 shares");
+    }
+
+    function test_addReHypothecatedLiquidity_exceedsSlippage_reverts() public {
+        _setupYieldSources();
+
+        // Mint and approve tokens
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Get current price
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+
+        // Provide a price that's significantly different from actual (simulating price moved)
+        // Expected price is 2x current price - should fail with any reasonable slippage
+        uint160 wrongExpectedPrice = sqrtPriceX96 * 2;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IReHypothecation.PriceSlippageExceeded.selector, wrongExpectedPrice, sqrtPriceX96, 10000
+            )
+        );
+        hook.addReHypothecatedLiquidity(10e18, wrongExpectedPrice, 10000);
+        vm.stopPrank();
+    }
+
+    function test_addReHypothecatedLiquidity_zeroExpectedPrice_skipsCheck() public {
+        _setupYieldSources();
+
+        // Mint and approve tokens
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Pass 0 for expectedSqrtPriceX96 to skip slippage check
+        hook.addReHypothecatedLiquidity(10e18, 0, 0);
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), 10e18, "User should have 10e18 shares");
+    }
+
+    function test_removeReHypothecatedLiquidity_withinSlippage_succeeds() public {
+        _setupYieldSources();
+
+        // Setup: Add liquidity first
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+        hook.addReHypothecatedLiquidity(50e18, 0, 0);
+
+        // Get current price
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+
+        // Remove liquidity with slippage check (1% tolerance)
+        hook.removeReHypothecatedLiquidity(25e18, sqrtPriceX96, 10000);
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), 25e18, "User should have 25e18 shares remaining");
+    }
+
+    function test_removeReHypothecatedLiquidity_exceedsSlippage_reverts() public {
+        _setupYieldSources();
+
+        // Setup: Add liquidity first
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+        hook.addReHypothecatedLiquidity(50e18, 0, 0);
+
+        // Get current price
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+
+        // Try to remove with wrong expected price
+        uint160 wrongExpectedPrice = sqrtPriceX96 * 2;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IReHypothecation.PriceSlippageExceeded.selector, wrongExpectedPrice, sqrtPriceX96, 10000
+            )
+        );
+        hook.removeReHypothecatedLiquidity(25e18, wrongExpectedPrice, 10000);
+        vm.stopPrank();
+    }
+
+    function test_addReHypothecatedLiquidity_exactSlippageBoundary_succeeds() public {
+        _setupYieldSources();
+
+        // Mint and approve tokens
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Get current price
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+
+        // Set expected price to exactly match current - should pass with any slippage
+        hook.addReHypothecatedLiquidity(10e18, sqrtPriceX96, 1); // Even 0.0001% slippage should pass
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), 10e18, "User should have 10e18 shares");
+    }
+
+    /**
+     * @notice Test that slippage protection prevents sandwich attacks on addLiquidity
+     * @dev Simulates: 1) User sees price P, 2) Attacker front-runs with swap moving price,
+     *      3) User's tx with slippage protection reverts because price moved
+     */
+    function test_addReHypothecatedLiquidity_sandwichAttack_preventsWithSlippage() public {
+        _setupYieldSources();
+
+        // Setup: mint tokens to both user and attacker
+        // Use smaller swap amount that the pool can handle (pool has ~100e18 liquidity)
+        address attacker = makeAddr("attacker");
+        uint256 swapAmount = 10e18; // Smaller amount that will move price but won't overflow
+        uint256 depositAmount = 100e18;
+
+        MockERC20(Currency.unwrap(currency0)).mint(attacker, swapAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(attacker, swapAmount);
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        // Step 1: User observes current price and prepares tx with slippage protection
+        (uint160 userExpectedPrice,,,) = poolManager.getSlot0(key.toId());
+        uint24 userSlippageTolerance = 5000; // 0.5% tolerance
+
+        // Step 2: Attacker front-runs with a swap to move price
+        vm.startPrank(attacker);
+        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
+        swapRouter.swapExactTokensForTokens({
+            amountIn: swapAmount,
+            amountOutMin: 0,
+            zeroForOne: true,
+            poolKey: key,
+            hookData: Constants.ZERO_BYTES,
+            receiver: attacker,
+            deadline: block.timestamp + 100
+        });
+        vm.stopPrank();
+
+        // Verify price actually moved
+        (uint160 newPrice,,,) = poolManager.getSlot0(key.toId());
+        assertNotEq(newPrice, userExpectedPrice, "Price should have moved after swap");
+
+        // Step 3: User's add liquidity tx should revert due to slippage protection
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IReHypothecation.PriceSlippageExceeded.selector, userExpectedPrice, newPrice, userSlippageTolerance
+            )
+        );
+        hook.addReHypothecatedLiquidity(10e18, userExpectedPrice, userSlippageTolerance);
+        vm.stopPrank();
+
+        // User protected - no shares minted, no tokens lost
+        assertEq(hook.balanceOf(user1), 0, "User should have no shares (protected by slippage)");
+    }
+
+    /**
+     * @notice Test that slippage protection prevents sandwich attacks on removeLiquidity
+     * @dev Simulates: 1) LP sees price P, 2) Attacker front-runs with swap moving price,
+     *      3) LP's withdrawal tx with slippage protection reverts
+     */
+    function test_removeReHypothecatedLiquidity_sandwichAttack_preventsWithSlippage() public {
+        _setupYieldSources();
+
+        // Setup: user adds liquidity first
+        // Use smaller swap amount that the pool can handle (pool has ~100e18 liquidity)
+        address attacker = makeAddr("attacker");
+        uint256 swapAmount = 10e18; // Smaller amount that will move price but won't overflow
+        uint256 depositAmount = 100e18;
+
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency0)).mint(attacker, swapAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+        hook.addReHypothecatedLiquidity(50e18, 0, 0); // Add without slippage check initially
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), 50e18, "User should have 50e18 shares");
+
+        // Step 1: User observes current price and prepares withdrawal with slippage protection
+        (uint160 userExpectedPrice,,,) = poolManager.getSlot0(key.toId());
+        uint24 userSlippageTolerance = 5000; // 0.5% tolerance
+
+        // Step 2: Attacker front-runs with a swap to move price
+        vm.startPrank(attacker);
+        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
+        swapRouter.swapExactTokensForTokens({
+            amountIn: swapAmount,
+            amountOutMin: 0,
+            zeroForOne: true,
+            poolKey: key,
+            hookData: Constants.ZERO_BYTES,
+            receiver: attacker,
+            deadline: block.timestamp + 100
+        });
+        vm.stopPrank();
+
+        // Verify price actually moved
+        (uint160 newPrice,,,) = poolManager.getSlot0(key.toId());
+        assertNotEq(newPrice, userExpectedPrice, "Price should have moved after swap");
+
+        // Step 3: User's remove liquidity tx should revert due to slippage protection
+        vm.startPrank(user1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IReHypothecation.PriceSlippageExceeded.selector, userExpectedPrice, newPrice, userSlippageTolerance
+            )
+        );
+        hook.removeReHypothecatedLiquidity(25e18, userExpectedPrice, userSlippageTolerance);
+        vm.stopPrank();
+
+        // User protected - shares not burned
+        assertEq(hook.balanceOf(user1), 50e18, "User should still have all shares (protected by slippage)");
+    }
+
+    /**
+     * @notice Test that without slippage protection (0,0), user IS vulnerable to price manipulation
+     * @dev This demonstrates what happens when users opt out of slippage protection
+     */
+    function test_addReHypothecatedLiquidity_noSlippageProtection_vulnerableToManipulation() public {
+        _setupYieldSources();
+
+        // Use smaller swap amount that the pool can handle (pool has ~100e18 liquidity)
+        address attacker = makeAddr("attacker");
+        uint256 swapAmount = 10e18; // Smaller amount that will move price but won't overflow
+        uint256 depositAmount = 100e18;
+
+        MockERC20(Currency.unwrap(currency0)).mint(attacker, swapAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(attacker, swapAmount);
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        // Record price before attack
+        (uint160 priceBefore,,,) = poolManager.getSlot0(key.toId());
+
+        // Attacker manipulates price
+        vm.startPrank(attacker);
+        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
+        swapRouter.swapExactTokensForTokens({
+            amountIn: swapAmount,
+            amountOutMin: 0,
+            zeroForOne: true,
+            poolKey: key,
+            hookData: Constants.ZERO_BYTES,
+            receiver: attacker,
+            deadline: block.timestamp + 100
+        });
+        vm.stopPrank();
+
+        (uint160 priceAfter,,,) = poolManager.getSlot0(key.toId());
+        assertNotEq(priceAfter, priceBefore, "Price should have moved");
+
+        // User adds liquidity WITHOUT slippage protection - this SUCCEEDS (user is vulnerable!)
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Passing 0,0 disables slippage check - tx goes through at manipulated price
+        hook.addReHypothecatedLiquidity(10e18, 0, 0);
+        vm.stopPrank();
+
+        // User got shares but at potentially unfavorable price
+        assertEq(hook.balanceOf(user1), 10e18, "User got shares (but at manipulated price)");
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+                    SLIPPAGE PROTECTION FUZZ TESTS
+    ═══════════════════════════════════════════════════════════════════════════ */
+
+    /**
+     * @notice Fuzz test: add liquidity succeeds when price is within slippage tolerance
+     * @param slippageTolerance The slippage tolerance (bounded to reasonable values)
+     * @param shares The number of shares to mint (bounded to reasonable values)
+     */
+    function testFuzz_addReHypothecatedLiquidity_withinSlippage_succeeds(uint24 slippageTolerance, uint256 shares)
+        public
+    {
+        _setupYieldSources();
+
+        // Bound inputs to reasonable values
+        slippageTolerance = uint24(bound(slippageTolerance, 100, 500000)); // 0.01% to 50%
+        shares = bound(shares, 1e18, 50e18); // 1 to 50 shares
+
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        // Get current price
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Should succeed - price hasn't moved
+        hook.addReHypothecatedLiquidity(shares, sqrtPriceX96, slippageTolerance);
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), shares, "User should have shares");
+    }
+
+    /**
+     * @notice Fuzz test: add liquidity reverts when price exceeds slippage tolerance
+     * @param slippageTolerance The slippage tolerance (bounded to small values)
+     * @param swapAmount The amount to swap to move price (bounded)
+     */
+    function testFuzz_addReHypothecatedLiquidity_exceedsSlippage_reverts(uint24 slippageTolerance, uint256 swapAmount)
+        public
+    {
+        _setupYieldSources();
+
+        // Bound inputs
+        slippageTolerance = uint24(bound(slippageTolerance, 100, 5000)); // 0.01% to 0.5% (tight tolerance)
+        swapAmount = bound(swapAmount, 5e18, 10e18); // Enough to move price beyond tight tolerance
+
+        address attacker = makeAddr("attacker");
+        uint256 depositAmount = 100e18;
+
+        MockERC20(Currency.unwrap(currency0)).mint(attacker, swapAmount);
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        // Record price before attack
+        (uint160 priceBefore,,,) = poolManager.getSlot0(key.toId());
+
+        // Attacker moves price with swap
+        vm.startPrank(attacker);
+        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), swapAmount);
+        swapRouter.swapExactTokensForTokens({
+            amountIn: swapAmount,
+            amountOutMin: 0,
+            zeroForOne: true,
+            poolKey: key,
+            hookData: Constants.ZERO_BYTES,
+            receiver: attacker,
+            deadline: block.timestamp + 100
+        });
+        vm.stopPrank();
+
+        // Verify price moved
+        (uint160 priceAfter,,,) = poolManager.getSlot0(key.toId());
+        if (priceAfter == priceBefore) {
+            // Price didn't move enough, skip this test case
+            return;
+        }
+
+        // User tries to add with slippage protection using old price
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Calculate actual slippage
+        uint256 priceDiff = priceAfter > priceBefore ? priceAfter - priceBefore : priceBefore - priceAfter;
+        uint256 actualSlippage = (priceDiff * LPFeeLibrary.MAX_LP_FEE) / priceBefore;
+
+        // Only expect revert if actual slippage exceeds tolerance
+        if (actualSlippage > slippageTolerance) {
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    IReHypothecation.PriceSlippageExceeded.selector, priceBefore, priceAfter, slippageTolerance
+                )
+            );
+        }
+
+        hook.addReHypothecatedLiquidity(10e18, priceBefore, slippageTolerance);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Fuzz test: remove liquidity succeeds when price is within slippage tolerance
+     * @param slippageTolerance The slippage tolerance (bounded to reasonable values)
+     * @param sharesToRemove The number of shares to remove (bounded)
+     */
+    function testFuzz_removeReHypothecatedLiquidity_withinSlippage_succeeds(
+        uint24 slippageTolerance,
+        uint256 sharesToRemove
+    ) public {
+        _setupYieldSources();
+
+        // Bound inputs
+        slippageTolerance = uint24(bound(slippageTolerance, 100, 500000)); // 0.01% to 50%
+
+        uint256 depositAmount = 100e18;
+        uint256 initialShares = 50e18;
+        sharesToRemove = bound(sharesToRemove, 1e18, initialShares); // 1 to all shares
+
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        // First add liquidity
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+        hook.addReHypothecatedLiquidity(initialShares, 0, 0);
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), initialShares, "User should have initial shares");
+
+        // Get current price
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+
+        // Remove liquidity with slippage protection - should succeed
+        vm.prank(user1);
+        hook.removeReHypothecatedLiquidity(sharesToRemove, sqrtPriceX96, slippageTolerance);
+
+        assertEq(hook.balanceOf(user1), initialShares - sharesToRemove, "User shares should be reduced");
+    }
+
+    /**
+     * @notice Fuzz test: add liquidity with zero expected price skips slippage check
+     * @param shares The number of shares to mint (bounded)
+     */
+    function testFuzz_addReHypothecatedLiquidity_zeroExpectedPrice_skipsCheck(uint256 shares) public {
+        _setupYieldSources();
+
+        shares = bound(shares, 1e18, 50e18);
+
+        uint256 depositAmount = 100e18;
+        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+
+        vm.startPrank(user1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
+
+        // Passing 0 for expected price should skip slippage check
+        // Even with very strict slippage (1), it should succeed
+        hook.addReHypothecatedLiquidity(shares, 0, 1);
+        vm.stopPrank();
+
+        assertEq(hook.balanceOf(user1), shares, "User should have shares");
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════

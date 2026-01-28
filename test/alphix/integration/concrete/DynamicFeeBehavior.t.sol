@@ -86,7 +86,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 1000; // 0.1%
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -120,7 +120,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 10000; // 1% - high enough to allow decrease
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -154,7 +154,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000; // Within bounds
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -188,7 +188,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 1000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -229,7 +229,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 50000; // High starting fee
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -279,10 +279,10 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         DynamicFeeLib.PoolParams memory unthrottledParams = responsiveParams;
         unthrottledParams.baseMaxFeeDelta = 10000; // Allow large fee changes
 
-        (PoolKey memory key1, PoolId id1) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook1, unthrottledParams
         );
-        (PoolKey memory key2, PoolId id2) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook2, unthrottledParams
         );
 
@@ -337,7 +337,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -380,7 +380,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 50000; // High enough to allow both increase and decrease
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -428,7 +428,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -470,7 +470,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -520,7 +520,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         DynamicFeeLib.PoolParams memory throttledParams = responsiveParams;
         throttledParams.baseMaxFeeDelta = 10; // Very low max delta
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, throttledParams
         );
 
@@ -557,7 +557,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
@@ -608,10 +608,10 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory normalKey,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, normalHook, responsiveParams
         );
-        (PoolKey memory aggressiveKey,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee,
             targetRatio,
             18,
@@ -667,10 +667,10 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 50000; // High enough to decrease
 
-        (PoolKey memory normalKey,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, normalHook, responsiveParams
         );
-        (PoolKey memory conservativeKey,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee,
             targetRatio,
             18,
@@ -726,7 +726,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 50000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, asymmetricParams
         );
 
@@ -753,7 +753,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
 
         // Reset with new hook for fair comparison
         Alphix freshHook2 = _deployFreshAlphixStack();
-        (PoolKey memory testKey2,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook2, asymmetricParams
         );
 
@@ -797,7 +797,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         DynamicFeeLib.PoolParams memory highSlopeParams = responsiveParams;
         highSlopeParams.linearSlope = 2e18; // 2x sensitivity
 
-        (PoolKey memory lowKey,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee,
             targetRatio,
             18,
@@ -807,7 +807,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
             lowSlopeHook,
             lowSensitivityParams // Has 0.1e18 slope
         );
-        (PoolKey memory highKey,) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee,
             targetRatio,
             18,
@@ -859,7 +859,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee,
             targetRatio,
             18,
@@ -906,12 +906,12 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 50000; // High fee to make adjustment rate visible
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, responsiveParams
         );
 
-        // Get globalMaxAdjRate from hook
-        uint256 globalMaxAdjRate = freshHook.getGlobalMaxAdjRate();
+        // Get globalMaxAdjRate from hook (not used directly, but validates accessor works)
+        freshHook.getGlobalMaxAdjRate();
 
         vm.warp(block.timestamp + responsiveParams.minPeriod + 1);
 
@@ -949,7 +949,7 @@ contract DynamicFeeBehaviorTest is BaseAlphixTest {
         DynamicFeeLib.PoolParams memory highDeltaParams = responsiveParams;
         highDeltaParams.baseMaxFeeDelta = 100000; // Very high
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, highDeltaParams
         );
 

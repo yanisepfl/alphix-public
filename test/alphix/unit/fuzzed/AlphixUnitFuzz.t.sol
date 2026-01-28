@@ -107,7 +107,7 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         badParams.minFee = minFee;
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector, minFee, badParams.maxFee));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector));
         hook.setPoolParams(badParams);
     }
 
@@ -124,7 +124,7 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         badParams.maxFee = maxFee;
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector, minFee, maxFee));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector));
         hook.setPoolParams(badParams);
     }
 
@@ -139,7 +139,7 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         badParams.maxFee = maxFee;
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector, badParams.minFee, maxFee));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidFeeBounds.selector));
         hook.setPoolParams(badParams);
     }
 
@@ -331,7 +331,7 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         vm.warp(block.timestamp + defaultPoolParams.minPeriod + 1);
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         hook.poke(0);
     }
 
@@ -345,7 +345,7 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         vm.warp(block.timestamp + defaultPoolParams.minPeriod + 1);
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, ratio));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         hook.poke(ratio);
     }
 
@@ -460,7 +460,7 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
         int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
         int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector, ratio));
+        vm.expectRevert(abi.encodeWithSelector(IAlphix.InvalidCurrentRatio.selector));
         freshHook.initializePool(freshKey, INITIAL_FEE, ratio, defaultPoolParams, tickLower, tickUpper);
     }
 

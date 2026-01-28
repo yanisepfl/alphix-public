@@ -96,36 +96,36 @@ contract ReHypothecationUnitTest is Test {
     ═══════════════════════════════════════════════════════════════════════════ */
 
     function test_validateTickRange_lowerEqualsUpper() public {
-        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector, int24(100), int24(100)));
+        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector));
         harness.validateTickRange(100, 100, 60);
     }
 
     function test_validateTickRange_lowerGreaterThanUpper() public {
-        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector, int24(200), int24(100)));
+        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector));
         harness.validateTickRange(200, 100, 60);
     }
 
     function test_validateTickRange_lowerBelowMin() public {
         int24 belowMin = TickMath.MIN_TICK - 60;
-        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector, belowMin, int24(0)));
+        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector));
         harness.validateTickRange(belowMin, 0, 60);
     }
 
     function test_validateTickRange_upperAboveMax() public {
         int24 aboveMax = TickMath.MAX_TICK + 60;
-        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector, int24(0), aboveMax));
+        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector));
         harness.validateTickRange(0, aboveMax, 60);
     }
 
     function test_validateTickRange_lowerMisaligned() public {
         // 55 is not divisible by 60
-        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector, int24(55), int24(120)));
+        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector));
         harness.validateTickRange(55, 120, 60);
     }
 
     function test_validateTickRange_upperMisaligned() public {
         // 125 is not divisible by 60
-        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector, int24(0), int24(125)));
+        vm.expectRevert(abi.encodeWithSelector(ReHypothecationLib.InvalidTickRange.selector));
         harness.validateTickRange(0, 125, 60);
     }
 
@@ -310,6 +310,34 @@ contract ReHypothecationUnitTest is Test {
         uint128 liquidity = ReHypothecationLib.getLiquidityToUse(sqrtPriceX96, tickLower, tickUpper, 1000e18, 1000e18);
         assertGt(liquidity, 0, "Should produce non-zero liquidity");
     }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+                    SECURITY FIX: ZERO SHARES RECEIVED TESTS
+    ═══════════════════════════════════════════════════════════════════════════ */
+
+    function test_depositToYieldSource_revertsOnZeroSharesReceived() public {
+        // Deploy a malicious vault that returns 0 shares
+        ZeroSharesVault maliciousVault = new ZeroSharesVault(IERC20(address(tokenA)));
+
+        // Attempt to deposit - should revert with ZeroSharesReceived
+        vm.expectRevert(ReHypothecationLib.ZeroSharesReceived.selector);
+        harness.depositToYieldSource(address(maliciousVault), Currency.wrap(address(tokenA)), 100e18);
+    }
+
+    function test_depositToYieldSource_protectsAssetsFromMaliciousVault() public {
+        // Deploy a malicious vault that returns 0 shares
+        ZeroSharesVault maliciousVault = new ZeroSharesVault(IERC20(address(tokenA)));
+
+        uint256 balanceBefore = tokenA.balanceOf(address(harness));
+
+        // Attempt to deposit - should revert
+        vm.expectRevert(ReHypothecationLib.ZeroSharesReceived.selector);
+        harness.depositToYieldSource(address(maliciousVault), Currency.wrap(address(tokenA)), 100e18);
+
+        // Balance should be unchanged (assets protected)
+        uint256 balanceAfter = tokenA.balanceOf(address(harness));
+        assertEq(balanceAfter, balanceBefore, "Assets should be protected when vault returns 0 shares");
+    }
 }
 
 /**
@@ -356,3 +384,27 @@ contract NonERC4626Contract {
     // Empty contract - no asset() function
 
     }
+
+/**
+ * @title ZeroSharesVault
+ * @notice A malicious ERC4626 vault that returns 0 shares on deposit
+ * @dev Used to test the ZeroSharesReceived security fix
+ */
+contract ZeroSharesVault {
+    IERC20 public immutable asset_;
+
+    constructor(IERC20 _asset) {
+        asset_ = _asset;
+    }
+
+    function asset() external view returns (address) {
+        return address(asset_);
+    }
+
+    function deposit(uint256 assets, address) external returns (uint256) {
+        // Transfer assets but return 0 shares (malicious behavior)
+        // forge-lint: disable-next-line(erc20-unchecked-transfer)
+        asset_.transferFrom(msg.sender, address(this), assets);
+        return 0; // Malicious: returns 0 shares
+    }
+}

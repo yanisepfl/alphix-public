@@ -179,7 +179,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
             uint256 bobT1Before = MockERC20(Currency.unwrap(testCurrency1)).balanceOf(bob);
 
             vm.prank(bob);
-            Alphix(address(testHook)).removeReHypothecatedLiquidity(bobShares);
+            Alphix(address(testHook)).removeReHypothecatedLiquidity(bobShares, 0, 0);
 
             uint256 bobT0After = MockERC20(Currency.unwrap(testCurrency0)).balanceOf(bob);
             uint256 bobT1After = MockERC20(Currency.unwrap(testCurrency1)).balanceOf(bob);
@@ -196,7 +196,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
         }
 
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
 
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
         assertEq(Alphix(address(testHook)).totalSupply(), 0, "Total supply zero");
@@ -318,11 +318,11 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
         // PHASE 5: Both withdraw
         // ══════════════════════════════════════════════════════════════════════
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice burned");
 
         vm.prank(bob);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(bobShares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(bobShares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(bob), 0, "Bob burned");
 
         assertEq(Alphix(address(testHook)).totalSupply(), 0, "Total supply zero");
@@ -376,7 +376,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
 
         // Remove liquidity
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
@@ -406,7 +406,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
 
         // Remove liquidity
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
@@ -471,7 +471,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
 
         // Remove liquidity - should work regardless of decimals
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
@@ -533,7 +533,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
 
         // Remove liquidity
         vm.prank(alice);
-        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares);
+        Alphix(address(testHook)).removeReHypothecatedLiquidity(shares, 0, 0);
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0);
     }
 
@@ -690,7 +690,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
         vm.startPrank(user);
         MockERC20(Currency.unwrap(testCurrency0)).approve(address(testHook), amount0);
         MockERC20(Currency.unwrap(testCurrency1)).approve(address(testHook), amount1);
-        Alphix(address(testHook)).addReHypothecatedLiquidity(shares);
+        Alphix(address(testHook)).addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
     }
 

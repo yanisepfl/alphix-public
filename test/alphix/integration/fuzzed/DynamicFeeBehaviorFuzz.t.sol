@@ -57,7 +57,7 @@ contract DynamicFeeBehaviorFuzzTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, fuzzParams
         );
 
@@ -92,7 +92,7 @@ contract DynamicFeeBehaviorFuzzTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, fuzzParams
         );
 
@@ -105,8 +105,7 @@ contract DynamicFeeBehaviorFuzzTest is BaseAlphixTest {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == FEE_UPDATED_TOPIC) {
-                (,, uint256 oldTargetRatio,, uint256 newTargetRatio) =
-                    abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
+                (,,,, uint256 newTargetRatio) = abi.decode(logs[i].data, (uint24, uint24, uint256, uint256, uint256));
 
                 // Key invariant: target ratio is always within bounds
                 assertGt(newTargetRatio, 0, "Target ratio should be positive");
@@ -128,7 +127,7 @@ contract DynamicFeeBehaviorFuzzTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 50000; // High initial to allow decrease
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, fuzzParams
         );
 
@@ -175,7 +174,7 @@ contract DynamicFeeBehaviorFuzzTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 5000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, fuzzParams
         );
 
@@ -231,7 +230,7 @@ contract DynamicFeeBehaviorFuzzTest is BaseAlphixTest {
         uint256 targetRatio = 1e18;
         uint24 initialFee = 50000;
 
-        (PoolKey memory testKey, PoolId testPoolId) = _initPoolWithHookAndParams(
+        _initPoolWithHookAndParams(
             initialFee, targetRatio, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook, fuzzParams
         );
 

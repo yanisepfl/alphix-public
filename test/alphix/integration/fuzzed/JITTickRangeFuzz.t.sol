@@ -388,7 +388,7 @@ contract JITTickRangeFuzzTest is BaseAlphixTest {
         vm.startPrank(user);
         MockERC20(Currency.unwrap(_currency0)).approve(address(_hook), amount0 + 1);
         MockERC20(Currency.unwrap(_currency1)).approve(address(_hook), amount1 + 1);
-        _hook.addReHypothecatedLiquidity(shares);
+        _hook.addReHypothecatedLiquidity(shares, 0, 0);
         vm.stopPrank();
     }
 }

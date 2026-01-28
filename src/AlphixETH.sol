@@ -83,9 +83,12 @@ contract AlphixETH is Alphix {
 
     /**
      * @dev Validates pool initialization conditions for ETH pools.
-     *      Prevents re-initialization and requires native ETH as currency0.
+     *      Only owner can initialize, prevents re-initialization, and requires native ETH as currency0.
      */
-    function _beforeInitialize(address, PoolKey calldata key, uint160) internal view override returns (bytes4) {
+    function _beforeInitialize(address sender, PoolKey calldata key, uint160) internal view override returns (bytes4) {
+        // Only owner can initialize the pool at PoolManager level
+        if (sender != owner()) revert OwnableUnauthorizedAccount(sender);
+
         // Prevent re-initialization if pool already configured
         if (address(_poolKey.hooks) != address(0)) revert PoolAlreadyInitialized();
 
@@ -145,13 +148,13 @@ contract AlphixETH is Alphix {
             // easily check interface support without ERC165
             if (newYieldSource != address(0)) {
                 if (newYieldSource.code.length == 0) {
-                    revert InvalidYieldSource(newYieldSource);
+                    revert InvalidYieldSource();
                 }
             }
         } else {
             // For non-ETH currencies, use standard validation
             if (!ReHypothecationLib.isValidYieldSource(newYieldSource, currency)) {
-                revert InvalidYieldSource(newYieldSource);
+                revert InvalidYieldSource();
             }
         }
 
@@ -186,7 +189,7 @@ contract AlphixETH is Alphix {
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH deposits for currency0.
      */
-    function addReHypothecatedLiquidity(uint256 shares)
+    function addReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
         payable
         override
@@ -195,6 +198,9 @@ contract AlphixETH is Alphix {
         returns (BalanceDelta delta)
     {
         if (shares == 0) revert ZeroShares();
+
+        // Check slippage before any state changes
+        _checkPriceSlippage(expectedSqrtPriceX96, maxPriceSlippage);
 
         // Calculate amounts with rounding up (protocol-favorable for deposits)
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForDeposit(shares);
@@ -233,7 +239,7 @@ contract AlphixETH is Alphix {
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH withdrawals for currency0.
      */
-    function removeReHypothecatedLiquidity(uint256 shares)
+    function removeReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
         override
         whenNotPaused
@@ -243,7 +249,10 @@ contract AlphixETH is Alphix {
         if (shares == 0) revert ZeroShares();
 
         uint256 userBalance = balanceOf(msg.sender);
-        if (userBalance < shares) revert InsufficientShares(shares, userBalance);
+        if (userBalance < shares) revert InsufficientShares();
+
+        // Check slippage before any state changes
+        _checkPriceSlippage(expectedSqrtPriceX96, maxPriceSlippage);
 
         // Calculate amounts with rounding down (protocol-favorable for withdrawals)
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForWithdrawal(shares);
@@ -275,7 +284,7 @@ contract AlphixETH is Alphix {
         if (amount == 0) return;
 
         YieldSourceState storage state = _yieldSourceState[currency];
-        if (state.yieldSource == address(0)) revert YieldSourceNotConfigured(currency);
+        if (state.yieldSource == address(0)) revert YieldSourceNotConfigured();
 
         // Deposit ETH directly to yield source
         uint256 sharesReceived = IAlphix4626WrapperWeth(state.yieldSource).depositETH{value: amount}(address(this));
@@ -292,7 +301,7 @@ contract AlphixETH is Alphix {
         if (amount == 0) return;
 
         YieldSourceState storage state = _yieldSourceState[currency];
-        if (state.yieldSource == address(0)) revert YieldSourceNotConfigured(currency);
+        if (state.yieldSource == address(0)) revert YieldSourceNotConfigured();
 
         // Withdraw ETH directly from yield source to recipient
         uint256 sharesRedeemed = IAlphix4626WrapperWeth(state.yieldSource).withdrawETH(amount, recipient, address(this));
@@ -325,11 +334,9 @@ contract AlphixETH is Alphix {
             poolManager.take(currency, address(this), amount);
 
             YieldSourceState storage state = _yieldSourceState[currency];
-            if (state.yieldSource != address(0)) {
-                uint256 sharesReceived =
-                    IAlphix4626WrapperWeth(state.yieldSource).depositETH{value: amount}(address(this));
-                state.sharesOwned += sharesReceived;
-            }
+            if (state.yieldSource == address(0)) revert YieldSourceNotConfigured();
+            uint256 sharesReceived = IAlphix4626WrapperWeth(state.yieldSource).depositETH{value: amount}(address(this));
+            state.sharesOwned += sharesReceived;
         } else if (currencyDelta < 0) {
             // Hook owes ETH - withdraw from yield source and settle
             // Safe: currencyDelta < 0
@@ -337,13 +344,12 @@ contract AlphixETH is Alphix {
             uint256 amount = uint256(-currencyDelta);
 
             YieldSourceState storage state = _yieldSourceState[currency];
-            if (state.yieldSource != address(0)) {
-                uint256 sharesRedeemed =
-                    IAlphix4626WrapperWeth(state.yieldSource).withdrawETH(amount, address(this), address(this));
-                // Safe: subtraction only executes when sharesOwned > sharesRedeemed (explicit guard)
-                unchecked {
-                    state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
-                }
+            if (state.yieldSource == address(0)) revert YieldSourceNotConfigured();
+            uint256 sharesRedeemed =
+                IAlphix4626WrapperWeth(state.yieldSource).withdrawETH(amount, address(this), address(this));
+            // Safe: subtraction only executes when sharesOwned > sharesRedeemed (explicit guard)
+            unchecked {
+                state.sharesOwned = state.sharesOwned > sharesRedeemed ? state.sharesOwned - sharesRedeemed : 0;
             }
 
             poolManager.settle{value: amount}();

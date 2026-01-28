@@ -71,12 +71,12 @@ interface IReHypothecation is IERC20 {
     /**
      * @dev Thrown when attempting to set an invalid yield source (not ERC-4626 compliant).
      */
-    error InvalidYieldSource(address yieldSource);
+    error InvalidYieldSource();
 
     /**
      * @dev Thrown when attempting to interact without a yield source configured.
      */
-    error YieldSourceNotConfigured(Currency currency);
+    error YieldSourceNotConfigured();
 
     /**
      * @dev Thrown when attempting operations with zero shares.
@@ -91,7 +91,7 @@ interface IReHypothecation is IERC20 {
     /**
      * @dev Thrown when tick range is invalid.
      */
-    error InvalidTickRange(int24 tickLower, int24 tickUpper);
+    error InvalidTickRange();
 
     /**
      * @dev Thrown when msg.value doesn't match expected amount for native ETH.
@@ -106,12 +106,20 @@ interface IReHypothecation is IERC20 {
     /**
      * @dev Thrown when user has insufficient shares.
      */
-    error InsufficientShares(uint256 requested, uint256 available);
+    error InsufficientShares();
 
     /**
      * @dev Thrown when attempting to use ETH in the ERC20-only variant.
      */
     error UnsupportedNativeCurrency();
+
+    /**
+     * @dev Thrown when price moved beyond acceptable slippage tolerance.
+     * @param expectedPrice The price the user expected.
+     * @param actualPrice The actual price at execution time.
+     * @param maxSlippage The maximum slippage tolerance (same scale as LP fee, 1000000 = 100%).
+     */
+    error PriceSlippageExceeded(uint160 expectedPrice, uint160 actualPrice, uint24 maxSlippage);
 
     /* YIELD MANAGER FUNCTIONS (gated by AccessManager YIELD_MANAGER_ROLE) */
 
@@ -186,20 +194,29 @@ interface IReHypothecation is IERC20 {
     /* LIQUIDITY OPERATIONS (permissionless, but pool must be active) */
 
     /**
-     * @notice Add rehypothecated liquidity.
+     * @notice Add rehypothecated liquidity with slippage protection.
      * @dev Deposits assets into yield sources and mints shares to sender.
      *      Pool must be active (uses existing poolActivated modifier).
      * @param shares Number of shares to mint.
+     * @param expectedSqrtPriceX96 Expected price (pass 0 to skip slippage check).
+     * @param maxPriceSlippage Max allowed price deviation, same scale as LP fee (1000000 = 100%).
      * @return delta Balance delta representing assets deposited.
      */
-    function addReHypothecatedLiquidity(uint256 shares) external payable returns (BalanceDelta delta);
+    function addReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
+        external
+        payable
+        returns (BalanceDelta delta);
 
     /**
-     * @notice Remove rehypothecated liquidity.
+     * @notice Remove rehypothecated liquidity with slippage protection.
      * @dev Burns shares and withdraws assets from yield sources to sender.
      *      Pool must be active (uses existing poolActivated modifier).
      * @param shares Number of shares to burn.
+     * @param expectedSqrtPriceX96 Expected price (pass 0 to skip slippage check).
+     * @param maxPriceSlippage Max allowed price deviation, same scale as LP fee (1000000 = 100%).
      * @return delta Balance delta representing assets withdrawn.
      */
-    function removeReHypothecatedLiquidity(uint256 shares) external returns (BalanceDelta delta);
+    function removeReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
+        external
+        returns (BalanceDelta delta);
 }

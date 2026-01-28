@@ -334,6 +334,7 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
         Currency tokenCurr = deployEthPoolToken(tokenDecimals);
         k = createEthPoolKey(tokenCurr, spacing, _hook);
         id = k.toId();
+        vm.prank(_hook.owner());
         poolManager.initialize(k, initialPrice);
     }
 
