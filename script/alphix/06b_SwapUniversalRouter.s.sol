@@ -7,8 +7,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
-import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {Actions} from "v4-periphery/src/libraries/Actions.sol";
+import {IV4Router} from "v4-periphery/src/interfaces/IV4Router.sol";
 import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
 import {Alphix} from "../../src/Alphix.sol";
 
@@ -46,9 +46,6 @@ contract SwapUniversalRouterScript is Script {
     using SafeERC20 for IERC20;
 
     IPermit2 constant PERMIT2 = IPermit2(0x000000000022D473030F116dDEE9F6B43aC78BA3);
-
-    uint160 constant MIN_PRICE_LIMIT = TickMath.MIN_SQRT_PRICE + 1;
-    uint160 constant MAX_PRICE_LIMIT = TickMath.MAX_SQRT_PRICE - 1;
 
     struct SwapConfig {
         string network;
@@ -152,27 +149,30 @@ contract SwapUniversalRouterScript is Script {
         Currency currencyIn = cfg.zeroForOne ? poolKey.currency0 : poolKey.currency1;
         Currency currencyOut = cfg.zeroForOne ? poolKey.currency1 : poolKey.currency0;
 
-        // Build V4 swap actions
+        // Build V4 swap actions: swap, settle input, take output
         bytes memory v4Actions =
             abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
 
         bytes[] memory v4Params = new bytes[](3);
 
-        // SWAP_EXACT_IN_SINGLE params
+        // SWAP_EXACT_IN_SINGLE params: ExactInputSingleParams struct
+        // Must encode as struct for correct ABI encoding with offset pointer
         // forge-lint: disable-next-line(unsafe-typecast)
         v4Params[0] = abi.encode(
-            poolKey,
-            cfg.zeroForOne,
-            uint128(cfg.amountIn),
-            uint128(cfg.minOutput),
-            cfg.zeroForOne ? MIN_PRICE_LIMIT : MAX_PRICE_LIMIT,
-            "" // hookData
+            IV4Router.ExactInputSingleParams({
+                poolKey: poolKey,
+                zeroForOne: cfg.zeroForOne,
+                amountIn: uint128(cfg.amountIn),
+                amountOutMinimum: uint128(cfg.minOutput),
+                hookData: bytes("")
+            })
         );
 
-        // SETTLE_ALL params
+        // SETTLE_ALL params: (Currency, maxAmount)
         v4Params[1] = abi.encode(currencyIn, cfg.amountIn);
 
-        // TAKE_ALL params
+        // TAKE_ALL params: (Currency, minAmount)
+        // For native ETH output, TAKE_ALL transfers ETH directly to msgSender (the original caller)
         v4Params[2] = abi.encode(currencyOut, cfg.minOutput);
 
         // Encode for Universal Router

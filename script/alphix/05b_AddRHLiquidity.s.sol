@@ -26,33 +26,36 @@ import {AlphixETH} from "../../src/AlphixETH.sol";
  * 5. JIT liquidity uses these funds during swaps
  * 6. Yield from vaults accrues to LP holders
  *
- * Slippage Protection:
- * The script supports on-chain slippage protection to guard against sandwich attacks.
- * If the pool price moves beyond your tolerance between submitting and executing,
- * the transaction will revert.
- *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
  * - ALPHIX_HOOK_{NETWORK}: Alphix hook address
  * - RH_SHARES_{NETWORK}: Number of shares to mint (in wei, 18 decimals)
- * - RH_AMOUNT0_MAX_{NETWORK}: Maximum amount of token0 willing to spend (safety limit)
- * - RH_AMOUNT1_MAX_{NETWORK}: Maximum amount of token1 willing to spend (safety limit)
  *
  * Optional Slippage Protection Variables:
  * - RH_EXPECTED_PRICE_{NETWORK}: Expected sqrtPriceX96 (set to 0 or omit to use current price)
- * - RH_MAX_SLIPPAGE_{NETWORK}: Max price slippage tolerance (same scale as LP fee: 1000000 = 100%, 10000 = 1%)
+ * - RH_MAX_SLIPPAGE_{NETWORK}: Max price slippage tolerance (1000000 = 100%, 10000 = 1%)
  *                              Default: 10000 (1%) if not set. Set to 0 to disable slippage check.
  *
  * Note: Token amounts are calculated automatically using previewAddReHypothecatedLiquidity()
+ *
+ * Yield Accrual Buffer:
+ * - Between simulation and broadcast, yield-bearing tokens (e.g., Aave aTokens) accrue yield
+ * - This causes the contract to calculate slightly higher required amounts at execution time
+ * - To handle this, we preview for the full shares but request slightly fewer shares (0.0002% less)
+ * - This creates a natural buffer that ensures the previewed amounts are always sufficient
  */
 contract AddRHLiquidityScript is Script {
     using StateLibrary for IPoolManager;
 
+    /// @notice Yield accrual buffer: reduce requested shares by this factor to account for
+    ///         yield accruing between simulation and broadcast (5 * 2.67e-7% ≈ 1.335e-6%)
+    ///         As a ratio: 1.335e-8. Using 1e12 precision: 1e12 - 13350 = 999999986650
+    uint256 private constant YIELD_BUFFER_FACTOR = 999999986650;
+    uint256 private constant YIELD_BUFFER_PRECISION = 1e12;
+
     struct Config {
         address hookAddr;
         uint256 shares;
-        uint256 amount0Max;
-        uint256 amount1Max;
         uint160 expectedPrice;
         uint24 maxSlippage;
     }
@@ -85,25 +88,26 @@ contract AddRHLiquidityScript is Script {
             console.log("Using current pool price for slippage check");
         }
 
-        // Preview required amounts
+        // Preview required amounts for the requested shares
         (uint256 amount0, uint256 amount1) = alphix.previewAddReHypothecatedLiquidity(cfg.shares);
 
-        _logAmounts(cfg, amount0, amount1, currentPrice, isEthPool);
+        // Apply yield buffer: request slightly fewer shares to account for yield accrual
+        // between simulation and broadcast. The previewed amounts will cover this reduced share amount
+        // even after yield accrues.
+        uint256 adjustedShares = (cfg.shares * YIELD_BUFFER_FACTOR) / YIELD_BUFFER_PRECISION;
 
-        // Safety check
-        require(amount0 <= cfg.amount0Max, "Amount0 exceeds RH_AMOUNT0_MAX limit");
-        require(amount1 <= cfg.amount1Max, "Amount1 exceeds RH_AMOUNT1_MAX limit");
+        _logAmounts(cfg, adjustedShares, amount0, amount1, currentPrice, isEthPool);
 
         vm.startBroadcast();
 
-        // Approve and add liquidity
-        _approveAndAddLiquidity(alphix, poolKey, cfg, amount0, amount1, isEthPool);
+        // Approve and add liquidity (use previewed amounts, but request adjusted shares)
+        _approveAndAddLiquidity(alphix, poolKey, cfg, adjustedShares, amount0, amount1, isEthPool);
 
         vm.stopBroadcast();
 
         // Verify
         uint256 userShares = alphix.balanceOf(tx.origin);
-        _logSuccess(cfg.shares, userShares);
+        _logSuccess(adjustedShares, userShares);
     }
 
     function _loadConfig(string memory network) internal view returns (Config memory cfg) {
@@ -116,14 +120,6 @@ contract AddRHLiquidityScript is Script {
         envVar = string.concat("RH_SHARES_", network);
         cfg.shares = vm.envUint(envVar);
         require(cfg.shares > 0, "RH_SHARES must be > 0");
-
-        envVar = string.concat("RH_AMOUNT0_MAX_", network);
-        cfg.amount0Max = vm.envUint(envVar);
-        require(cfg.amount0Max > 0, string.concat(envVar, " not set"));
-
-        envVar = string.concat("RH_AMOUNT1_MAX_", network);
-        cfg.amount1Max = vm.envUint(envVar);
-        require(cfg.amount1Max > 0, string.concat(envVar, " not set"));
 
         envVar = string.concat("RH_EXPECTED_PRICE_", network);
         cfg.expectedPrice = uint160(vm.envOr(envVar, uint256(0)));
@@ -149,17 +145,20 @@ contract AddRHLiquidityScript is Script {
         return true;
     }
 
-    function _logAmounts(Config memory cfg, uint256 amount0, uint256 amount1, uint160 currentPrice, bool isEthPool)
-        internal
-        pure
-    {
-        console.log("Shares to mint:", cfg.shares);
-        console.log("Required amounts:");
+    function _logAmounts(
+        Config memory cfg,
+        uint256 adjustedShares,
+        uint256 amount0,
+        uint256 amount1,
+        uint160 currentPrice,
+        bool isEthPool
+    ) internal pure {
+        console.log("Shares requested:", cfg.shares);
+        console.log("Shares to mint (after yield buffer):", adjustedShares);
+        console.log("Yield buffer reduction:", cfg.shares - adjustedShares, "shares");
+        console.log("Required amounts (from preview):");
         console.log("  - Amount0:", amount0, "wei", isEthPool ? "(ETH)" : "");
         console.log("  - Amount1:", amount1, "wei");
-        console.log("Max limits:");
-        console.log("  - Amount0 max:", cfg.amount0Max, "wei");
-        console.log("  - Amount1 max:", cfg.amount1Max, "wei");
         console.log("");
         console.log("Slippage Protection:");
         console.log("  - Current price (sqrtPriceX96):", currentPrice);
@@ -174,31 +173,35 @@ contract AddRHLiquidityScript is Script {
         Alphix alphix,
         PoolKey memory poolKey,
         Config memory cfg,
+        uint256 adjustedShares,
         uint256 amount0,
         uint256 amount1,
         bool isEthPool
     ) internal {
         console.log("Step 1: Approving tokens...");
+
         if (!isEthPool && amount0 > 0) {
             IERC20 token0 = IERC20(Currency.unwrap(poolKey.currency0));
             token0.approve(cfg.hookAddr, 0);
-            token0.approve(cfg.hookAddr, amount0 + 1);
-            console.log("  - Approved token0");
+            token0.approve(cfg.hookAddr, amount0);
+            console.log("  - Approved token0:", amount0, "wei");
         }
         if (amount1 > 0) {
             IERC20 token1 = IERC20(Currency.unwrap(poolKey.currency1));
             token1.approve(cfg.hookAddr, 0);
-            token1.approve(cfg.hookAddr, amount1 + 1);
-            console.log("  - Approved token1");
+            token1.approve(cfg.hookAddr, amount1);
+            console.log("  - Approved token1:", amount1, "wei");
         }
 
         console.log("Step 2: Adding rehypothecated liquidity...");
         if (isEthPool) {
+            console.log("  - Sending ETH:", amount0, "wei");
+            console.log("  - Requesting shares:", adjustedShares);
             AlphixETH(payable(cfg.hookAddr)).addReHypothecatedLiquidity{value: amount0}(
-                cfg.shares, cfg.expectedPrice, cfg.maxSlippage
+                adjustedShares, cfg.expectedPrice, cfg.maxSlippage
             );
         } else {
-            alphix.addReHypothecatedLiquidity(cfg.shares, cfg.expectedPrice, cfg.maxSlippage);
+            alphix.addReHypothecatedLiquidity(adjustedShares, cfg.expectedPrice, cfg.maxSlippage);
         }
         console.log("  - Done");
     }

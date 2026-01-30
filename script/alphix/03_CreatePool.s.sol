@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
@@ -74,6 +75,7 @@ contract CreatePoolScript is Script {
     struct Config {
         string network;
         address positionManagerAddr;
+        address poolManagerAddr;
         address hookAddr;
         address token0;
         address token1;
@@ -122,6 +124,10 @@ contract CreatePoolScript is Script {
         envVar = string.concat("POSITION_MANAGER_", cfg.network);
         cfg.positionManagerAddr = vm.envAddress(envVar);
         require(cfg.positionManagerAddr != address(0), string.concat(envVar, " not set"));
+
+        envVar = string.concat("POOL_MANAGER_", cfg.network);
+        cfg.poolManagerAddr = vm.envAddress(envVar);
+        require(cfg.poolManagerAddr != address(0), string.concat(envVar, " not set"));
 
         envVar = string.concat("ALPHIX_HOOK_", cfg.network);
         cfg.hookAddr = vm.envAddress(envVar);
@@ -255,6 +261,7 @@ contract CreatePoolScript is Script {
         DynamicFeeLib.PoolParams memory poolParams = _defaultPoolParams();
 
         IPositionManager posm = IPositionManager(cfg.positionManagerAddr);
+        IPoolManager poolManager = IPoolManager(cfg.poolManagerAddr);
         Alphix alphix = Alphix(cfg.hookAddr);
 
         // Check and warn about JIT alignment
@@ -266,8 +273,11 @@ contract CreatePoolScript is Script {
         _approveTokens(cfg, liq.isEthPool);
 
         // Step 1: Initialize Uniswap pool
+        // NOTE: We call poolManager.initialize() directly (not posm.initializePool())
+        // because the Alphix hook's beforeInitialize checks that sender == owner().
+        // Going through PositionManager would make sender = PositionManager, which fails.
         console.log("Step 1: Initializing Uniswap V4 pool...");
-        posm.initializePool(poolKey, cfg.sqrtPrice);
+        poolManager.initialize(poolKey, cfg.sqrtPrice);
 
         // Step 2: Initialize Alphix (with JIT tick range - immutable after init)
         console.log("Step 2: Initializing Alphix dynamic fee system...");
@@ -275,7 +285,12 @@ contract CreatePoolScript is Script {
         console.logInt(int256(cfg.jitTickLower));
         console.log("  - JIT Tick Upper:");
         console.logInt(int256(cfg.jitTickUpper));
-        alphix.initializePool(poolKey, cfg.initialFee, cfg.targetRatio, poolParams, cfg.jitTickLower, cfg.jitTickUpper);
+        {
+            // Scope to avoid stack too deep
+            int24 jitLower = cfg.jitTickLower;
+            int24 jitUpper = cfg.jitTickUpper;
+            alphix.initializePool(poolKey, cfg.initialFee, cfg.targetRatio, poolParams, jitLower, jitUpper);
+        }
 
         // Step 3: Add liquidity
         console.log("Step 3: Adding initial liquidity...");
@@ -410,14 +425,14 @@ contract CreatePoolScript is Script {
         return DynamicFeeLib.PoolParams({
             minFee: 1, // 0.0001%
             maxFee: 1001, // 0.1001%
-            baseMaxFeeDelta: 10,
-            lookbackPeriod: 30,
-            minPeriod: 172_800, // 2 days
-            ratioTolerance: 5e15,
-            linearSlope: 5e17,
-            maxCurrentRatio: 1e21,
-            upperSideFactor: 1e18,
-            lowerSideFactor: 2e18
+            baseMaxFeeDelta: 10, // 0.001%
+            lookbackPeriod: 30, // 30 days
+            minPeriod: 86_400, // 2 days
+            ratioTolerance: 5e15, // 0.5%
+            linearSlope: 5e17, // 0.5x
+            maxCurrentRatio: 1e21, // 1000x
+            upperSideFactor: 1e18, // 1.0x
+            lowerSideFactor: 2e18 // 2.0x
         });
     }
 
