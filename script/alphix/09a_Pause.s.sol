@@ -174,9 +174,8 @@ contract PauseScript is Script {
      */
     function _testAddRHLiquidityReverts(Alphix alphix) internal view returns (bool) {
         // Use staticcall to test without modifying state
-        (bool success,) = address(alphix).staticcall(
-            abi.encodeWithSelector(alphix.addReHypothecatedLiquidity.selector, 1e18, 0, 0)
-        );
+        (bool success,) =
+            address(alphix).staticcall(abi.encodeWithSelector(alphix.addReHypothecatedLiquidity.selector, 1e18, 0, 0));
         return !success; // Should fail (revert) when paused
     }
 
@@ -186,9 +185,8 @@ contract PauseScript is Script {
      */
     function _testRemoveRHLiquidityReverts(Alphix alphix) internal view returns (bool) {
         // Use staticcall to test without modifying state
-        (bool success,) = address(alphix).staticcall(
-            abi.encodeWithSelector(alphix.removeReHypothecatedLiquidity.selector, 1e18, 0, 0)
-        );
+        (bool success,) = address(alphix)
+            .staticcall(abi.encodeWithSelector(alphix.removeReHypothecatedLiquidity.selector, 1e18, 0, 0));
         return !success; // Should fail (revert) when paused
     }
 }
