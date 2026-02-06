@@ -125,12 +125,13 @@ contract SlippageProtectionFuzzTest is BaseAlphixTest {
         // Get new price
         (uint160 newPrice,,,) = poolManager.getSlot0(key.toId());
 
-        // Calculate actual slippage
+        // Calculate slippage using the same formula as the contract
+        // Contract uses: priceDiff * MAX_LP_FEE > expectedPrice * maxSlippage
         uint256 priceDiff = newPrice > observedPrice ? newPrice - observedPrice : observedPrice - newPrice;
-        uint256 actualSlippage = (priceDiff * LPFeeLibrary.MAX_LP_FEE) / observedPrice;
+        bool exceedsSlippage = priceDiff * LPFeeLibrary.MAX_LP_FEE > uint256(observedPrice) * slippageTolerance;
 
         // Either succeeds or reverts based on slippage
-        if (actualSlippage > slippageTolerance) {
+        if (exceedsSlippage) {
             vm.prank(alice);
             vm.expectRevert(
                 abi.encodeWithSelector(
@@ -249,12 +250,13 @@ contract SlippageProtectionFuzzTest is BaseAlphixTest {
         // Get new price
         (uint160 newPrice,,,) = poolManager.getSlot0(key.toId());
 
-        // Calculate actual slippage
+        // Calculate slippage using the same formula as the contract
+        // Contract uses: priceDiff * MAX_LP_FEE > expectedPrice * maxSlippage
         uint256 priceDiff = newPrice > observedPrice ? newPrice - observedPrice : observedPrice - newPrice;
-        uint256 actualSlippage = (priceDiff * LPFeeLibrary.MAX_LP_FEE) / observedPrice;
+        bool exceedsSlippage = priceDiff * LPFeeLibrary.MAX_LP_FEE > uint256(observedPrice) * slippageTolerance;
 
         // Either succeeds or reverts based on slippage
-        if (actualSlippage > slippageTolerance) {
+        if (exceedsSlippage) {
             vm.prank(alice);
             vm.expectRevert(
                 abi.encodeWithSelector(
@@ -354,12 +356,13 @@ contract SlippageProtectionFuzzTest is BaseAlphixTest {
 
         (uint160 newPrice,,,) = poolManager.getSlot0(key.toId());
 
-        // Calculate actual slippage (absolute difference)
+        // Calculate slippage using the same formula as the contract
+        // Contract uses: priceDiff * MAX_LP_FEE > expectedPrice * maxSlippage
         uint256 priceDiff = newPrice > observedPrice ? newPrice - observedPrice : observedPrice - newPrice;
-        uint256 actualSlippage = (priceDiff * LPFeeLibrary.MAX_LP_FEE) / observedPrice;
+        bool exceedsSlippage = priceDiff * LPFeeLibrary.MAX_LP_FEE > uint256(observedPrice) * slippageTolerance;
 
         // Verify behavior matches expectation
-        if (actualSlippage > slippageTolerance) {
+        if (exceedsSlippage) {
             vm.prank(alice);
             vm.expectRevert();
             hook.addReHypothecatedLiquidity(shares, observedPrice, slippageTolerance);
