@@ -27,7 +27,7 @@ import {IPSM3} from "../../../src/wrappers/sky/interfaces/IPSM3.sol";
  *    export SKY_REFERRAL_CODE=0              # PSM referral code (optional)
  *
  * 3. Run deployment:
- *    forge script script/sky/DeployAlphix4626WrapperSky.s.sol:DeployAlphix4626WrapperSky \
+ *    forge script script/wrappers/sky/DeployAlphix4626WrapperSky.s.sol:DeployAlphix4626WrapperSky \
  *      --rpc-url $RPC_URL \
  *      --broadcast \
  *      --verify
@@ -95,7 +95,7 @@ contract DeployAlphix4626WrapperSky is Script {
         // Approve seed liquidity before deployment
         // The constructor will transferFrom the deployer
         // Note: +1 because the approve tx itself consumes a nonce
-        IERC20(usds).approve(_computeCreateAddress(deployer, vm.getNonce(deployer) + 1), seedLiquidity);
+        IERC20(usds).approve(vm.computeCreateAddress(deployer, vm.getNonce(deployer) + 1), seedLiquidity);
 
         // Deploy wrapper
         wrapper = new Alphix4626WrapperSky(
@@ -127,16 +127,21 @@ contract DeployAlphix4626WrapperSky is Script {
         yieldTreasury = vm.envOr("YIELD_TREASURY", address(0));
         shareName = vm.envOr("SKY_SHARE_NAME", string("Alphix sUSDS Vault"));
         shareSymbol = vm.envOr("SKY_SHARE_SYMBOL", string("alphsUSDS"));
-        initialFee = uint24(vm.envOr("INITIAL_FEE", uint256(100_000))); // Default 10%
         seedLiquidity = vm.envOr("SKY_SEED_LIQUIDITY", uint256(1 ether)); // Default 1 USDS
         referralCode = vm.envOr("SKY_REFERRAL_CODE", uint256(0));
+
+        // Read fee as uint256 first; validated and cast here to avoid silent truncation
+        uint256 rawFee = vm.envOr("INITIAL_FEE", uint256(100_000)); // Default 10%
+        require(rawFee <= 1_000_000, "INITIAL_FEE too high (max 1_000_000)");
+        initialFee = uint24(rawFee);
     }
 
     function _validateConfig() internal view {
         require(psm != address(0), "SKY_PSM_ADDRESS not set");
         require(yieldTreasury != address(0), "YIELD_TREASURY not set");
         require(seedLiquidity > 0, "SKY_SEED_LIQUIDITY must be > 0");
-        require(initialFee <= 1_000_000, "INITIAL_FEE too high (max 1_000_000)");
+        require(bytes(shareName).length > 0, "SKY_SHARE_NAME must not be empty");
+        require(bytes(shareSymbol).length > 0, "SKY_SHARE_SYMBOL must not be empty");
     }
 
     function _verifyDeployment(Alphix4626WrapperSky wrapper, address deployer) internal view {
@@ -145,26 +150,5 @@ contract DeployAlphix4626WrapperSky is Script {
         require(wrapper.getFee() == initialFee, "Fee mismatch");
         require(wrapper.totalSupply() == seedLiquidity, "Seed liquidity mismatch");
         console.log("Deployment verification passed!");
-    }
-
-    /* HELPERS */
-
-    /// @notice Compute CREATE address for approval before deployment
-    function _computeCreateAddress(address deployer, uint64 nonce) internal pure returns (address) {
-        bytes memory data;
-        if (nonce == 0x00) {
-            data = abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, bytes1(0x80));
-        } else if (nonce <= 0x7f) {
-            data = abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, uint8(nonce));
-        } else if (nonce <= 0xff) {
-            data = abi.encodePacked(bytes1(0xd7), bytes1(0x94), deployer, bytes1(0x81), uint8(nonce));
-        } else if (nonce <= 0xffff) {
-            data = abi.encodePacked(bytes1(0xd8), bytes1(0x94), deployer, bytes1(0x82), uint16(nonce));
-        } else if (nonce <= 0xffffff) {
-            data = abi.encodePacked(bytes1(0xd9), bytes1(0x94), deployer, bytes1(0x83), uint24(nonce));
-        } else {
-            data = abi.encodePacked(bytes1(0xda), bytes1(0x94), deployer, bytes1(0x84), uint32(nonce));
-        }
-        return address(uint160(uint256(keccak256(data))));
     }
 }

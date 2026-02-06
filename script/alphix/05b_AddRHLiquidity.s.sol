@@ -41,7 +41,7 @@ import {AlphixETH} from "../../src/AlphixETH.sol";
  * Yield Accrual Buffer:
  * - Between simulation and broadcast, yield-bearing tokens (e.g., Aave aTokens) accrue yield
  * - This causes the contract to calculate slightly higher required amounts at execution time
- * - To handle this, we preview for the full shares but request slightly fewer shares (0.0002% less)
+ * - To handle this, we preview for the full shares but request slightly fewer shares (~0.000001335% less)
  * - This creates a natural buffer that ensures the previewed amounts are always sufficient
  */
 contract AddRHLiquidityScript is Script {

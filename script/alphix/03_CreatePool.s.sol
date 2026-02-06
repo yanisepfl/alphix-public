@@ -427,7 +427,7 @@ contract CreatePoolScript is Script {
             maxFee: 1001, // 0.1001%
             baseMaxFeeDelta: 10, // 0.001%
             lookbackPeriod: 30, // 30 days
-            minPeriod: 86_400, // 2 days
+            minPeriod: 86_400, // 1 day
             ratioTolerance: 5e15, // 0.5%
             linearSlope: 5e17, // 0.5x
             maxCurrentRatio: 1e21, // 1000x

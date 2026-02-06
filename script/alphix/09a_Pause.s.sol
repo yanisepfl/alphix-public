@@ -158,35 +158,40 @@ contract PauseScript is Script {
     }
 
     /**
-     * @dev Tests that computeFeeUpdate reverts when paused
+     * @dev Tests that computeFeeUpdate reverts with EnforcedPause when paused.
+     *      Uses a low-level call and checks the revert selector to avoid false positives.
      */
-    function _testComputeFeeUpdateReverts(Alphix alphix) internal view returns (bool) {
-        try alphix.computeFeeUpdate(1e18) {
-            return false; // Should have reverted
-        } catch {
-            return true; // Correctly reverted
-        }
+    function _testComputeFeeUpdateReverts(Alphix alphix) internal returns (bool) {
+        (bool success, bytes memory data) =
+            address(alphix).call(abi.encodeWithSelector(Alphix.computeFeeUpdate.selector, 1e18));
+        if (success) return false;
+        // Verify revert reason is EnforcedPause()
+        return data.length >= 4 && bytes4(data) == Pausable.EnforcedPause.selector;
     }
 
     /**
-     * @dev Tests that addReHypothecatedLiquidity reverts when paused
-     *      Uses staticcall to avoid state changes while testing
+     * @dev Tests that addReHypothecatedLiquidity reverts with EnforcedPause when paused.
+     *      Uses a low-level call and checks the revert selector to avoid false positives
+     *      (staticcall always reverts on state-mutating functions regardless of pause state).
      */
-    function _testAddRHLiquidityReverts(Alphix alphix) internal view returns (bool) {
-        // Use staticcall to test without modifying state
-        (bool success,) =
-            address(alphix).staticcall(abi.encodeWithSelector(alphix.addReHypothecatedLiquidity.selector, 1e18, 0, 0));
-        return !success; // Should fail (revert) when paused
+    function _testAddRHLiquidityReverts(Alphix alphix) internal returns (bool) {
+        (bool success, bytes memory data) = address(alphix)
+            .call(abi.encodeWithSelector(Alphix.addReHypothecatedLiquidity.selector, 1e18, uint160(0), uint24(0)));
+        if (success) return false;
+        // Verify revert reason is EnforcedPause()
+        return data.length >= 4 && bytes4(data) == Pausable.EnforcedPause.selector;
     }
 
     /**
-     * @dev Tests that removeReHypothecatedLiquidity reverts when paused
-     *      Uses staticcall to avoid state changes while testing
+     * @dev Tests that removeReHypothecatedLiquidity reverts with EnforcedPause when paused.
+     *      Uses a low-level call and checks the revert selector to avoid false positives
+     *      (staticcall always reverts on state-mutating functions regardless of pause state).
      */
-    function _testRemoveRHLiquidityReverts(Alphix alphix) internal view returns (bool) {
-        // Use staticcall to test without modifying state
-        (bool success,) = address(alphix)
-            .staticcall(abi.encodeWithSelector(alphix.removeReHypothecatedLiquidity.selector, 1e18, 0, 0));
-        return !success; // Should fail (revert) when paused
+    function _testRemoveRHLiquidityReverts(Alphix alphix) internal returns (bool) {
+        (bool success, bytes memory data) = address(alphix)
+            .call(abi.encodeWithSelector(Alphix.removeReHypothecatedLiquidity.selector, 1e18, uint160(0), uint24(0)));
+        if (success) return false;
+        // Verify revert reason is EnforcedPause()
+        return data.length >= 4 && bytes4(data) == Pausable.EnforcedPause.selector;
     }
 }

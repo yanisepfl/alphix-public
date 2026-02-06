@@ -27,7 +27,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *    export SEED_LIQUIDITY=1000000000000000000  # 1 WETH (18 decimals)
  *
  * 3. Run deployment:
- *    forge script script/aave/DeployAlphix4626WrapperWethAave.s.sol:DeployAlphix4626WrapperWethAave \
+ *    forge script script/wrappers/aave/DeployAlphix4626WrapperWethAave.s.sol:DeployAlphix4626WrapperWethAave \
  *      --rpc-url $RPC_URL \
  *      --broadcast \
  *      --verify
@@ -110,9 +110,9 @@ contract DeployAlphix4626WrapperWethAave is Script {
         }
 
         // Compute expected wrapper address for approval
-        // Note: +1 for approve tx, +1 more if we wrapped ETH
+        // Note: vm.getNonce already accounts for prior txs (including wrap if it happened); +1 for the approve tx below
         uint64 deployNonce = vm.getNonce(deployer) + 1;
-        address expectedWrapper = _computeCreateAddress(deployer, deployNonce);
+        address expectedWrapper = vm.computeCreateAddress(deployer, deployNonce);
 
         // Approve seed liquidity before deployment
         IERC20(weth).approve(expectedWrapper, seedLiquidity);
@@ -146,8 +146,12 @@ contract DeployAlphix4626WrapperWethAave is Script {
         poolAddressesProvider = vm.envOr("POOL_ADDRESSES_PROVIDER", address(0));
         shareName = vm.envOr("SHARE_NAME", string("Alphix WETH Vault"));
         shareSymbol = vm.envOr("SHARE_SYMBOL", string("alphWETH"));
-        initialFee = uint24(vm.envOr("INITIAL_FEE", uint256(100_000))); // Default 10%
         seedLiquidity = vm.envOr("SEED_LIQUIDITY", uint256(1 ether)); // Default 1 WETH
+
+        // Read fee as uint256 first; validated and cast in _validateConfig
+        uint256 rawFee = vm.envOr("INITIAL_FEE", uint256(100_000)); // Default 10%
+        require(rawFee <= 1_000_000, "INITIAL_FEE too high (max 1_000_000)");
+        initialFee = uint24(rawFee);
     }
 
     function _validateConfig() internal view {
@@ -155,7 +159,8 @@ contract DeployAlphix4626WrapperWethAave is Script {
         require(yieldTreasury != address(0), "YIELD_TREASURY not set");
         require(poolAddressesProvider != address(0), "POOL_ADDRESSES_PROVIDER not set");
         require(seedLiquidity > 0, "SEED_LIQUIDITY must be > 0");
-        require(initialFee <= 1_000_000, "INITIAL_FEE too high (max 1_000_000)");
+        require(bytes(shareName).length > 0, "SHARE_NAME must not be empty");
+        require(bytes(shareSymbol).length > 0, "SHARE_SYMBOL must not be empty");
     }
 
     function _verifyDeployment(Alphix4626WrapperWethAave wrapper, address deployer) internal view {
@@ -167,26 +172,5 @@ contract DeployAlphix4626WrapperWethAave is Script {
         uint256 totalAssets = wrapper.totalAssets();
         require(totalAssets >= seedLiquidity - 1 && totalAssets <= seedLiquidity + 1, "Seed liquidity mismatch");
         console.log("Deployment verification passed!");
-    }
-
-    /* HELPERS */
-
-    /// @notice Compute CREATE address for approval before deployment
-    function _computeCreateAddress(address deployer, uint64 nonce) internal pure returns (address) {
-        bytes memory data;
-        if (nonce == 0x00) {
-            data = abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, bytes1(0x80));
-        } else if (nonce <= 0x7f) {
-            data = abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, uint8(nonce));
-        } else if (nonce <= 0xff) {
-            data = abi.encodePacked(bytes1(0xd7), bytes1(0x94), deployer, bytes1(0x81), uint8(nonce));
-        } else if (nonce <= 0xffff) {
-            data = abi.encodePacked(bytes1(0xd8), bytes1(0x94), deployer, bytes1(0x82), uint16(nonce));
-        } else if (nonce <= 0xffffff) {
-            data = abi.encodePacked(bytes1(0xd9), bytes1(0x94), deployer, bytes1(0x83), uint24(nonce));
-        } else {
-            data = abi.encodePacked(bytes1(0xda), bytes1(0x94), deployer, bytes1(0x84), uint32(nonce));
-        }
-        return address(uint160(uint256(keccak256(data))));
     }
 }
