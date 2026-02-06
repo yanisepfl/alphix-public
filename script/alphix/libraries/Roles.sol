@@ -9,7 +9,7 @@ pragma solidity ^0.8.26;
  * Role Definitions:
  * - ADMIN_ROLE (0): Default admin role in OpenZeppelin AccessManager, can manage all other roles
  * - FEE_POKER_ROLE (1): Can call Alphix.poke() to manually update dynamic fees
- * - REGISTRAR_ROLE (2): Can call registerContract() and registerPool() on Registry
+ * - YIELD_MANAGER_ROLE (2): Can manage rehypothecation settings (yield sources, tax rates, treasury)
  */
 library Roles {
     /**
@@ -26,9 +26,10 @@ library Roles {
     uint64 internal constant FEE_POKER_ROLE = 1;
 
     /**
-     * @dev Registrar role - can register pools and contracts in the Registry
+     * @dev Yield manager role - can manage rehypothecation settings
+     * (yield sources, tax rates, treasury)
      * Granted in: 06b_ConfigureRoles.s.sol
      * Revoked in: 06c_RemoveRoles.s.sol
      */
-    uint64 internal constant REGISTRAR_ROLE = 2;
+    uint64 internal constant YIELD_MANAGER_ROLE = 2;
 }

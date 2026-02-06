@@ -41,14 +41,14 @@ contract DynamicFeeFuzzTest is Test {
     uint256 constant TWO_WAD = 2e18;
 
     // Sample pool type params for testing
-    DynamicFeeLib.PoolTypeParams testParams;
+    DynamicFeeLib.PoolParams testParams;
 
     /**
      * @notice Sets up test parameters
      * @dev Initializes baseline pool type parameters for testing
      */
     function setUp() public {
-        testParams = DynamicFeeLib.PoolTypeParams({
+        testParams = DynamicFeeLib.PoolParams({
             minFee: 100, // 0.01%
             maxFee: 10000, // 1%
             baseMaxFeeDelta: 50,
@@ -651,7 +651,7 @@ contract DynamicFeeFuzzTest is Test {
         lowerSideFactor = bound(lowerSideFactor, HALF_WAD, TWO_WAD * 2);
 
         // Create custom params with different side factors
-        DynamicFeeLib.PoolTypeParams memory customParams = testParams;
+        DynamicFeeLib.PoolParams memory customParams = testParams;
         customParams.upperSideFactor = upperSideFactor;
         customParams.lowerSideFactor = lowerSideFactor;
 

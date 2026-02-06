@@ -6,14 +6,29 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId} from "v4-core/src/types/PoolId.sol";
 
 /* LOCAL IMPORTS */
-import {IAlphixLogic} from "./IAlphixLogic.sol";
+import {DynamicFeeLib} from "../libraries/DynamicFee.sol";
 
 /**
  * @title IAlphix.
- * @notice Interface for the Alphix Uniswap v4 Hook.
- * @dev All user-facing operations go through this contract.
+ * @notice Interface for the Alphix Uniswap v4 Dynamic Fee Hook with JIT liquidity rehypothecation.
+ * @dev Single contract combining hook, dynamic fee logic, and rehypothecation.
+ *      Each instance serves exactly one pool. Shares are ERC20 tokens.
  */
 interface IAlphix {
+    /* STRUCTS */
+
+    /**
+     * @dev Pool configuration data.
+     * @param initialFee The initial fee set during pool initialization.
+     * @param initialTargetRatio The initial target ratio set during pool initialization.
+     * @param isConfigured Whether the pool has been configured.
+     */
+    struct PoolConfig {
+        uint24 initialFee;
+        uint256 initialTargetRatio;
+        bool isConfigured;
+    }
+
     /* EVENTS */
 
     /**
@@ -35,106 +50,99 @@ interface IAlphix {
     );
 
     /**
-     * @dev Emitted upon logic change.
-     * @param oldLogic The previous logic contract address.
-     * @param newLogic The new logic contract address.
+     * @dev Emitted when pool params are updated.
+     * @notice Call getPoolParams() to retrieve the current parameter values.
      */
-    event LogicUpdated(address oldLogic, address newLogic);
-
-    /**
-     * @dev Emitted upon registry change.
-     * @param oldRegistry The previous registry contract address.
-     * @param newRegistry The new registry contract address.
-     */
-    event RegistryUpdated(address oldRegistry, address newRegistry);
-
-    /**
-     * @dev Emitted upon pool configuration.
-     * @param poolId The pool ID of the pool that has been configured.
-     * @param initialFee The initial fee of the pool that has been configured.
-     * @param initialTargetRatio The initial target ratio of the pool that has been configured.
-     * @param poolType The pool type of the pool that has been configured.
-     */
-    event PoolConfigured(
-        PoolId indexed poolId, uint24 initialFee, uint256 initialTargetRatio, IAlphixLogic.PoolType poolType
-    );
-
-    /**
-     * @dev Emitted upon pool activation.
-     * @param poolId The pool ID of the pool that has been activated.
-     */
-    event PoolActivated(PoolId indexed poolId);
-
-    /**
-     * @dev Emitted upon pool deactivation.
-     * @param poolId The pool ID of the pool that has been deactivated.
-     */
-    event PoolDeactivated(PoolId indexed poolId);
+    event PoolParamsUpdated();
 
     /* ERRORS */
-
-    /**
-     * @dev Thrown when logic contract is not set.
-     */
-    error LogicNotSet();
 
     /**
      * @dev Thrown when an invalid address (e.g. 0) is provided.
      */
     error InvalidAddress();
 
-    /* INITIALIZER */
+    /**
+     * @dev Thrown when the pool is paused or not activated.
+     */
+    error PoolPaused();
 
     /**
-     * @notice Initialize the contract with a logic contract address.
-     * @param _logic The initial logic contract address.
-     * @dev Can only be called by the owner, sets logic and unpauses contract.
+     * @dev Thrown when a pool is already configured.
      */
-    function initialize(address _logic) external;
+    error PoolAlreadyConfigured();
+
+    /**
+     * @dev Thrown when pool initialization is attempted on an already initialized pool.
+     */
+    error PoolAlreadyInitialized();
+
+    /**
+     * @dev Thrown when a pool is not configured.
+     */
+    error PoolNotConfigured();
+
+    /**
+     * @dev Thrown when fee bounds are invalid.
+     */
+    error InvalidFeeBounds();
+
+    /**
+     * @dev Thrown when initial fee is outside the configured pool params bounds.
+     */
+    error InvalidInitialFee(uint24 fee, uint24 minFee, uint24 maxFee);
+
+    /**
+     * @dev Thrown when another parameter than fee bounds is invalid.
+     */
+    error InvalidParameter();
+
+    /**
+     * @dev Thrown when the time elapsed since the pool's last fee update is less than minPeriod.
+     */
+    error CooldownNotElapsed(uint256 currentTimestamp, uint256 nextEligibleTimestamp);
+
+    /**
+     * @dev Thrown when an invalid ratio is provided (outside pool params bounds).
+     */
+    error InvalidCurrentRatio();
+
+    /**
+     * @dev Thrown when the pool key's hook address doesn't match this contract.
+     */
+    error HookMismatch();
 
     /* ADMIN FUNCTIONS */
-
-    /**
-     * @notice Set a new logic contract address.
-     * @param newLogic The new logic contract address.
-     * @dev Validates the new logic contract implements required constant signature.
-     */
-    function setLogic(address newLogic) external;
-
-    /**
-     * @notice Set a new registry contract address.
-     * @param newRegistry The new registry contract address.
-     * @dev Registers Alphix Hook and AlphixLogic contracts in the new registry.
-     *      IMPORTANT: Existing pools are NOT automatically migrated to the new registry.
-     *      Admin must manually re-register pools after updating the registry.
-     */
-    function setRegistry(address newRegistry) external;
 
     /**
      * @notice Initialize pool by activating and configuring it, and sets its initial fee.
      * @param key The key of the pool to initialize.
      * @param _initialFee The initial fee of the pool to initialize.
      * @param _initialTargetRatio The initial target ratio of the pool to initialize.
-     * @param _poolType The pool type of the pool to initialize.
+     * @param _poolParams The pool parameters for the dynamic fee algorithm.
+     * @param _tickLower Lower tick boundary for JIT liquidity position (immutable after init).
+     * @param _tickUpper Upper tick boundary for JIT liquidity position (immutable after init).
      */
     function initializePool(
         PoolKey calldata key,
         uint24 _initialFee,
         uint256 _initialTargetRatio,
-        IAlphixLogic.PoolType _poolType
+        DynamicFeeLib.PoolParams calldata _poolParams,
+        int24 _tickLower,
+        int24 _tickUpper
     ) external;
 
     /**
-     * @notice Activate pool.
-     * @param key The key of the pool to activate.
+     * @notice Set pool params for the single pool.
+     * @param params The parameters to set.
      */
-    function activatePool(PoolKey calldata key) external;
+    function setPoolParams(DynamicFeeLib.PoolParams calldata params) external;
 
     /**
-     * @notice Deactivate pool.
-     * @param key The key of the pool to deactivate.
+     * @notice Set the global max adjustment rate.
+     * @param globalMaxAdjRate_ The global max adjustment rate to set.
      */
-    function deactivatePool(PoolKey calldata key) external;
+    function setGlobalMaxAdjRate(uint256 globalMaxAdjRate_) external;
 
     /**
      * @notice Pause the contract.
@@ -148,24 +156,64 @@ interface IAlphix {
      */
     function unpause() external;
 
+    /* FEE FUNCTIONS */
+
+    /**
+     * @notice Compute and apply a fee update for the pool.
+     * @dev This is the main entry point for fee updates. Gated by POKER_ROLE via AccessManager.
+     * @param currentRatio The current ratio observed for this pool.
+     */
+    function poke(uint256 currentRatio) external;
+
+    /**
+     * @notice Compute what a poke would produce without any state changes.
+     * @dev Useful for dry-run simulations, UI previews, or off-chain tooling.
+     *      Does NOT check cooldown - that's only enforced in poke().
+     * @param currentRatio The current ratio observed for this pool.
+     * @return newFee The computed new fee that would be applied.
+     * @return newOobState The new out-of-bounds state after the update.
+     * @return wouldUpdate Whether the fee would actually update (passes cooldown check).
+     */
+    function computeFeeUpdate(uint256 currentRatio)
+        external
+        view
+        returns (uint24 newFee, DynamicFeeLib.OobState memory newOobState, bool wouldUpdate);
+
     /* GETTERS */
 
     /**
-     * @notice Get the current logic contract address.
-     * @return currentLogic The address of the current logic contract.
+     * @notice Get the pool's current fee.
+     * @return fee The current fee of the pool.
      */
-    function getLogic() external view returns (address currentLogic);
+    function getFee() external view returns (uint24 fee);
 
     /**
-     * @notice Get the registry address.
-     * @return registry The address of the registry.
+     * @notice Get the cached pool key.
+     * @return The pool key for the single pool this hook serves.
      */
-    function getRegistry() external view returns (address registry);
+    function getPoolKey() external view returns (PoolKey memory);
 
     /**
-     * @notice Get the given key's current fee.
-     * @param key The key of the pool to get the current fee from.
-     * @return fee The current fee of the given pool.
+     * @notice Get the cached pool ID.
+     * @return The pool ID for the single pool this hook serves.
      */
-    function getFee(PoolKey calldata key) external view returns (uint24 fee);
+    function getPoolId() external view returns (PoolId);
+
+    /**
+     * @notice Get pool config.
+     * @return poolConfig The configs for the pool.
+     */
+    function getPoolConfig() external view returns (PoolConfig memory poolConfig);
+
+    /**
+     * @notice Get pool parameters.
+     * @return params The pool parameters.
+     */
+    function getPoolParams() external view returns (DynamicFeeLib.PoolParams memory params);
+
+    /**
+     * @notice Get the global max adjustment rate.
+     * @return The global max adjustment rate.
+     */
+    function getGlobalMaxAdjRate() external view returns (uint256);
 }

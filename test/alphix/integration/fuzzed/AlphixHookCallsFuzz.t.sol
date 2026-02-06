@@ -6,26 +6,22 @@ pragma solidity ^0.8.26;
 /* OZ IMPORTS */
 
 /* UNISWAP V4 IMPORTS */
-import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
-import {BaseDynamicFee} from "../../../../src/BaseDynamicFee.sol";
 import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
-import {AlphixLogic} from "../../../../src/AlphixLogic.sol";
-import {IAlphixLogic} from "../../../../src/interfaces/IAlphixLogic.sol";
-import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
+import {Alphix} from "../../../../src/Alphix.sol";
+import {IAlphix} from "../../../../src/interfaces/IAlphix.sol";
 import {EasyPosm} from "../../../utils/libraries/EasyPosm.sol";
 
 /**
@@ -66,42 +62,31 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
      * @dev Tests pool initialization across different fees and target ratios
      * @param initialFee Initial fee for the pool
      * @param targetRatio Initial target ratio
-     * @param poolTypeIndex Pool type (0=STABLE, 1=STANDARD, 2=VOLATILE)
+     * @dev Removed: poolType parameter (single-pool architecture)
      */
-    function testFuzz_owner_can_initialize_pool_with_various_params(
-        uint24 initialFee,
-        uint256 targetRatio,
-        uint8 poolTypeIndex
-    ) public {
-        // Bound pool type
-        poolTypeIndex = uint8(bound(poolTypeIndex, 0, 2));
+    function testFuzz_owner_can_initialize_pool_with_various_params(uint24 initialFee, uint256 targetRatio) public {
+        // Single-pool-per-hook architecture - deploy fresh stack
+        Alphix freshHook = _deployFreshAlphixStack();
 
-        // Map to pool type
-        IAlphixLogic.PoolType poolType;
-        if (poolTypeIndex == 0) poolType = IAlphixLogic.PoolType.STABLE;
-        else if (poolTypeIndex == 1) poolType = IAlphixLogic.PoolType.STANDARD;
-        else poolType = IAlphixLogic.PoolType.VOLATILE;
-
-        // Get pool type parameters to bound fee correctly
-        DynamicFeeLib.PoolTypeParams memory params = logic.getPoolTypeParams(poolType);
-
-        // Bound parameters to valid range for this pool type
-        initialFee = uint24(bound(initialFee, params.minFee, params.maxFee));
-        targetRatio = bound(targetRatio, MIN_TARGET_RATIO_FUZZ, params.maxCurrentRatio);
+        // Use defaultPoolParams for bounds (before pool is configured)
+        // Bound parameters to valid range
+        initialFee = uint24(bound(initialFee, defaultPoolParams.minFee, defaultPoolParams.maxFee));
+        targetRatio = bound(targetRatio, MIN_TARGET_RATIO_FUZZ, defaultPoolParams.maxCurrentRatio);
 
         // Create fresh pool
-        (PoolKey memory freshKey, PoolId freshId) =
-            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, hook);
+        (PoolKey memory freshKey,) =
+            _newUninitializedPoolWithHook(18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook);
 
         // Initialize pool
+        int24 tickLower = TickMath.minUsableTick(freshKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(freshKey.tickSpacing);
         vm.prank(owner);
-        hook.initializePool(freshKey, initialFee, targetRatio, poolType);
+        freshHook.initializePool(freshKey, initialFee, targetRatio, defaultPoolParams, tickLower, tickUpper);
 
         // Verify configuration
-        IAlphixLogic.PoolConfig memory cfg = logic.getPoolConfig(freshId);
+        IAlphix.PoolConfig memory cfg = freshHook.getPoolConfig();
         assertEq(cfg.initialFee, initialFee, "initial fee mismatch");
         assertEq(cfg.initialTargetRatio, targetRatio, "initial target ratio mismatch");
-        assertEq(uint8(cfg.poolType), uint8(poolType), "pool type mismatch");
         assertTrue(cfg.isConfigured, "pool should be configured");
     }
 
@@ -118,16 +103,12 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         // Bound liquidity to reasonable range
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY_FUZZ, MAX_LIQUIDITY_FUZZ));
 
+        // Deploy fresh hook stack
+        Alphix freshHook = _deployFreshAlphixStack();
+
         // Create configured pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         // Full-range position
@@ -170,16 +151,12 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         initialLiquidity = uint128(bound(initialLiquidity, MIN_LIQUIDITY_FUZZ, MAX_LIQUIDITY_FUZZ));
         removePercentage = uint8(bound(removePercentage, 1, 100));
 
+        // Deploy fresh hook stack
+        Alphix freshHook = _deployFreshAlphixStack();
+
         // Create pool and add liquidity
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         vm.startPrank(owner);
@@ -222,16 +199,12 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         // Bound swap amount
         swapAmount = bound(swapAmount, MIN_SWAP_AMOUNT_FUZZ, MAX_SWAP_AMOUNT_FUZZ);
 
+        // Deploy fresh hook stack
+        Alphix freshHook = _deployFreshAlphixStack();
+
         // Create pool with liquidity
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         vm.startPrank(owner);
@@ -280,16 +253,12 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         // Bound swap amount
         swapAmount = bound(swapAmount, MIN_SWAP_AMOUNT_FUZZ, MAX_SWAP_AMOUNT_FUZZ);
 
+        // Deploy fresh hook stack
+        Alphix freshHook = _deployFreshAlphixStack();
+
         // Create pool with liquidity
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         vm.startPrank(owner);
@@ -297,8 +266,8 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         // Add liquidity
         seedLiquidity(kFresh, owner, true, UNIT, 10_000e18, 10_000e18);
 
-        // Pause logic
-        AlphixLogic(address(logicProxy)).pause();
+        // Pause hook
+        freshHook.pause();
 
         // Approve swap input
         MockERC20(Currency.unwrap(kFresh.currency0)).approve(address(swapRouter), swapAmount);
@@ -327,22 +296,18 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         // Bound liquidity
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY_FUZZ, MAX_LIQUIDITY_FUZZ));
 
+        // Deploy fresh hook stack
+        Alphix freshHook = _deployFreshAlphixStack();
+
         // Create pool
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
-            INITIAL_FEE,
-            INITIAL_TARGET_RATIO,
-            18,
-            18,
-            defaultTickSpacing,
-            Constants.SQRT_PRICE_1_1,
-            hook
+            INITIAL_FEE, INITIAL_TARGET_RATIO, 18, 18, defaultTickSpacing, Constants.SQRT_PRICE_1_1, freshHook
         );
 
         vm.startPrank(owner);
 
-        // Deactivate pool
-        hook.deactivatePool(kFresh);
+        // Pause pool
+        freshHook.pause();
 
         // Calculate amounts
         int24 tl = TickMath.minUsableTick(kFresh.tickSpacing);
@@ -366,26 +331,6 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         vm.stopPrank();
     }
 
-    /**
-     * @notice Fuzz test that afterInitialize requires dynamic fee
-     * @dev Verifies static fee pools are rejected
-     * @param staticFee Static fee value
-     */
-    function testFuzz_afterInitialize_requires_dynamic_fee(uint24 staticFee) public {
-        // Bound to valid static fee range (exclude dynamic fee flag)
-        staticFee = uint24(bound(staticFee, 1, LPFeeLibrary.MAX_LP_FEE));
-        vm.assume(!LPFeeLibrary.isDynamicFee(staticFee));
-
-        // Create static fee key
-        // forge-lint: disable-next-line(named-struct-fields)
-        PoolKey memory staticKey = PoolKey(currency0, currency1, staticFee, defaultTickSpacing, IHooks(hook));
-
-        // Expect revert
-        vm.prank(address(hook));
-        vm.expectRevert(BaseDynamicFee.NotDynamicFee.selector);
-        logic.afterInitialize(user1, staticKey, Constants.SQRT_PRICE_1_1, 0);
-    }
-
     /* ========================================================================== */
     /*                        TOKEN DECIMALS TESTS                               */
     /* ========================================================================== */
@@ -405,16 +350,18 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         decimals1 = uint8(bound(decimals1, 6, 18));
         liquidityAmount = uint128(bound(liquidityAmount, MIN_LIQUIDITY_FUZZ, MAX_LIQUIDITY_FUZZ));
 
+        // Deploy fresh hook stack
+        Alphix freshHook = _deployFreshAlphixStack();
+
         // Create pool with specific decimals
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
             INITIAL_FEE,
             INITIAL_TARGET_RATIO,
             decimals0,
             decimals1,
             defaultTickSpacing,
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         // Full-range position
@@ -468,16 +415,18 @@ contract AlphixHookCallsFuzzTest is BaseAlphixTest {
         uint8 swapDecimals = zeroForOne ? decimals0 : decimals1;
         swapAmount = bound(swapAmount, 10 ** swapDecimals / 1000, 10 ** swapDecimals * 100); // 0.001 to 100 tokens
 
+        // Deploy fresh hook stack
+        Alphix freshHook = _deployFreshAlphixStack();
+
         // Create pool with specific decimals
         (PoolKey memory kFresh,) = _initPoolWithHook(
-            IAlphixLogic.PoolType.STANDARD,
             INITIAL_FEE,
             INITIAL_TARGET_RATIO,
             decimals0,
             decimals1,
             defaultTickSpacing,
             Constants.SQRT_PRICE_1_1,
-            hook
+            freshHook
         );
 
         vm.startPrank(owner);

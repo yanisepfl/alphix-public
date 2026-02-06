@@ -25,17 +25,18 @@ import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 contract TestBaseDynamicFeeFuzz is BaseDynamicFee {
     uint24 public mockFee = 500;
     bool public shouldRevertOnPoke = false;
+    PoolKey private _poolKey;
 
     constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) {}
 
     /**
      * @dev Implementation of abstract poke function
      */
-    function poke(PoolKey calldata key, uint256) external override onlyValidPools(key.hooks) {
+    function poke(uint256) external override {
         if (shouldRevertOnPoke) {
             revert("Mock revert in poke");
         }
-        poolManager.updateDynamicLPFee(key, mockFee);
+        poolManager.updateDynamicLPFee(_poolKey, mockFee);
     }
 
     // Test helper functions
@@ -46,6 +47,10 @@ contract TestBaseDynamicFeeFuzz is BaseDynamicFee {
 
     function setShouldRevertOnPoke(bool _shouldRevert) external {
         shouldRevertOnPoke = _shouldRevert;
+    }
+
+    function setPoolKey(PoolKey memory key) external {
+        _poolKey = key;
     }
 
     // Expose internal functions for testing
@@ -98,6 +103,9 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         // Create dynamic fee pool key
         // forge-lint: disable-next-line(named-struct-fields)
         dynamicFeeKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(testHook));
+
+        // Set the pool key for testing poke
+        testHook.setPoolKey(dynamicFeeKey);
     }
 
     /* ========================================================================== */
@@ -196,7 +204,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         testHook.setMockFee(mockFee);
 
         // Poke the pool
-        testHook.poke(dynamicFeeKey, currentRatio);
+        testHook.poke(currentRatio);
 
         // Check fee was updated
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
@@ -219,7 +227,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         testHook.setMockFee(mockFee);
 
         // Poke with ratio
-        testHook.poke(dynamicFeeKey, currentRatio);
+        testHook.poke(currentRatio);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(dynamicFeeKey.toId());
@@ -241,7 +249,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
         testHook.setMockFee(mockFee);
 
-        testHook.poke(dynamicFeeKey, 0);
+        testHook.poke(0);
 
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(newFee, mockFee, "Should handle zero current ratio");
@@ -261,7 +269,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
         testHook.setMockFee(mockFee);
 
-        testHook.poke(dynamicFeeKey, maxRatio);
+        testHook.poke(maxRatio);
 
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(newFee, mockFee, "Should handle max current ratio");
@@ -285,7 +293,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
 
         // Set initial fee
         testHook.setMockFee(initialFee);
-        testHook.poke(dynamicFeeKey, currentRatio);
+        testHook.poke(currentRatio);
 
         // Get fee before second poke
         (,,, uint24 feeBefore) = poolManager.getSlot0(dynamicFeeKey.toId());
@@ -293,7 +301,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
 
         // Update to new fee
         testHook.setMockFee(newFee);
-        testHook.poke(dynamicFeeKey, currentRatio);
+        testHook.poke(currentRatio);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(dynamicFeeKey.toId());
@@ -317,7 +325,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         testHook.setMockFee(mockFee);
 
         // Poke with boundary fee
-        testHook.poke(dynamicFeeKey, currentRatio);
+        testHook.poke(currentRatio);
 
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(newFee, mockFee, "Should handle boundary fee values");
@@ -359,17 +367,17 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
         testHook.setMockFee(mockFee);
 
         // First poke
-        testHook.poke(dynamicFeeKey, ratio1);
+        testHook.poke(ratio1);
         (,,, uint24 fee1) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(fee1, mockFee, "First poke should set fee");
 
         // Second poke
-        testHook.poke(dynamicFeeKey, ratio2);
+        testHook.poke(ratio2);
         (,,, uint24 fee2) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(fee2, mockFee, "Second poke should maintain fee");
 
         // Third poke
-        testHook.poke(dynamicFeeKey, ratio3);
+        testHook.poke(ratio3);
         (,,, uint24 fee3) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(fee3, mockFee, "Third poke should maintain fee");
     }
@@ -390,7 +398,7 @@ contract BaseDynamicFeeFuzzTest is BaseAlphixTest {
 
         // Should propagate the revert
         vm.expectRevert("Mock revert in poke");
-        testHook.poke(dynamicFeeKey, currentRatio);
+        testHook.poke(currentRatio);
     }
 
     /* ========================================================================== */

@@ -24,17 +24,18 @@ import {BaseAlphixTest} from "../../BaseAlphix.t.sol";
 contract TestBaseDynamicFee is BaseDynamicFee {
     uint24 public mockFee = 500;
     bool public shouldRevertOnPoke = false;
+    PoolKey private _poolKey;
 
     constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) {}
 
     /**
      * @dev Implementation of abstract poke function
      */
-    function poke(PoolKey calldata key, uint256) external override onlyValidPools(key.hooks) {
+    function poke(uint256) external override {
         if (shouldRevertOnPoke) {
             revert("Mock revert in poke");
         }
-        poolManager.updateDynamicLPFee(key, mockFee);
+        poolManager.updateDynamicLPFee(_poolKey, mockFee);
     }
 
     // Test helper functions
@@ -44,6 +45,10 @@ contract TestBaseDynamicFee is BaseDynamicFee {
 
     function setShouldRevertOnPoke(bool _shouldRevert) external {
         shouldRevertOnPoke = _shouldRevert;
+    }
+
+    function setPoolKey(PoolKey memory key) external {
+        _poolKey = key;
     }
 
     // Expose internal functions for testing
@@ -85,6 +90,9 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         dynamicFeeKey = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(testHook));
         // forge-lint: disable-next-line(named-struct-fields)
         staticFeeKey = PoolKey(currency0, currency1, 3000, 60, IHooks(testHook));
+
+        // Set the pool key for testing poke
+        testHook.setPoolKey(dynamicFeeKey);
     }
 
     /* CONSTRUCTOR AND INITIALIZATION TESTS */
@@ -148,7 +156,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         (,,, uint24 initialFee) = poolManager.getSlot0(dynamicFeeKey.toId());
 
         // Poke the pool
-        testHook.poke(dynamicFeeKey, currentRatio);
+        testHook.poke(currentRatio);
 
         // Check fee was updated
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
@@ -156,18 +164,8 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         assertTrue(newFee != initialFee, "Fee should have changed from initial value");
     }
 
-    function test_poke_reverts_invalidPool() public {
-        PoolKey memory invalidKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 60,
-            hooks: IHooks(address(0x1234))
-        });
-
-        vm.expectRevert(); // Should revert with onlyValidPools modifier
-        testHook.poke(invalidKey, 5e17);
-    }
+    // Note: test_poke_reverts_invalidPool removed - single pool architecture stores pool key,
+    // so the onlyValidPools modifier is no longer needed at the poke level.
 
     function test_poke_handlesPokeFunctionRevert() public {
         // Initialize pool first
@@ -178,7 +176,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
 
         // Should propagate the revert
         vm.expectRevert("Mock revert in poke");
-        testHook.poke(dynamicFeeKey, 5e17);
+        testHook.poke(5e17);
     }
 
     function test_poke_withDifferentCurrentRatios() public {
@@ -195,7 +193,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
 
         for (uint256 i = 0; i < ratios.length; i++) {
             // Poke with different ratio
-            testHook.poke(dynamicFeeKey, ratios[i]);
+            testHook.poke(ratios[i]);
 
             // Get fee after poke
             (,,, uint24 feeAfter) = poolManager.getSlot0(dynamicFeeKey.toId());
@@ -214,7 +212,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
-        testHook.poke(dynamicFeeKey, 0);
+        testHook.poke(0);
 
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(newFee, expectedFee, "Should handle zero current ratio");
@@ -228,7 +226,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         // Initialize pool first
         poolManager.initialize(dynamicFeeKey, Constants.SQRT_PRICE_1_1);
 
-        testHook.poke(dynamicFeeKey, maxRatio);
+        testHook.poke(maxRatio);
 
         (,,, uint24 newFee) = poolManager.getSlot0(dynamicFeeKey.toId());
         assertEq(newFee, expectedFee, "Should handle max current ratio");
@@ -272,7 +270,7 @@ contract BaseDynamicFeeTest is BaseAlphixTest {
         (,,, uint24 feeBefore) = poolManager.getSlot0(dynamicFeeKey.toId());
 
         // Poke the pool
-        testHook.poke(dynamicFeeKey, 6e17);
+        testHook.poke(6e17);
 
         // Get fee after poke
         (,,, uint24 feeAfter) = poolManager.getSlot0(dynamicFeeKey.toId());

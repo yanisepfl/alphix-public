@@ -4,7 +4,7 @@
 [project]
 # Project identification
 name = "Alphix"
-description = "Uniswap V4 Dynamic Fee Hook with upgradeable logic"
+description = "Uniswap V4 Dynamic Fee Hook with JIT Liquidity Rehypothecation"
 version = "1.0.0"
 
 [toolchain]
@@ -49,7 +49,7 @@ enable_overflow_check = true
 enable_access_control_check = true
 enable_gas_optimization_check = true
 enable_code_quality_check = true
-enable_upgradeability_check = true  # Important for UUPS proxy pattern
+enable_upgradeability_check = false  # Not using upgradeable contracts
 
 [detection]
 # Vulnerability detection settings
@@ -62,14 +62,15 @@ detect_best_practices = true
 focus_on = [
     "reentrancy",
     "access-control",
-    "upgradeability",
     "arithmetic",
     "gas-optimization",
     "unchecked-returns",
     "delegatecall",
     "selfdestruct",
     "tx-origin",
-    "timestamp-dependence"
+    "timestamp-dependence",
+    "erc4626",
+    "flash-accounting"
 ]
 
 [reports]
@@ -112,12 +113,13 @@ warn_on_expensive_operations = true
 
 # Known safe patterns (won't be flagged)
 safe_patterns = [
-    # UUPS proxy pattern is intentional
-    "UUPSUpgradeable",
     # Ownable2Step transfer is safe
     "Ownable2Step",
     # ReentrancyGuardTransient is safe
-    "ReentrancyGuardTransient"
+    "ReentrancyGuardTransient",
+    # ERC-4626 vault interactions are intentional
+    "ERC4626",
+    "IERC4626"
 ]
 
 # Expected external calls (won't flag as unsafe)
@@ -126,7 +128,9 @@ trusted_contracts = [
     "IPoolManager",      # Uniswap V4 Core - pool manager interface (audited)
     "PoolManager",       # Uniswap V4 Core - main pool manager implementation (audited)
     "IHooks",            # Uniswap V4 Core - hook interface specification
-    "AccessManager"      # OpenZeppelin v5 - access control manager (audited)
+    "AccessManager",     # OpenZeppelin v5 - access control manager (audited)
+    "IERC4626",          # OpenZeppelin ERC-4626 vault interface (audited)
+    "ERC4626"            # OpenZeppelin ERC-4626 vault implementation (audited)
 ]
 
 # Architecture-specific settings
@@ -136,12 +140,11 @@ validate_hook_permissions = true
 check_dynamic_fees = true
 validate_hook_returns = true
 
-[custom.upgradeability]
-# UUPS upgradeability checks
-proxy_pattern = "uups"
-validate_storage_layout = true
-check_initialization = true
-require_authorization = true
+[custom.rehypothecation]
+# ERC-4626 yield source checks
+validate_vault_interactions = true
+check_share_accounting = true
+validate_deposit_withdraw_symmetry = true
 
 [custom.access_control]
 # Access control validation

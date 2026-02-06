@@ -18,12 +18,12 @@ library DynamicFeeLib {
     uint256 internal constant ALPHA_NUMERATOR = 2 * AlphixGlobalConstants.ONE_WAD;
 
     /**
-     * @dev PoolType-dependent parameters.
+     * @dev Pool parameters for dynamic fee algorithm.
      * - Bounds are used by clampFee and to validate updates.
      * - Algorithm knobs control fee sensitivity and EMA smoothing.
      * - Side multipliers to throttle by side.
      */
-    struct PoolTypeParams {
+    struct PoolParams {
         // Bounds
         uint24 minFee;
         uint24 maxFee;
@@ -81,7 +81,7 @@ library DynamicFeeLib {
      * @param currentRatio The current ratio in 1e18.
      * @param targetRatio The target ratio in 1e18.
      * @param globalMaxAdjRate Global cap for adjustmentRate in 1e18.
-     * @param p PoolType-dependent parameters (including bounds and factors).
+     * @param p Pool parameters (including bounds and factors).
      * @param s Out-of-band state (streak and last side).
      * @return newFee The clamped new LP fee.
      * @return sOut The updated out-of-band state.
@@ -91,7 +91,7 @@ library DynamicFeeLib {
         uint256 currentRatio,
         uint256 targetRatio,
         uint256 globalMaxAdjRate,
-        PoolTypeParams memory p,
+        PoolParams memory p,
         OobState memory s
     ) internal pure returns (uint24 newFee, OobState memory sOut) {
         // Create a proper copy of the input state
@@ -115,7 +115,7 @@ library DynamicFeeLib {
         uint256 currentRatio,
         uint256 targetRatio,
         uint256 globalMaxAdjRate,
-        PoolTypeParams memory p,
+        PoolParams memory p,
         OobState memory sOut,
         bool isUpper
     ) private pure returns (uint24 newFee, OobState memory) {
@@ -133,7 +133,7 @@ library DynamicFeeLib {
     function _applyFeeAdjustment(
         uint24 currentFee,
         uint256 adjustmentRate,
-        PoolTypeParams memory p,
+        PoolParams memory p,
         OobState memory sOut,
         bool isUpper
     ) private pure returns (uint24, OobState memory) {
