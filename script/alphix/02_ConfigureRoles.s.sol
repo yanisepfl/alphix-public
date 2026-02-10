@@ -21,6 +21,8 @@ import {Roles} from "./libraries/Roles.sol";
  * 2. Grant YIELD_MANAGER_ROLE to specified address
  * 3. Grant FEE_POKER_ROLE permissions on poke() function
  * 4. Grant FEE_POKER_ROLE to specified address
+ * 5. Grant PAUSER_ROLE permissions on pause()/unpause() functions
+ * 6. Grant PAUSER_ROLE to specified address
  *
  * NOTE: The hook is unpaused automatically by initializePool() in script 03.
  *
@@ -30,6 +32,7 @@ import {Roles} from "./libraries/Roles.sol";
  * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
  * - YIELD_MANAGER_{NETWORK}: Address to grant YIELD_MANAGER_ROLE (REQUIRED)
  * - FEE_POKER_{NETWORK}: Address to grant FEE_POKER_ROLE (REQUIRED)
+ * - PAUSER_{NETWORK}: Address to grant PAUSER_ROLE (REQUIRED)
  *
  * After this script:
  * - Roles are configured
@@ -60,6 +63,11 @@ contract ConfigureRolesScript is Script {
         address feePoker = vm.envAddress(envVar);
         require(feePoker != address(0), string.concat(envVar, " not set"));
 
+        // Required: pauser address
+        envVar = string.concat("PAUSER_", network);
+        address pauser = vm.envAddress(envVar);
+        require(pauser != address(0), string.concat(envVar, " not set"));
+
         console.log("===========================================");
         console.log("CONFIGURING ALPHIX ROLES");
         console.log("===========================================");
@@ -68,6 +76,7 @@ contract ConfigureRolesScript is Script {
         console.log("AccessManager:", accessManagerAddr);
         console.log("Yield Manager:", yieldManager);
         console.log("Fee Poker:", feePoker);
+        console.log("Pauser:", pauser);
         console.log("");
 
         Alphix alphix = Alphix(hookAddr);
@@ -95,6 +104,15 @@ contract ConfigureRolesScript is Script {
         accessManager.grantRole(Roles.FEE_POKER_ROLE, feePoker, 0);
         console.log("  - Granted to:", feePoker);
 
+        // Step 4: Grant PAUSER_ROLE
+        console.log("Step 4: Setting up PAUSER_ROLE...");
+        bytes4[] memory pauserSelectors = new bytes4[](2);
+        pauserSelectors[0] = alphix.pause.selector;
+        pauserSelectors[1] = alphix.unpause.selector;
+        accessManager.setTargetFunctionRole(hookAddr, pauserSelectors, Roles.PAUSER_ROLE);
+        accessManager.grantRole(Roles.PAUSER_ROLE, pauser, 0);
+        console.log("  - Granted to:", pauser);
+
         vm.stopBroadcast();
 
         console.log("");
@@ -104,6 +122,7 @@ contract ConfigureRolesScript is Script {
         console.log("Roles configured:");
         console.log("  - YIELD_MANAGER_ROLE (", Roles.YIELD_MANAGER_ROLE, "):", yieldManager);
         console.log("  - FEE_POKER_ROLE (", Roles.FEE_POKER_ROLE, "):", feePoker);
+        console.log("  - PAUSER_ROLE (", Roles.PAUSER_ROLE, "):", pauser);
         console.log("");
         console.log("NOTE: Hook is still PAUSED. It will be unpaused");
         console.log("      automatically when initializePool() is called.");

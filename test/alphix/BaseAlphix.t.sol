@@ -73,6 +73,7 @@ abstract contract BaseAlphixTest is Test, Deployers {
     uint256 constant UNIT = 1e18;
     uint64 constant FEE_POKER_ROLE = 1;
     uint64 constant YIELD_MANAGER_ROLE = 2;
+    uint64 constant PAUSER_ROLE = 3;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
@@ -454,6 +455,15 @@ abstract contract BaseAlphixTest is Test, Deployers {
         pokeSelectors[0] = Alphix(hookAddr).poke.selector;
         // forge-lint: disable-next-line(named-struct-fields)
         am.setTargetFunctionRole(hookAddr, pokeSelectors, FEE_POKER_ROLE);
+
+        // Grant pauser role to owner (by default, tests can override)
+        am.grantRole(PAUSER_ROLE, owner, 0);
+
+        // Assign pauser role to pause/unpause functions on Hook
+        bytes4[] memory pauserSelectors = new bytes4[](2);
+        pauserSelectors[0] = Alphix(hookAddr).pause.selector;
+        pauserSelectors[1] = Alphix(hookAddr).unpause.selector;
+        am.setTargetFunctionRole(hookAddr, pauserSelectors, PAUSER_ROLE);
     }
 
     /**

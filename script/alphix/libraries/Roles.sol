@@ -10,6 +10,7 @@ pragma solidity ^0.8.26;
  * - ADMIN_ROLE (0): Default admin role in OpenZeppelin AccessManager, can manage all other roles
  * - FEE_POKER_ROLE (1): Can call Alphix.poke() to manually update dynamic fees
  * - YIELD_MANAGER_ROLE (2): Can manage rehypothecation settings (yield sources, tax rates, treasury)
+ * - PAUSER_ROLE (3): Can pause and unpause the contract
  */
 library Roles {
     /**
@@ -20,16 +21,17 @@ library Roles {
 
     /**
      * @dev Fee poker role - can manually trigger fee updates
-     * Granted in: 06b_ConfigureRoles.s.sol
-     * Revoked in: 06c_RemoveRoles.s.sol
      */
     uint64 internal constant FEE_POKER_ROLE = 1;
 
     /**
      * @dev Yield manager role - can manage rehypothecation settings
      * (yield sources, tax rates, treasury)
-     * Granted in: 06b_ConfigureRoles.s.sol
-     * Revoked in: 06c_RemoveRoles.s.sol
      */
     uint64 internal constant YIELD_MANAGER_ROLE = 2;
+
+    /**
+     * @dev Pauser role - can pause and unpause the contract
+     */
+    uint64 internal constant PAUSER_ROLE = 3;
 }

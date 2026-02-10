@@ -295,12 +295,12 @@ contract Alphix is
     }
 
     /// @inheritdoc IAlphix
-    function pause() external override onlyOwner {
+    function pause() external override restricted {
         _pause();
     }
 
     /// @inheritdoc IAlphix
-    function unpause() external override onlyOwner {
+    function unpause() external override restricted {
         _unpause();
     }
 
@@ -410,7 +410,6 @@ contract Alphix is
         override
         restricted
         poolConfigured
-        whenNotPaused
         nonReentrant
     {
         if (!ReHypothecationLib.isValidYieldSource(newYieldSource, currency)) {

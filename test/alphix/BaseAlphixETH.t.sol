@@ -73,6 +73,7 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
     // Use shared role constants from Roles library
     uint64 constant FEE_POKER_ROLE = Roles.FEE_POKER_ROLE;
     uint64 constant YIELD_MANAGER_ROLE = Roles.YIELD_MANAGER_ROLE;
+    uint64 constant PAUSER_ROLE = Roles.PAUSER_ROLE;
 
     // Optional: derived safe cap if tests ever want to override logic default
     uint256 internal constant GLOBAL_MAX_ADJ_RATE_SAFE =
@@ -305,6 +306,15 @@ abstract contract BaseAlphixETHTest is Test, Deployers {
         bytes4[] memory pokeSelectors = new bytes4[](1);
         pokeSelectors[0] = AlphixETH(payable(hookAddr)).poke.selector;
         am.setTargetFunctionRole(hookAddr, pokeSelectors, FEE_POKER_ROLE);
+
+        // Grant pauser role to owner
+        am.grantRole(PAUSER_ROLE, owner, 0);
+
+        // Assign pauser role to pause/unpause functions on Hook
+        bytes4[] memory pauserSelectors = new bytes4[](2);
+        pauserSelectors[0] = AlphixETH(payable(hookAddr)).pause.selector;
+        pauserSelectors[1] = AlphixETH(payable(hookAddr)).unpause.selector;
+        am.setTargetFunctionRole(hookAddr, pauserSelectors, PAUSER_ROLE);
     }
 
     /**

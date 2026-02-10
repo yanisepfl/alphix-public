@@ -146,13 +146,13 @@ interface IAlphix {
 
     /**
      * @notice Pause the contract.
-     * @dev Only callable by owner, prevents most contract operations.
+     * @dev Only callable by PAUSER_ROLE via AccessManager, prevents most contract operations.
      */
     function pause() external;
 
     /**
      * @notice Unpause the contract.
-     * @dev Only callable by owner, restores normal contract operations.
+     * @dev Only callable by PAUSER_ROLE via AccessManager, restores normal contract operations.
      */
     function unpause() external;
 

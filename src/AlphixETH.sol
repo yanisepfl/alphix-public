@@ -139,7 +139,6 @@ contract AlphixETH is Alphix {
         override
         restricted
         poolConfigured
-        whenNotPaused
         nonReentrant
     {
         if (currency.isAddressZero()) {
