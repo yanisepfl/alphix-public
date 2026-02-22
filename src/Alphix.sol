@@ -498,7 +498,9 @@ contract Alphix is
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForWithdrawal(shares);
 
         // Prevent burning shares when both amounts round to zero
-        if (amount0 == 0 && amount1 == 0) revert ZeroAmounts();
+        if (amount0 == 0) {
+            if (amount1 == 0) revert ZeroAmounts();
+        }
 
         // Burn shares first
         _burn(msg.sender, shares);
