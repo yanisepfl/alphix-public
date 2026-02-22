@@ -167,8 +167,10 @@ contract AlphixETH is Alphix {
                     // For ETH, redeem to ETH then deposit ETH to new yield source
                     uint256 assetsRedeemed = IAlphix4626WrapperWeth(oldYieldSource)
                         .redeemETH(state.sharesOwned, address(this), address(this));
-                    state.sharesOwned =
+                    uint256 newShares =
                         IAlphix4626WrapperWeth(newYieldSource).depositETH{value: assetsRedeemed}(address(this));
+                    if (newShares == 0) revert ReHypothecationLib.ZeroSharesReceived();
+                    state.sharesOwned = newShares;
                 } else {
                     state.sharesOwned = ReHypothecationLib.migrateYieldSource(
                         oldYieldSource, newYieldSource, currency, state.sharesOwned
@@ -256,6 +258,9 @@ contract AlphixETH is Alphix {
         // Calculate amounts with rounding down (protocol-favorable for withdrawals)
         (uint256 amount0, uint256 amount1) = _convertSharesToAmountsForWithdrawal(shares);
 
+        // Prevent burning shares when both amounts round to zero
+        if (amount0 == 0 && amount1 == 0) revert ZeroAmounts();
+
         // Burn shares first
         _burn(msg.sender, shares);
 
@@ -287,6 +292,7 @@ contract AlphixETH is Alphix {
 
         // Deposit ETH directly to yield source
         uint256 sharesReceived = IAlphix4626WrapperWeth(state.yieldSource).depositETH{value: amount}(address(this));
+        if (sharesReceived == 0) revert ReHypothecationLib.ZeroSharesReceived();
         state.sharesOwned += sharesReceived;
     }
 
@@ -331,11 +337,7 @@ contract AlphixETH is Alphix {
             // forge-lint: disable-next-line(unsafe-typecast)
             uint256 amount = uint256(currencyDelta);
             poolManager.take(currency, address(this), amount);
-
-            YieldSourceState storage state = _yieldSourceState[currency];
-            if (state.yieldSource == address(0)) revert YieldSourceNotConfigured();
-            uint256 sharesReceived = IAlphix4626WrapperWeth(state.yieldSource).depositETH{value: amount}(address(this));
-            state.sharesOwned += sharesReceived;
+            _depositToYieldSourceEth(currency, amount);
         } else if (currencyDelta < 0) {
             // Hook owes ETH - withdraw from yield source and settle
             // Safe: currencyDelta < 0
