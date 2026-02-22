@@ -252,8 +252,12 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
         // Add a large amount of liquidity so 1 share is worth dust
         _seedBaseLiquidity(user1, 100e18);
 
-        // Try removing 1 share out of 100e18 — amounts round to 0
-        // amount0 = floor(1 * amount0InYield / 100e18) = 0 for typical amounts
+        // Verify precondition: 1 share out of 100e18 rounds both amounts to 0
+        (uint256 previewAmount0, uint256 previewAmount1) = hook.previewRemoveReHypothecatedLiquidity(1);
+        assertEq(previewAmount0, 0, "Dust condition: amount0 should be 0 for 1 share");
+        assertEq(previewAmount1, 0, "Dust condition: amount1 should be 0 for 1 share");
+
+        // Try removing 1 share — should revert with ZeroAmounts
         vm.prank(user1);
         vm.expectRevert(IReHypothecation.ZeroAmounts.selector);
         hook.removeReHypothecatedLiquidity(1, 0, 0);
