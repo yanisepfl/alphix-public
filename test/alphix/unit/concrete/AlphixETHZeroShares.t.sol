@@ -56,26 +56,13 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
         _inflateEthVaultSharePrice();
 
         // First depositor gets real hook shares (hook totalSupply == 0 → amounts from pool price)
-        uint256 largeShares = 1e18;
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(largeShares);
-
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 10 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(largeShares, 0, 0);
-        vm.stopPrank();
+        _seedBaseLiquidity(user1, 1e18);
 
         // Find minimal hook shares that yield a non-zero ETH amount but 0 vault shares
-        (uint256 tinyAmount0, uint256 tinyAmount1) = hook.previewAddReHypothecatedLiquidity(1);
-        uint256 hookShares = 1;
-        while (tinyAmount0 == 0 && tinyAmount1 == 0 && hookShares < 2000) {
-            hookShares++;
-            (tinyAmount0, tinyAmount1) = hook.previewAddReHypothecatedLiquidity(hookShares);
-        }
+        (uint256 hookShares, uint256 tinyAmount0, uint256 tinyAmount1) = _findMinimalHookShares();
 
-        // Verify precondition: vault would return 0 shares
+        // Verify preconditions: ETH path is exercised and vault returns 0 shares
+        assertGt(tinyAmount0, 0, "tinyAmount0 must be > 0 to exercise ETH deposit path");
         assertEq(ethVault.previewDeposit(tinyAmount0), 0, "Vault should return 0 shares for this amount");
 
         // Attempt deposit — should revert
@@ -98,24 +85,11 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
         _inflateEthVaultSharePrice();
 
         // First depositor provides base liquidity
-        uint256 largeShares = 1e18;
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(largeShares);
-
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 10 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(largeShares, 0, 0);
-        vm.stopPrank();
+        _seedBaseLiquidity(user1, 1e18);
 
         // Find hook shares that trigger zero vault shares
-        (uint256 tinyAmount0, uint256 tinyAmount1) = hook.previewAddReHypothecatedLiquidity(1);
-        uint256 hookShares = 1;
-        while (tinyAmount0 == 0 && tinyAmount1 == 0 && hookShares < 2000) {
-            hookShares++;
-            (tinyAmount0, tinyAmount1) = hook.previewAddReHypothecatedLiquidity(hookShares);
-        }
+        (uint256 hookShares, uint256 tinyAmount0, uint256 tinyAmount1) = _findMinimalHookShares();
+        assertGt(tinyAmount0, 0, "tinyAmount0 must be > 0 to exercise ETH deposit path");
 
         MockERC20(Currency.unwrap(key.currency1)).mint(user2, tinyAmount1 + 1e18);
         vm.deal(user2, tinyAmount0 + 1 ether);
@@ -143,25 +117,8 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
      * @dev Migrates real ETH from old vault to new vault with inflated share price.
      */
     function test_setYieldSource_migration_revertsOnZeroSharesReceived() public {
-        address yieldManager = makeAddr("yieldManager");
-        vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
-        vm.stopPrank();
-
-        // Setup yield sources and add real liquidity
-        vm.startPrank(yieldManager);
-        hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
-        hook.setYieldSource(key.currency1, address(tokenVault));
-        vm.stopPrank();
-
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(10e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 1 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(10e18, 0, 0);
-        vm.stopPrank();
+        address yieldManager = _setupYieldSources();
+        _seedBaseLiquidity(user1, 10e18);
 
         uint256 amountInYield = hook.getAmountInYieldSource(Currency.wrap(address(0)));
         assertGt(amountInYield, 0, "Should have ETH in yield source");
@@ -180,24 +137,8 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
      * @dev After revert, yield source address and sharesOwned should be unchanged.
      */
     function test_setYieldSource_migration_zeroSharesRevert_preservesState() public {
-        address yieldManager = makeAddr("yieldManager");
-        vm.startPrank(owner);
-        _setupYieldManagerRole(yieldManager, accessManager, address(hook));
-        vm.stopPrank();
-
-        vm.startPrank(yieldManager);
-        hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
-        hook.setYieldSource(key.currency1, address(tokenVault));
-        vm.stopPrank();
-
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(10e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 1 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(10e18, 0, 0);
-        vm.stopPrank();
+        address yieldManager = _setupYieldSources();
+        _seedBaseLiquidity(user1, 10e18);
 
         uint256 amountInYield = hook.getAmountInYieldSource(Currency.wrap(address(0)));
         address yieldSourceBefore = hook.getCurrencyYieldSource(Currency.wrap(address(0)));
@@ -232,16 +173,7 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
      */
     function test_removeReHypothecatedLiquidity_revertsOnZeroAmounts_afterLoss() public {
         _setupYieldSources();
-
-        // Add liquidity
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(10e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 1 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(10e18, 0, 0);
-        vm.stopPrank();
+        _seedBaseLiquidity(user1, 10e18);
 
         // Simulate severe losses — drain both vaults to ~1 wei
         _drainVaultsToMinimum();
@@ -265,16 +197,7 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
      */
     function test_removeReHypothecatedLiquidity_succeedsWithLargeSharesAfterLoss() public {
         _setupYieldSources();
-
-        // Add liquidity
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(10e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 1 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(10e18, 0, 0);
-        vm.stopPrank();
+        _seedBaseLiquidity(user1, 10e18);
 
         // Simulate severe losses
         _drainVaultsToMinimum();
@@ -288,6 +211,10 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
             vm.prank(user1);
             hook.removeReHypothecatedLiquidity(10e18, 0, 0);
             assertEq(hook.balanceOf(user1), 0, "User should have 0 shares after full withdrawal");
+        } else {
+            vm.prank(user1);
+            vm.expectRevert(IReHypothecation.ZeroAmounts.selector);
+            hook.removeReHypothecatedLiquidity(10e18, 0, 0);
         }
     }
 
@@ -297,15 +224,7 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
      */
     function test_removeReHypothecatedLiquidity_zeroAmountsRevert_preservesShares() public {
         _setupYieldSources();
-
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(10e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 1 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(10e18, 0, 0);
-        vm.stopPrank();
+        _seedBaseLiquidity(user1, 10e18);
 
         _drainVaultsToMinimum();
 
@@ -330,15 +249,8 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
     function test_removeReHypothecatedLiquidity_revertsOnZeroAmounts_dustCondition() public {
         _setupYieldSources();
 
-        // Add a large amount of liquidity: 100e18 hook shares
-        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(100e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 10 ether);
-
-        vm.startPrank(user1);
-        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
-        hook.addReHypothecatedLiquidity{value: amount0Needed}(100e18, 0, 0);
-        vm.stopPrank();
+        // Add a large amount of liquidity so 1 share is worth dust
+        _seedBaseLiquidity(user1, 100e18);
 
         // Try removing 1 share out of 100e18 — amounts round to 0
         // amount0 = floor(1 * amount0InYield / 100e18) = 0 for typical amounts
@@ -351,8 +263,8 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
                               HELPER FUNCTIONS
     ═══════════════════════════════════════════════════════════════════════════ */
 
-    function _setupYieldSources() internal {
-        address yieldManager = makeAddr("yieldManager");
+    function _setupYieldSources() internal returns (address yieldManager) {
+        yieldManager = makeAddr("yieldManager");
 
         vm.startPrank(owner);
         _setupYieldManagerRole(yieldManager, accessManager, address(hook));
@@ -362,6 +274,32 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
         hook.setYieldSource(key.currency1, address(tokenVault));
         vm.stopPrank();
+    }
+
+    /// @dev Seeds base liquidity for a user with the given number of hook shares
+    function _seedBaseLiquidity(address user, uint256 shares) internal {
+        (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(shares);
+        MockERC20(Currency.unwrap(key.currency1)).mint(user, amount1Needed + 1e18);
+        vm.deal(user, amount0Needed + 10 ether);
+
+        vm.startPrank(user);
+        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
+        hook.addReHypothecatedLiquidity{value: amount0Needed}(shares, 0, 0);
+        vm.stopPrank();
+    }
+
+    /// @dev Finds minimal hook shares where tinyAmount0 > 0 but ethVault.previewDeposit(tinyAmount0) == 0
+    function _findMinimalHookShares()
+        internal
+        view
+        returns (uint256 hookShares, uint256 tinyAmount0, uint256 tinyAmount1)
+    {
+        hookShares = 1;
+        (tinyAmount0, tinyAmount1) = hook.previewAddReHypothecatedLiquidity(hookShares);
+        while (tinyAmount0 == 0 && hookShares < 2000) {
+            hookShares++;
+            (tinyAmount0, tinyAmount1) = hook.previewAddReHypothecatedLiquidity(hookShares);
+        }
     }
 
     /// @dev Inflates ethVault share price to ~1001 ether per share
@@ -382,7 +320,7 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
     function _deployInflatedEthVault(uint256 donation) internal returns (MockAlphix4626WrapperWeth newVault) {
         newVault = new MockAlphix4626WrapperWeth(address(weth));
 
-        vm.deal(address(this), donation + 1 ether);
+        vm.deal(address(this), donation + 1);
         weth.deposit{value: 1}();
         weth.approve(address(newVault), 1);
         newVault.deposit(1, address(this));
