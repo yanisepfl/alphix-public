@@ -744,6 +744,10 @@ contract Alphix is
 
     /**
      * @dev Validates that current price is within acceptable slippage of expected price.
+     *      NOTE: The slippage tolerance applies to sqrtPriceX96, not the actual token price.
+     *      Since price = (sqrtPriceX96)^2 / 2^192, a 1% tolerance on sqrtPrice corresponds
+     *      to approximately 2% on the actual token price. Frontends should account for this
+     *      when setting maxPriceSlippage.
      * @param expectedSqrtPriceX96 The price user expects.
      * @param maxPriceSlippage Maximum allowed deviation, same scale as LP fee (1000000 = 100%).
      */
@@ -779,6 +783,9 @@ contract Alphix is
 
     /**
      * @dev Gets the total assets in the yield source for a currency.
+     *      NOTE: This relies on the yield source's convertToAssets() returning
+     *      accurate values. Yield sources are assumed to be trusted. A compromised or buggy
+     *      yield source returning inflated values would propagate to Alphix share pricing.
      * @param currency The currency to query.
      * @return The amount of assets in the yield source.
      */
