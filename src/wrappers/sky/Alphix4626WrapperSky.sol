@@ -192,7 +192,7 @@ contract Alphix4626WrapperSky is ERC4626, IAlphix4626WrapperSky, Ownable2Step, R
         // Seed liquidity: USDS → sUSDS
         USDS.safeTransferFrom(msg.sender, address(this), seedLiquidityUsds);
         uint256 susdsExpected = PSM.previewSwapExactIn(address(USDS), address(SUSDS), seedLiquidityUsds);
-        USDS.approve(address(PSM), seedLiquidityUsds);
+        USDS.forceApprove(address(PSM), seedLiquidityUsds);
         PSM.swapExactIn(address(USDS), address(SUSDS), seedLiquidityUsds, susdsExpected, address(this), referralCode);
 
         // Mint initial shares to deployer to prevent inflation attacks (in 1:1 ratio)
@@ -408,7 +408,7 @@ contract Alphix4626WrapperSky is ERC4626, IAlphix4626WrapperSky, Ownable2Step, R
 
         // Swap USDS → sUSDS
         uint256 susdsExpected = PSM.previewSwapExactIn(address(USDS), address(SUSDS), assets);
-        USDS.approve(address(PSM), assets);
+        USDS.forceApprove(address(PSM), assets);
         PSM.swapExactIn(address(USDS), address(SUSDS), assets, susdsExpected, address(this), _referralCode);
 
         // Mint wrapper shares
@@ -431,7 +431,7 @@ contract Alphix4626WrapperSky is ERC4626, IAlphix4626WrapperSky, Ownable2Step, R
         uint256 susdsNeeded = PSM.previewSwapExactOut(address(SUSDS), address(USDS), assets);
 
         // Swap sUSDS → USDS directly to receiver
-        SUSDS.approve(address(PSM), susdsNeeded);
+        SUSDS.forceApprove(address(PSM), susdsNeeded);
         PSM.swapExactOut(address(SUSDS), address(USDS), assets, susdsNeeded, receiver, _referralCode);
 
         emit Withdraw(caller, receiver, owner_, assets, shares);
