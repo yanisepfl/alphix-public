@@ -29,7 +29,7 @@ library AlphixGlobalConstants {
      */
 
     // Time-related bounds (in seconds)
-    uint256 internal constant MIN_PERIOD = 1 hours;
+    uint256 internal constant MIN_PERIOD = 1 seconds;
     uint256 internal constant MAX_PERIOD = 30 days;
 
     // Lookback period bounds (in days)
