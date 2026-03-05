@@ -66,6 +66,17 @@ contract SlippageProtectionFuzzTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), type(uint256).max);
         MockERC20(Currency.unwrap(currency1)).approve(address(swapRouter), type(uint256).max);
         vm.stopPrank();
+
+        // Seed first deposit as owner (first-depositor restriction)
+        uint256 seedShares = 1e18;
+        (uint256 amt0, uint256 amt1) = hook.previewAddReHypothecatedLiquidity(seedShares);
+        vm.startPrank(owner);
+        MockERC20(Currency.unwrap(currency0)).mint(owner, amt0);
+        MockERC20(Currency.unwrap(currency1)).mint(owner, amt1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), amt0);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), amt1);
+        hook.addReHypothecatedLiquidity(seedShares, 0, 0);
+        vm.stopPrank();
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════

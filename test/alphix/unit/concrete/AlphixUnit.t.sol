@@ -599,12 +599,12 @@ contract AlphixUnitTest is BaseAlphixTest {
         hook.setYieldSource(currency1, address(vault1));
         vm.stopPrank();
 
-        // Add liquidity to create shares in yield source
+        // Add liquidity to create shares in yield source (first deposit must be as owner)
         uint256 depositAmount = 100e18;
-        MockERC20(Currency.unwrap(currency0)).mint(user1, depositAmount);
-        MockERC20(Currency.unwrap(currency1)).mint(user1, depositAmount);
+        MockERC20(Currency.unwrap(currency0)).mint(owner, depositAmount);
+        MockERC20(Currency.unwrap(currency1)).mint(owner, depositAmount);
 
-        vm.startPrank(user1);
+        vm.startPrank(owner);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), depositAmount);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), depositAmount);
         hook.addReHypothecatedLiquidity(1e18, 0, 0);
@@ -916,8 +916,14 @@ contract AlphixUnitTest is BaseAlphixTest {
         hook.addReHypothecatedLiquidity(100e18, 0, 0); // Get 100e18 shares
         vm.stopPrank();
 
+        // Simulate severe vault losses so per-share value drops below 1 wei
+        // This makes 1 share worth 0 of each asset (rounds down to 0)
+        uint256 vault0Assets = vault0.totalAssets();
+        uint256 vault1Assets = vault1.totalAssets();
+        if (vault0Assets > 1) vault0.simulateLoss(vault0Assets - 1);
+        if (vault1Assets > 1) vault1.simulateLoss(vault1Assets - 1);
+
         // Now try to withdraw with just 1 share - both amounts will round to 0
-        // With 100e18 shares and ~100e18 total assets, 1 share gives ~1e-18 of each asset = 0
         // This should revert with ZeroAmounts
         vm.prank(user1);
         vm.expectRevert(IReHypothecation.ZeroAmounts.selector);
@@ -1453,6 +1459,15 @@ contract AlphixUnitTest is BaseAlphixTest {
         vm.startPrank(yieldManager);
         hook.setYieldSource(currency0, address(vault0));
         hook.setYieldSource(currency1, address(vault1));
+        vm.stopPrank();
+
+        // Seed first deposit as owner (required by first-depositor restriction)
+        uint256 seedShares = 1e18;
+        (uint256 amt0, uint256 amt1) = hook.previewAddReHypothecatedLiquidity(seedShares);
+        vm.startPrank(owner);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), amt0);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), amt1);
+        hook.addReHypothecatedLiquidity(seedShares, 0, 0);
         vm.stopPrank();
     }
 

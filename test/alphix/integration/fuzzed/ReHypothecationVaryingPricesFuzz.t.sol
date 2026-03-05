@@ -96,6 +96,10 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // PHASE 1: Alice deposits - verify preview matches actual deposit
         // ══════════════════════════════════════════════════════════════════════
         {
+            // Seed first deposit as owner to establish share price
+            // (preview formula differs at totalSupply == 0 vs > 0)
+            _addReHypoToTestPool(testHook.owner(), 1e18);
+
             (uint256 previewDeposit0, uint256 previewDeposit1) =
                 Alphix(address(testHook)).previewAddReHypothecatedLiquidity(aliceShares);
 
@@ -113,7 +117,9 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
 
             // Verify shares minted
             assertEq(Alphix(address(testHook)).balanceOf(alice), aliceShares, "Shares should be minted");
-            assertEq(Alphix(address(testHook)).totalSupply(), aliceShares, "Total supply should equal alice shares");
+            assertEq(
+                Alphix(address(testHook)).totalSupply(), 1e18 + aliceShares, "Total supply should include seed + alice"
+            );
 
             // Verify yield sources have funds (at least one should have funds depending on price)
             uint256 yieldSource0Initial = Alphix(address(testHook)).getAmountInYieldSource(testCurrency0);
@@ -151,7 +157,7 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
             _addReHypoToTestPool(bob, bobShares);
 
             assertEq(Alphix(address(testHook)).balanceOf(bob), bobShares, "Bob should have shares");
-            assertEq(Alphix(address(testHook)).totalSupply(), aliceShares + bobShares, "Total supply updated");
+            assertEq(Alphix(address(testHook)).totalSupply(), 1e18 + aliceShares + bobShares, "Total supply updated");
 
             // Record pre-yield values for Alice
             (alicePreYield0, alicePreYield1) =
@@ -257,11 +263,8 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
 
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
-        assertEq(Alphix(address(testHook)).totalSupply(), 0, "Total supply is zero");
-
-        // Verify yield sources are empty
-        assertEq(Alphix(address(testHook)).getAmountInYieldSource(testCurrency0), 0, "Yield source0 empty");
-        assertEq(Alphix(address(testHook)).getAmountInYieldSource(testCurrency1), 0, "Yield source1 empty");
+        // Only the seed deposit (1e18 shares from owner) remains
+        assertEq(Alphix(address(testHook)).totalSupply(), 1e18, "Only seed shares remain");
     }
 
     /**
@@ -701,11 +704,13 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
         // Deploy test tokens with specified decimals
         (testCurrency0, testCurrency1) = deployCurrencyPairWithDecimals(decimals0, decimals1);
 
-        // Fund test addresses
+        // Fund test addresses (including owner for seed deposits at extreme prices)
         MockERC20(Currency.unwrap(testCurrency0)).mint(alice, INITIAL_TOKEN_AMOUNT * 100);
         MockERC20(Currency.unwrap(testCurrency1)).mint(alice, INITIAL_TOKEN_AMOUNT * 100);
         MockERC20(Currency.unwrap(testCurrency0)).mint(bob, INITIAL_TOKEN_AMOUNT * 100);
         MockERC20(Currency.unwrap(testCurrency1)).mint(bob, INITIAL_TOKEN_AMOUNT * 100);
+        MockERC20(Currency.unwrap(testCurrency0)).mint(owner, INITIAL_TOKEN_AMOUNT * 100);
+        MockERC20(Currency.unwrap(testCurrency1)).mint(owner, INITIAL_TOKEN_AMOUNT * 100);
 
         // Calculate sqrt price from tick
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(initialTick);
@@ -796,12 +801,19 @@ contract ReHypothecationVaryingPricesFuzzTest is BaseAlphixTest {
     }
 
     function _addReHypoToTestPool(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = Alphix(address(testHook)).previewAddReHypothecatedLiquidity(shares);
+        Alphix h = Alphix(address(testHook));
+        bool isFirstDeposit = h.totalSupply() == 0;
+        address depositor = isFirstDeposit ? h.owner() : user;
 
-        vm.startPrank(user);
+        (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
+
+        vm.startPrank(depositor);
         MockERC20(Currency.unwrap(testCurrency0)).approve(address(testHook), amount0);
         MockERC20(Currency.unwrap(testCurrency1)).approve(address(testHook), amount1);
-        Alphix(address(testHook)).addReHypothecatedLiquidity(shares, 0, 0);
+        h.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != depositor) {
+            h.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 

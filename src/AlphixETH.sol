@@ -190,6 +190,11 @@ contract AlphixETH is Alphix {
      *      Therefore whenNotPaused already implies pool is configured.
      *      ASSUMPTION: The admin must not call unpause() before initializePool().
      *
+     *      First deposit (totalSupply == 0) is restricted to the owner to prevent
+     *      first-depositor share manipulation attacks.
+     *
+     *      NOTE: Fee-on-transfer, rebasing, and ERC-777 tokens are not supported for currency1.
+     *      Pools must only use standard ERC-20 tokens.
      */
     function addReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
@@ -200,6 +205,9 @@ contract AlphixETH is Alphix {
         returns (BalanceDelta delta)
     {
         if (shares == 0) revert ZeroShares();
+
+        // First deposit restricted to owner to prevent share manipulation attacks
+        if (totalSupply() == 0 && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
 
         // Check slippage before any state changes
         _checkPriceSlippage(expectedSqrtPriceX96, maxPriceSlippage);

@@ -1102,12 +1102,19 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
     }
 
     function _addReHypoLiquidity(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = Alphix(address(hook)).previewAddReHypothecatedLiquidity(shares);
+        Alphix h = Alphix(address(hook));
+        bool isFirstDeposit = h.totalSupply() == 0;
+        address depositor = isFirstDeposit ? owner : user;
 
-        vm.startPrank(user);
+        (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
+
+        vm.startPrank(depositor);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
+        h.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != owner) {
+            h.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 
@@ -1149,12 +1156,18 @@ contract ReHypothecationSwapsAccountingTest is BaseAlphixTest {
     function _addReHypoLiquidityToHook(address user, uint256 shares, Alphix targetHook, PoolKey memory poolKey)
         internal
     {
+        bool isFirstDeposit = targetHook.totalSupply() == 0;
+        address depositor = isFirstDeposit ? targetHook.owner() : user;
+
         (uint256 amount0, uint256 amount1) = targetHook.previewAddReHypothecatedLiquidity(shares);
 
-        vm.startPrank(user);
+        vm.startPrank(depositor);
         MockERC20(Currency.unwrap(poolKey.currency0)).approve(address(targetHook), amount0);
         MockERC20(Currency.unwrap(poolKey.currency1)).approve(address(targetHook), amount1);
         targetHook.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != depositor) {
+            targetHook.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 

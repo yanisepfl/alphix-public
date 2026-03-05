@@ -357,12 +357,11 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         hook.setYieldSource(key.currency1, address(tokenVault));
         vm.stopPrank();
 
-        // Add liquidity with ETH
+        // Add liquidity with ETH (first deposit must be as owner)
         (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(10e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 1 ether);
+        MockERC20(Currency.unwrap(key.currency1)).mint(owner, amount1Needed + 1e18);
 
-        vm.startPrank(user1);
+        vm.startPrank(owner);
         MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
         hook.addReHypothecatedLiquidity{value: amount0Needed}(10e18, 0, 0);
         vm.stopPrank();
@@ -402,12 +401,11 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         hook.setYieldSource(key.currency1, address(tokenVault));
         vm.stopPrank();
 
-        // Add liquidity
+        // Add liquidity (first deposit must be as owner)
         (uint256 amount0Needed, uint256 amount1Needed) = hook.previewAddReHypothecatedLiquidity(10e18);
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, amount1Needed + 1e18);
-        vm.deal(user1, amount0Needed + 1 ether);
+        MockERC20(Currency.unwrap(key.currency1)).mint(owner, amount1Needed + 1e18);
 
-        vm.startPrank(user1);
+        vm.startPrank(owner);
         MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
         hook.addReHypothecatedLiquidity{value: amount0Needed}(10e18, 0, 0);
         vm.stopPrank();
@@ -479,11 +477,10 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         // Tick range is already set at initializePool time (full range by default)
         // Yield sources are NOT configured, so addReHypothecatedLiquidity should revert
 
-        // Mint tokens and try to add liquidity without yield source
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, 100e18);
-        vm.deal(user1, 10 ether);
+        // Must use owner since totalSupply == 0 (first-depositor restriction)
+        MockERC20(Currency.unwrap(key.currency1)).mint(owner, 100e18);
 
-        vm.startPrank(user1);
+        vm.startPrank(owner);
         MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
 
         // This should revert with YieldSourceNotConfigured
@@ -532,10 +529,10 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         // since the same check is now applied in _resolveHookDeltaEth.
 
         // Don't set up yield sources - leave them unconfigured
-        MockERC20(Currency.unwrap(key.currency1)).mint(user1, 100e18);
-        vm.deal(user1, 10 ether);
+        // Must use owner since totalSupply == 0 (first-depositor restriction)
+        MockERC20(Currency.unwrap(key.currency1)).mint(owner, 100e18);
 
-        vm.startPrank(user1);
+        vm.startPrank(owner);
         MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), type(uint256).max);
 
         // This should revert with YieldSourceNotConfigured for ETH (currency0 = address(0))
@@ -610,6 +607,15 @@ contract AlphixETHUnitTest is BaseAlphixETHTest {
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
         // Set token yield source
         hook.setYieldSource(key.currency1, address(tokenVault));
+        vm.stopPrank();
+
+        // Seed first deposit as owner (required by first-depositor restriction)
+        uint256 seedShares = 1e18;
+        (uint256 amt0, uint256 amt1) = hook.previewAddReHypothecatedLiquidity(seedShares);
+        MockERC20(Currency.unwrap(key.currency1)).mint(owner, amt1);
+        vm.startPrank(owner);
+        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), amt1);
+        AlphixETH(payable(address(hook))).addReHypothecatedLiquidity{value: amt0}(seedShares, 0, 0);
         vm.stopPrank();
     }
 

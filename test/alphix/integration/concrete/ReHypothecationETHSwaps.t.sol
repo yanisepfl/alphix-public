@@ -419,9 +419,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         );
         vm.stopPrank();
 
-        // Add rehypo liquidity
+        // Add rehypo liquidity (first deposit must be as owner)
         (uint256 amount0, uint256 amount1) = freshHook.previewAddReHypothecatedLiquidity(10e18);
-        vm.startPrank(alice);
+        vm.startPrank(owner);
         narrowToken.approve(address(freshHook), amount1);
         freshHook.addReHypothecatedLiquidity{value: amount0}(10e18, 0, 0);
         vm.stopPrank();
@@ -503,9 +503,9 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
         );
         vm.stopPrank();
 
-        // Add rehypo liquidity
+        // Add rehypo liquidity (first deposit must be as owner)
         (uint256 amount0, uint256 amount1) = freshHook.previewAddReHypothecatedLiquidity(10e18);
-        vm.startPrank(alice);
+        vm.startPrank(owner);
         asymToken.approve(address(freshHook), amount1);
         freshHook.addReHypothecatedLiquidity{value: amount0}(10e18, 0, 0);
         vm.stopPrank();
@@ -729,11 +729,18 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
     }
 
     function _addReHypoLiquidity(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = AlphixETH(payable(address(hook))).previewAddReHypothecatedLiquidity(shares);
+        AlphixETH h = AlphixETH(payable(address(hook)));
+        bool isFirstDeposit = h.totalSupply() == 0;
+        address depositor = isFirstDeposit ? owner : user;
 
-        vm.startPrank(user);
+        (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
+
+        vm.startPrank(depositor);
         token.approve(address(hook), amount1);
-        AlphixETH(payable(address(hook))).addReHypothecatedLiquidity{value: amount0}(shares, 0, 0);
+        h.addReHypothecatedLiquidity{value: amount0}(shares, 0, 0);
+        if (isFirstDeposit && user != owner) {
+            h.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 

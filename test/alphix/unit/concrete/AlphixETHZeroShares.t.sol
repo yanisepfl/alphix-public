@@ -50,12 +50,15 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
      * @dev Inflates vault share price via yield donation so small deposits round to 0 shares.
      */
     function test_depositToYieldSourceEth_revertsOnZeroSharesReceived() public {
-        _setupYieldSources();
+        _configureYieldSources();
 
-        // Seed the vault and inflate share price: 1 share = 1001 ether
+        // Inflate vault share price BEFORE seed deposit so seed gets expensive vault shares
         _inflateEthVaultSharePrice();
 
-        // First depositor gets real hook shares (hook totalSupply == 0 → amounts from pool price)
+        // Seed deposit as owner (at inflated vault price → few vault shares)
+        _seedOwnerDeposit();
+
+        // Second depositor provides base liquidity
         _seedBaseLiquidity(user1, 1e18);
 
         // Find minimal hook shares that yield a non-zero ETH amount but 0 vault shares
@@ -81,10 +84,15 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
      * @dev The revert must be atomic — no ETH should be lost to the vault.
      */
     function test_depositToYieldSourceEth_zeroSharesRevert_preservesUserETH() public {
-        _setupYieldSources();
+        _configureYieldSources();
+
+        // Inflate vault share price BEFORE seed deposit so seed gets expensive vault shares
         _inflateEthVaultSharePrice();
 
-        // First depositor provides base liquidity
+        // Seed deposit as owner (at inflated vault price → few vault shares)
+        _seedOwnerDeposit();
+
+        // Second depositor provides base liquidity
         _seedBaseLiquidity(user1, 1e18);
 
         // Find hook shares that trigger zero vault shares
@@ -243,8 +251,9 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
 
     /**
      * @notice Verifies removeReHypothecatedLiquidity reverts when both amounts round to zero
-     *         due to large share supply making 1 share worth ~0 (dust condition, no vault loss).
-     * @dev Mirrors the test pattern from AlphixUnit.t.sol for consistency.
+     *         due to vault losses making per-share value vanishingly small.
+     * @dev With the seed deposit, 1:1 vault ratio means 1 share = 1 wei (never 0 without loss).
+     *      Draining the vaults forces per-share value below 1, so 1 share rounds to 0.
      */
     function test_removeReHypothecatedLiquidity_revertsOnZeroAmounts_dustCondition() public {
         _setupYieldSources();
@@ -252,7 +261,10 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
         // Add a large amount of liquidity so 1 share is worth dust
         _seedBaseLiquidity(user1, 100e18);
 
-        // Verify precondition: 1 share out of 100e18 rounds both amounts to 0
+        // Drain vaults to near-zero so per-share value rounds to 0
+        _drainVaultsToMinimum();
+
+        // Verify precondition: 1 share rounds both amounts to 0 after loss
         (uint256 previewAmount0, uint256 previewAmount1) = hook.previewRemoveReHypothecatedLiquidity(1);
         assertEq(previewAmount0, 0, "Dust condition: amount0 should be 0 for 1 share");
         assertEq(previewAmount1, 0, "Dust condition: amount1 should be 0 for 1 share");
@@ -268,6 +280,12 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
     ═══════════════════════════════════════════════════════════════════════════ */
 
     function _setupYieldSources() internal returns (address yieldManager) {
+        yieldManager = _configureYieldSources();
+        _seedOwnerDeposit();
+    }
+
+    /// @dev Configures yield sources without seeding — use when inflation must happen before seeding
+    function _configureYieldSources() internal returns (address yieldManager) {
         yieldManager = makeAddr("yieldManager");
 
         vm.startPrank(owner);
@@ -277,6 +295,18 @@ contract AlphixETHZeroSharesTest is BaseAlphixETHTest {
         vm.startPrank(yieldManager);
         hook.setYieldSource(Currency.wrap(address(0)), address(ethVault));
         hook.setYieldSource(key.currency1, address(tokenVault));
+        vm.stopPrank();
+    }
+
+    /// @dev Seeds first deposit as owner (required by first-depositor restriction)
+    function _seedOwnerDeposit() internal {
+        uint256 seedShares = 1e18;
+        (uint256 seedAmt0, uint256 seedAmt1) = hook.previewAddReHypothecatedLiquidity(seedShares);
+        MockERC20(Currency.unwrap(key.currency1)).mint(owner, seedAmt1);
+        vm.deal(owner, seedAmt0 + 1 ether);
+        vm.startPrank(owner);
+        MockERC20(Currency.unwrap(key.currency1)).approve(address(hook), seedAmt1);
+        hook.addReHypothecatedLiquidity{value: seedAmt0}(seedShares, 0, 0);
         vm.stopPrank();
     }
 
