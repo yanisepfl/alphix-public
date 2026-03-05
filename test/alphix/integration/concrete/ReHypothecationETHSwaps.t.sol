@@ -731,14 +731,14 @@ contract ReHypothecationETHSwapsTest is BaseAlphixETHTest {
     function _addReHypoLiquidity(address user, uint256 shares) internal {
         AlphixETH h = AlphixETH(payable(address(hook)));
         bool isFirstDeposit = h.totalSupply() == 0;
-        address depositor = isFirstDeposit ? owner : user;
+        address depositor = isFirstDeposit ? h.owner() : user;
 
         (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
 
         vm.startPrank(depositor);
         token.approve(address(hook), amount1);
         h.addReHypothecatedLiquidity{value: amount0}(shares, 0, 0);
-        if (isFirstDeposit && user != owner) {
+        if (isFirstDeposit && user != depositor) {
             h.transfer(user, shares);
         }
         vm.stopPrank();

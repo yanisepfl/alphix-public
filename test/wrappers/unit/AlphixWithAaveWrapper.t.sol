@@ -558,7 +558,7 @@ contract AlphixWithAaveWrapperTest is BaseAlphixTest {
     function _addReHypoLiquidity(address user, uint256 shares) internal {
         Alphix h = Alphix(address(hook));
         bool isFirstDeposit = h.totalSupply() == 0;
-        address depositor = isFirstDeposit ? owner : user;
+        address depositor = isFirstDeposit ? h.owner() : user;
 
         (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
 
@@ -566,7 +566,7 @@ contract AlphixWithAaveWrapperTest is BaseAlphixTest {
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
         h.addReHypothecatedLiquidity(shares, 0, 0);
-        if (isFirstDeposit && user != owner) {
+        if (isFirstDeposit && user != depositor) {
             h.transfer(user, shares);
         }
         vm.stopPrank();
