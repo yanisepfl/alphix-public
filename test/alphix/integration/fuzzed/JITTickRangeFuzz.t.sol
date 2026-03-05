@@ -383,12 +383,18 @@ contract JITTickRangeFuzzTest is BaseAlphixTest {
         address user,
         uint256 shares
     ) internal {
+        bool isFirstDeposit = _hook.totalSupply() == 0;
+        address depositor = isFirstDeposit ? _hook.owner() : user;
+
         (uint256 amount0, uint256 amount1) = _hook.previewAddReHypothecatedLiquidity(shares);
 
-        vm.startPrank(user);
+        vm.startPrank(depositor);
         MockERC20(Currency.unwrap(_currency0)).approve(address(_hook), amount0 + 1);
         MockERC20(Currency.unwrap(_currency1)).approve(address(_hook), amount1 + 1);
         _hook.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != depositor) {
+            _hook.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 }

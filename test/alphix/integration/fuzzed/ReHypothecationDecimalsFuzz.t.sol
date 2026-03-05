@@ -84,6 +84,10 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
         // PHASE 1: Alice deposits - verify preview matches actual
         // ══════════════════════════════════════════════════════════════════════
         {
+            // Seed first deposit as owner to establish share price
+            // (preview formula differs at totalSupply == 0 vs > 0)
+            _addReHypoToTestPool(testHook.owner(), 1e18);
+
             (uint256 previewDeposit0, uint256 previewDeposit1) =
                 Alphix(address(testHook)).previewAddReHypothecatedLiquidity(aliceShares);
 
@@ -113,7 +117,7 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
             _addReHypoToTestPool(bob, bobShares);
 
             assertEq(Alphix(address(testHook)).balanceOf(bob), bobShares, "Bob shares minted");
-            assertEq(Alphix(address(testHook)).totalSupply(), aliceShares + bobShares, "Total supply correct");
+            assertEq(Alphix(address(testHook)).totalSupply(), 1e18 + aliceShares + bobShares, "Total supply correct");
 
             // Same shares = same value
             (uint256 alice50Preview0, uint256 alice50Preview1) =
@@ -199,7 +203,8 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
         Alphix(address(testHook)).removeReHypothecatedLiquidity(aliceShares, 0, 0);
 
         assertEq(Alphix(address(testHook)).balanceOf(alice), 0, "Alice shares burned");
-        assertEq(Alphix(address(testHook)).totalSupply(), 0, "Total supply zero");
+        // Only the seed deposit (1e18 shares from owner) remains
+        assertEq(Alphix(address(testHook)).totalSupply(), 1e18, "Only seed shares remain");
     }
 
     /**
@@ -685,12 +690,19 @@ contract ReHypothecationDecimalsFuzzTest is BaseAlphixTest {
     }
 
     function _addReHypoToTestPool(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = Alphix(address(testHook)).previewAddReHypothecatedLiquidity(shares);
+        Alphix h = Alphix(address(testHook));
+        bool isFirstDeposit = h.totalSupply() == 0;
+        address depositor = isFirstDeposit ? h.owner() : user;
 
-        vm.startPrank(user);
+        (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
+
+        vm.startPrank(depositor);
         MockERC20(Currency.unwrap(testCurrency0)).approve(address(testHook), amount0);
         MockERC20(Currency.unwrap(testCurrency1)).approve(address(testHook), amount1);
-        Alphix(address(testHook)).addReHypothecatedLiquidity(shares, 0, 0);
+        h.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != depositor) {
+            h.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 

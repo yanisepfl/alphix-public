@@ -407,12 +407,24 @@ contract JITSelfHealingFuzzTest is BaseAlphixTest {
     function _addReHypoLiquidityToHook(address user, uint256 shares, Alphix targetHook, PoolKey memory poolKey)
         internal
     {
+        bool isFirstDeposit = targetHook.totalSupply() == 0;
+        address depositor = isFirstDeposit ? targetHook.owner() : user;
+
         (uint256 amount0, uint256 amount1) = targetHook.previewAddReHypothecatedLiquidity(shares);
 
-        vm.startPrank(user);
-        MockERC20(Currency.unwrap(poolKey.currency0)).approve(address(targetHook), amount0 + 1);
-        MockERC20(Currency.unwrap(poolKey.currency1)).approve(address(targetHook), amount1 + 1);
+        // Ensure depositor has sufficient balances
+        MockERC20 token0 = MockERC20(Currency.unwrap(poolKey.currency0));
+        MockERC20 token1 = MockERC20(Currency.unwrap(poolKey.currency1));
+        if (token0.balanceOf(depositor) < amount0 + 1) token0.mint(depositor, amount0 + 1);
+        if (token1.balanceOf(depositor) < amount1 + 1) token1.mint(depositor, amount1 + 1);
+
+        vm.startPrank(depositor);
+        token0.approve(address(targetHook), amount0 + 1);
+        token1.approve(address(targetHook), amount1 + 1);
         targetHook.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != depositor) {
+            targetHook.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 

@@ -27,6 +27,15 @@ contract DustShareTest is BaseAlphixTest {
         // setYieldSource requires whenNotPaused
         Alphix(address(hook)).setYieldSource(currency0, address(vault0));
         Alphix(address(hook)).setYieldSource(currency1, address(vault1));
+
+        // Seed first deposit as owner (first-depositor restriction)
+        uint256 seedShares = 1e18;
+        (uint256 amt0, uint256 amt1) = Alphix(address(hook)).previewAddReHypothecatedLiquidity(seedShares);
+        MockERC20(Currency.unwrap(currency0)).mint(owner, amt0);
+        MockERC20(Currency.unwrap(currency1)).mint(owner, amt1);
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), amt0);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), amt1);
+        Alphix(address(hook)).addReHypothecatedLiquidity(seedShares, 0, 0);
         vm.stopPrank();
     }
 

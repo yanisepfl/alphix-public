@@ -142,13 +142,9 @@ contract AlphixETH is Alphix {
         nonReentrant
     {
         if (currency.isAddressZero()) {
-            // For ETH currency, just validate basic 4626 compliance
-            // The yield source must implement depositETH/withdrawETH but we can't
-            // easily check interface support without ERC165
-            if (newYieldSource != address(0)) {
-                if (newYieldSource.code.length == 0) {
-                    revert InvalidYieldSource();
-                }
+            // ETH yield sources must be non-zero contracts (removal not supported, use migration)
+            if (newYieldSource == address(0) || newYieldSource.code.length == 0) {
+                revert InvalidYieldSource();
             }
         } else {
             // For non-ETH currencies, use standard validation
@@ -189,6 +185,16 @@ contract AlphixETH is Alphix {
     /**
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH deposits for currency0.
+     *      The poolConfigured modifier is intentionally omitted: the contract starts paused
+     *      and is only unpaused atomically during initializePool (which sets isConfigured = true).
+     *      Therefore whenNotPaused already implies pool is configured.
+     *      ASSUMPTION: The admin must not call unpause() before initializePool().
+     *
+     *      First deposit (totalSupply == 0) is restricted to the owner to prevent
+     *      first-depositor share manipulation attacks.
+     *
+     *      NOTE: Fee-on-transfer, rebasing, and ERC-777 tokens are not supported for currency1.
+     *      Pools must only use standard ERC-20 tokens.
      */
     function addReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
@@ -199,6 +205,9 @@ contract AlphixETH is Alphix {
         returns (BalanceDelta delta)
     {
         if (shares == 0) revert ZeroShares();
+
+        // First deposit restricted to owner to prevent share manipulation attacks
+        if (totalSupply() == 0 && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
 
         // Check slippage before any state changes
         _checkPriceSlippage(expectedSqrtPriceX96, maxPriceSlippage);
@@ -239,6 +248,9 @@ contract AlphixETH is Alphix {
     /**
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH withdrawals for currency0.
+     *      The poolConfigured modifier is intentionally omitted: whenNotPaused implies
+     *      pool is configured (see addReHypothecatedLiquidity NatSpec for rationale).
+     *      ASSUMPTION: The admin must not call unpause() before initializePool().
      */
     function removeReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
@@ -328,6 +340,9 @@ contract AlphixETH is Alphix {
      * reentrancy is prevented by: (1) public entry points use nonReentrant modifier,
      * (2) hook callbacks are protected by Uniswap V4's unlock pattern,
      * (3) yield sources are trusted (configured by AccessManager).
+     *
+     * NOTE: If the yield source reverts (e.g. paused, drained, or misconfigured), the entire
+     * swap will revert.
      *
      * @param currency The currency to resolve (must be native ETH).
      */

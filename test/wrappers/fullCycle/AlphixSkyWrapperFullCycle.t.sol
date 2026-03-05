@@ -508,11 +508,18 @@ contract AlphixSkyWrapperFullCycleTest is BaseAlphixTest {
     }
 
     function _addReHypoLiquidity(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = Alphix(address(hook)).previewAddReHypothecatedLiquidity(shares);
-        vm.startPrank(user);
+        Alphix h = Alphix(address(hook));
+        bool isFirstDeposit = h.totalSupply() == 0;
+        address depositor = isFirstDeposit ? h.owner() : user;
+
+        (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
+        vm.startPrank(depositor);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
+        h.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != depositor) {
+            h.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 

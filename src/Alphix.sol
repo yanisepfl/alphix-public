@@ -434,7 +434,15 @@ contract Alphix is
 
     /* REHYPOTHECATION - LIQUIDITY OPERATIONS */
 
-    /// @inheritdoc IReHypothecation
+    /**
+     * @inheritdoc IReHypothecation
+     * @dev First deposit (totalSupply == 0) is restricted to the owner to prevent
+     *      first-depositor share manipulation attacks. The owner seeds initial liquidity,
+     *      establishing a healthy share-to-asset ratio before external deposits are accepted.
+     *
+     *      NOTE: Fee-on-transfer, rebasing, and ERC-777 tokens are not supported.
+     *      Pools must only use standard ERC-20 tokens.
+     */
     function addReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
         payable
@@ -447,6 +455,9 @@ contract Alphix is
     {
         if (shares == 0) revert ZeroShares();
         if (msg.value > 0) revert InvalidMsgValue();
+
+        // First deposit restricted to owner to prevent share manipulation attacks
+        if (totalSupply() == 0 && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
 
         // Check slippage before any state changes
         _checkPriceSlippage(expectedSqrtPriceX96, maxPriceSlippage);
@@ -981,6 +992,9 @@ contract Alphix is
      * reentrancy is prevented by: (1) public entry points use nonReentrant modifier,
      * (2) hook callbacks are protected by Uniswap V4's unlock pattern,
      * (3) yield sources are trusted (configured by AccessManager).
+     *
+     * NOTE: If the yield source reverts (e.g. paused, drained, or misconfigured), the entire
+     * swap will revert.
      */
     function _resolveHookDelta(Currency currency) internal virtual {
         int256 currencyDelta = poolManager.currencyDelta(address(this), currency);
@@ -999,6 +1013,16 @@ contract Alphix is
             _withdrawFromYieldSourceTo(currency, amount, address(this));
             currency.settle(poolManager, address(this), amount, false);
         }
+    }
+
+    /* OWNERSHIP OVERRIDE */
+
+    /**
+     * @notice Disabled to prevent accidental loss of admin functions.
+     * @dev Ownership can only be transferred via two-step process, not renounced.
+     */
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
     }
 
     /* MODIFIER HELPERS */

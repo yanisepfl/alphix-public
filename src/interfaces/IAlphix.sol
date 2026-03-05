@@ -112,6 +112,11 @@ interface IAlphix {
      */
     error HookMismatch();
 
+    /**
+     * @dev Thrown when renounceOwnership is called. Ownership renunciation is disabled.
+     */
+    error RenounceDisabled();
+
     /* ADMIN FUNCTIONS */
 
     /**

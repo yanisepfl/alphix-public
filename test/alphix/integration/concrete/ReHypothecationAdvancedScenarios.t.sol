@@ -303,9 +303,12 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
         _addRegularLp(1000e18);
         _configureReHypo();
 
+        // Seed first deposit as owner (changes preview formula from liquidity-based to shares-based)
+        _addReHypoLiquidity(owner, 1e18);
+
         uint256 sharesToMint = 100e18;
 
-        // Get preview
+        // Get preview AFTER seed deposit so formula is consistent with actual deposit
         (uint256 previewAmount0, uint256 previewAmount1) =
             Alphix(address(hook)).previewAddReHypothecatedLiquidity(sharesToMint);
 
@@ -313,7 +316,7 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
         uint256 aliceToken0Before = MockERC20(Currency.unwrap(currency0)).balanceOf(alice);
         uint256 aliceToken1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(alice);
 
-        // Actually add liquidity
+        // Actually add liquidity (not first deposit, so alice deposits directly)
         _addReHypoLiquidity(alice, sharesToMint);
 
         // Record balances after
@@ -491,12 +494,19 @@ contract ReHypothecationAdvancedScenariosTest is BaseAlphixTest {
     }
 
     function _addReHypoLiquidity(address user, uint256 shares) internal {
-        (uint256 amount0, uint256 amount1) = Alphix(address(hook)).previewAddReHypothecatedLiquidity(shares);
+        Alphix h = Alphix(address(hook));
+        bool isFirstDeposit = h.totalSupply() == 0;
+        address depositor = isFirstDeposit ? h.owner() : user;
 
-        vm.startPrank(user);
+        (uint256 amount0, uint256 amount1) = h.previewAddReHypothecatedLiquidity(shares);
+
+        vm.startPrank(depositor);
         MockERC20(Currency.unwrap(currency0)).approve(address(hook), amount0);
         MockERC20(Currency.unwrap(currency1)).approve(address(hook), amount1);
-        Alphix(address(hook)).addReHypothecatedLiquidity(shares, 0, 0);
+        h.addReHypothecatedLiquidity(shares, 0, 0);
+        if (isFirstDeposit && user != depositor) {
+            h.transfer(user, shares);
+        }
         vm.stopPrank();
     }
 

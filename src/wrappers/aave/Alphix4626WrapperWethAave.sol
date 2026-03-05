@@ -5,6 +5,7 @@ import {Alphix4626WrapperAave} from "./Alphix4626WrapperAave.sol";
 import {IAlphix4626WrapperWethAave} from "./interfaces/IAlphix4626WrapperWethAave.sol";
 import {IWETH} from "@aave-v3-core/misc/interfaces/IWETH.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title Alphix4626WrapperWethAave
@@ -100,7 +101,7 @@ contract Alphix4626WrapperWethAave is Alphix4626WrapperAave, IAlphix4626WrapperW
 
         // Supply WETH to Aave (already in contract, no transferFrom needed)
         AAVE_POOL.supply(address(ASSET), msg.value, address(this), REFERRAL_CODE);
-        _lastWrapperBalance = uint128(ATOKEN.balanceOf(address(this)));
+        _lastWrapperBalance = SafeCast.toUint128(ATOKEN.balanceOf(address(this)));
         _mint(receiver, shares);
 
         emit DepositETH(msg.sender, msg.sender, msg.value, shares);
@@ -130,7 +131,7 @@ contract Alphix4626WrapperWethAave is Alphix4626WrapperAave, IAlphix4626WrapperW
 
         // Withdraw WETH from Aave to this contract
         AAVE_POOL.withdraw(address(ASSET), assets, address(this));
-        _lastWrapperBalance = uint128(ATOKEN.balanceOf(address(this)));
+        _lastWrapperBalance = SafeCast.toUint128(ATOKEN.balanceOf(address(this)));
 
         // Unwrap WETH to ETH and send to receiver
         WETH.withdraw(assets);
@@ -163,7 +164,7 @@ contract Alphix4626WrapperWethAave is Alphix4626WrapperAave, IAlphix4626WrapperW
 
         // Withdraw WETH from Aave to this contract
         AAVE_POOL.withdraw(address(ASSET), assets, address(this));
-        _lastWrapperBalance = uint128(ATOKEN.balanceOf(address(this)));
+        _lastWrapperBalance = SafeCast.toUint128(ATOKEN.balanceOf(address(this)));
 
         // Unwrap WETH to ETH and send to receiver
         WETH.withdraw(assets);
