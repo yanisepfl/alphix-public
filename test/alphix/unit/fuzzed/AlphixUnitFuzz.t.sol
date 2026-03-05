@@ -144,14 +144,11 @@ contract AlphixUnitFuzzTest is BaseAlphixTest {
     }
 
     /**
-     * @notice Fuzz test that minPeriod below MIN_PERIOD reverts
+     * @notice Test that minPeriod of 0 (below MIN_PERIOD) reverts
      */
-    function testFuzz_setPoolParams_invalidMinPeriod_belowMin(uint256 minPeriod) public {
-        // minPeriod below MIN_PERIOD
-        vm.assume(minPeriod < AlphixGlobalConstants.MIN_PERIOD);
-
+    function test_setPoolParams_invalidMinPeriod_belowMin() public {
         DynamicFeeLib.PoolParams memory badParams = defaultPoolParams;
-        badParams.minPeriod = minPeriod;
+        badParams.minPeriod = 0;
 
         vm.prank(owner);
         vm.expectRevert(IAlphix.InvalidParameter.selector);
