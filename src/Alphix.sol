@@ -1001,6 +1001,16 @@ contract Alphix is
         }
     }
 
+    /* OWNERSHIP OVERRIDE */
+
+    /**
+     * @notice Disabled to prevent accidental loss of admin functions.
+     * @dev Ownership can only be transferred via two-step process, not renounced.
+     */
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
+    }
+
     /* MODIFIER HELPERS */
 
     /**
