@@ -8,6 +8,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -332,7 +333,7 @@ contract Alphix4626WrapperAave is ERC4626, IAlphix4626WrapperAave, Ownable2Step,
     function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override {
         ASSET.safeTransferFrom(caller, address(this), assets);
         AAVE_POOL.supply(address(ASSET), assets, address(this), REFERRAL_CODE);
-        _lastWrapperBalance = uint128(ATOKEN.balanceOf(address(this)));
+        _lastWrapperBalance = SafeCast.toUint128(ATOKEN.balanceOf(address(this)));
         _mint(receiver, shares);
         emit Deposit(caller, receiver, assets, shares);
     }
@@ -348,7 +349,7 @@ contract Alphix4626WrapperAave is ERC4626, IAlphix4626WrapperAave, Ownable2Step,
     {
         _burn(owner_, shares);
         AAVE_POOL.withdraw(address(ASSET), assets, receiver);
-        _lastWrapperBalance = uint128(ATOKEN.balanceOf(address(this)));
+        _lastWrapperBalance = SafeCast.toUint128(ATOKEN.balanceOf(address(this)));
         emit Withdraw(caller, receiver, owner_, assets, shares);
     }
 
@@ -383,7 +384,7 @@ contract Alphix4626WrapperAave is ERC4626, IAlphix4626WrapperAave, Ownable2Step,
         if (feesCollected == 0) revert ZeroAmount();
         _accumulatedFees = 0;
         IERC20(address(ATOKEN)).safeTransfer(_yieldTreasury, feesCollected);
-        _lastWrapperBalance = uint128(ATOKEN.balanceOf(address(this)));
+        _lastWrapperBalance = SafeCast.toUint128(ATOKEN.balanceOf(address(this)));
         emit FeesCollected(feesCollected, _lastWrapperBalance);
     }
 
@@ -461,19 +462,15 @@ contract Alphix4626WrapperAave is ERC4626, IAlphix4626WrapperAave, Ownable2Step,
                 newFeesEarned = totalYield.mulDiv(_fee, MAX_FEE);
             }
 
-            // forge-lint: disable-next-line(unsafe-typecast)
-            _accumulatedFees += uint128(newFeesEarned);
-            // forge-lint: disable-next-line(unsafe-typecast)
-            _lastWrapperBalance = uint128(newWrapperBalance);
+            _accumulatedFees += SafeCast.toUint128(newFeesEarned);
+            _lastWrapperBalance = SafeCast.toUint128(newWrapperBalance);
             emit YieldAccrued(totalYield, newFeesEarned, newWrapperBalance);
         } else if (newWrapperBalance < lastBalance) {
             // Negative yield: reduce fees proportionally to the loss
             uint256 loss = lastBalance - newWrapperBalance;
             uint256 feeLoss = uint256(_accumulatedFees).mulDiv(loss, lastBalance);
-            // forge-lint: disable-next-line(unsafe-typecast)
-            _accumulatedFees -= uint128(feeLoss);
-            // forge-lint: disable-next-line(unsafe-typecast)
-            _lastWrapperBalance = uint128(newWrapperBalance);
+            _accumulatedFees -= SafeCast.toUint128(feeLoss);
+            _lastWrapperBalance = SafeCast.toUint128(newWrapperBalance);
             emit NegativeYield(loss, feeLoss, newWrapperBalance);
         }
         // If equal, no action needed
@@ -555,7 +552,7 @@ contract Alphix4626WrapperAave is ERC4626, IAlphix4626WrapperAave, Ownable2Step,
     /**
      * @inheritdoc IAlphix4626WrapperAave
      */
-    function rescueTokens(address token, uint256 amount) external override onlyOwner {
+    function rescueTokens(address token, uint256 amount) external override onlyOwner nonReentrant {
         if (token == address(ATOKEN)) revert InvalidToken();
         if (_yieldTreasury == address(0)) revert InvalidAddress();
         if (amount == 0) revert ZeroAmount();
