@@ -333,6 +333,9 @@ contract AlphixETH is Alphix {
      * (2) hook callbacks are protected by Uniswap V4's unlock pattern,
      * (3) yield sources are trusted (configured by AccessManager).
      *
+     * NOTE: If the yield source reverts (e.g. paused, drained, or misconfigured), the entire
+     * swap will revert.
+     *
      * @param currency The currency to resolve (must be native ETH).
      */
     function _resolveHookDeltaEth(Currency currency) internal {

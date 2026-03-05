@@ -448,6 +448,9 @@ contract Alphix is
         if (shares == 0) revert ZeroShares();
         if (msg.value > 0) revert InvalidMsgValue();
 
+        // First deposit restricted to owner to prevent share manipulation attacks
+        if (totalSupply() == 0 && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
+
         // Check slippage before any state changes
         _checkPriceSlippage(expectedSqrtPriceX96, maxPriceSlippage);
 
