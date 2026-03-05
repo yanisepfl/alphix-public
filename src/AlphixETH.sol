@@ -142,13 +142,9 @@ contract AlphixETH is Alphix {
         nonReentrant
     {
         if (currency.isAddressZero()) {
-            // For ETH currency, just validate basic 4626 compliance
-            // The yield source must implement depositETH/withdrawETH but we can't
-            // easily check interface support without ERC165
-            if (newYieldSource != address(0)) {
-                if (newYieldSource.code.length == 0) {
-                    revert InvalidYieldSource();
-                }
+            // ETH yield sources must be non-zero contracts (removal not supported, use migration)
+            if (newYieldSource == address(0) || newYieldSource.code.length == 0) {
+                revert InvalidYieldSource();
             }
         } else {
             // For non-ETH currencies, use standard validation
@@ -189,6 +185,11 @@ contract AlphixETH is Alphix {
     /**
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH deposits for currency0.
+     *      The poolConfigured modifier is intentionally omitted: the contract starts paused
+     *      and is only unpaused atomically during initializePool (which sets isConfigured = true).
+     *      Therefore whenNotPaused already implies pool is configured.
+     *      ASSUMPTION: The admin must not call unpause() before initializePool().
+     *
      */
     function addReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
@@ -239,6 +240,9 @@ contract AlphixETH is Alphix {
     /**
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH withdrawals for currency0.
+     *      The poolConfigured modifier is intentionally omitted: whenNotPaused implies
+     *      pool is configured (see addReHypothecatedLiquidity NatSpec for rationale).
+     *      ASSUMPTION: The admin must not call unpause() before initializePool().
      */
     function removeReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
