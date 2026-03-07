@@ -14,7 +14,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 /* LOCAL IMPORTS */
 import {BaseAlphixETHTest} from "../../BaseAlphixETH.t.sol";
-import {AlphixETH} from "../../../../src/AlphixETH.sol";
+
 import {IReHypothecation} from "../../../../src/interfaces/IReHypothecation.sol";
 import {ReHypothecationLib} from "../../../../src/libraries/ReHypothecation.sol";
 import {MockYieldVault} from "../../../utils/mocks/MockYieldVault.sol";
