@@ -11,7 +11,7 @@ import {DynamicFeeLib} from "../../../../src/libraries/DynamicFee.sol";
 import {AlphixGlobalConstants} from "../../../../src/libraries/AlphixGlobalConstants.sol";
 import {Constants} from "v4-core/test/utils/Constants.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 
 /**
  * @title DynamicFeeEMATest

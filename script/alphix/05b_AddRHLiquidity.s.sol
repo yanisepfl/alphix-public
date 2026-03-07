@@ -180,17 +180,21 @@ contract AddRHLiquidityScript is Script {
     ) internal {
         console.log("Step 1: Approving tokens...");
 
+        // Approve with a small buffer (+0.01%) to cover yield accrual between simulation and broadcast
+        uint256 approveAmount0 = amount0 + (amount0 / 10000) + 1;
+        uint256 approveAmount1 = amount1 + (amount1 / 10000) + 1;
+
         if (!isEthPool && amount0 > 0) {
             IERC20 token0 = IERC20(Currency.unwrap(poolKey.currency0));
             token0.approve(cfg.hookAddr, 0);
-            token0.approve(cfg.hookAddr, amount0);
-            console.log("  - Approved token0:", amount0, "wei");
+            token0.approve(cfg.hookAddr, approveAmount0);
+            console.log("  - Approved token0:", approveAmount0, "wei");
         }
         if (amount1 > 0) {
             IERC20 token1 = IERC20(Currency.unwrap(poolKey.currency1));
             token1.approve(cfg.hookAddr, 0);
-            token1.approve(cfg.hookAddr, amount1);
-            console.log("  - Approved token1:", amount1, "wei");
+            token1.approve(cfg.hookAddr, approveAmount1);
+            console.log("  - Approved token1:", approveAmount1, "wei");
         }
 
         console.log("Step 2: Adding rehypothecated liquidity...");

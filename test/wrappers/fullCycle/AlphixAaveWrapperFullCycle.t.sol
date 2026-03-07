@@ -14,9 +14,6 @@ import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
-/* OZ IMPORTS */
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
 /* SOLMATE IMPORTS */
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
