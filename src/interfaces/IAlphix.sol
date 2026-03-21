@@ -63,11 +63,6 @@ interface IAlphix {
     error InvalidAddress();
 
     /**
-     * @dev Thrown when the pool is paused or not activated.
-     */
-    error PoolPaused();
-
-    /**
      * @dev Thrown when a pool is already configured.
      */
     error PoolAlreadyConfigured();
@@ -90,7 +85,7 @@ interface IAlphix {
     /**
      * @dev Thrown when initial fee is outside the configured pool params bounds.
      */
-    error InvalidInitialFee(uint24 fee, uint24 minFee, uint24 maxFee);
+    error InvalidInitialFee();
 
     /**
      * @dev Thrown when another parameter than fee bounds is invalid.

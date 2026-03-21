@@ -89,11 +89,6 @@ interface IReHypothecation is IERC20 {
     error ZeroAmounts();
 
     /**
-     * @dev Thrown when tick range is invalid.
-     */
-    error InvalidTickRange();
-
-    /**
      * @dev Thrown when msg.value doesn't match expected amount for native ETH.
      */
     error InvalidMsgValue();
