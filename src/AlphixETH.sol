@@ -185,10 +185,6 @@ contract AlphixETH is Alphix {
     /**
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH deposits for currency0.
-     *      The poolConfigured modifier is intentionally omitted: the contract starts paused
-     *      and is only unpaused atomically during initializePool (which sets isConfigured = true).
-     *      Therefore whenNotPaused already implies pool is configured.
-     *      ASSUMPTION: The admin must not call unpause() before initializePool().
      *
      *      First deposit (totalSupply == 0) is restricted to the owner to prevent
      *      first-depositor share manipulation attacks.
@@ -201,6 +197,7 @@ contract AlphixETH is Alphix {
         payable
         override
         whenNotPaused
+        poolConfigured
         nonReentrant
         returns (BalanceDelta delta)
     {
@@ -248,14 +245,12 @@ contract AlphixETH is Alphix {
     /**
      * @inheritdoc IReHypothecation
      * @dev Override to handle native ETH withdrawals for currency0.
-     *      The poolConfigured modifier is intentionally omitted: whenNotPaused implies
-     *      pool is configured (see addReHypothecatedLiquidity NatSpec for rationale).
-     *      ASSUMPTION: The admin must not call unpause() before initializePool().
      */
     function removeReHypothecatedLiquidity(uint256 shares, uint160 expectedSqrtPriceX96, uint24 maxPriceSlippage)
         external
         override
         whenNotPaused
+        poolConfigured
         nonReentrant
         returns (BalanceDelta delta)
     {

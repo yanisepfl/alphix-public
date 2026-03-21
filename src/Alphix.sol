@@ -263,7 +263,7 @@ contract Alphix is
 
         // Validate initial fee against the pool params bounds
         if (_initialFee < params.minFee || _initialFee > params.maxFee) {
-            revert InvalidInitialFee(_initialFee, params.minFee, params.maxFee);
+            revert InvalidInitialFee();
         }
 
         // Validate initial target ratio against pool params
