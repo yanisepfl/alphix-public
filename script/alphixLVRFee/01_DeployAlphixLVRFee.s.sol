@@ -65,8 +65,8 @@ contract DeployAlphixLVRFeeScript is Script {
         console.log("");
 
         // Hook permissions: afterInitialize + afterSwap + afterSwapReturnDelta
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG) | uint160(Hooks.AFTER_SWAP_FLAG) | uint160(Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = uint160(Hooks.AFTER_INITIALIZE_FLAG) | uint160(Hooks.AFTER_SWAP_FLAG)
+            | uint160(Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
 
         console.log("Mining hook address with afterInitialize + afterSwap + afterSwapReturnDelta flags...");
 
