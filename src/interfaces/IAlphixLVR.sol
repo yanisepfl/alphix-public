@@ -27,9 +27,11 @@ interface IAlphixLVR {
     /// @return The current fee in hundredths of a bip.
     function getFee(PoolId poolId) external view returns (uint24);
 
-    /// @notice Pause the hook, preventing poke calls.
+    /// @notice Pause the hook, preventing `poke()` calls.
+    /// @dev Only affects `poke()`. Swaps continue to work with the last set fee.
+    ///      Does not affect pool initialization via `afterInitialize`.
     function pause() external;
 
-    /// @notice Unpause the hook, allowing poke calls.
+    /// @notice Unpause the hook, re-enabling `poke()` calls.
     function unpause() external;
 }
