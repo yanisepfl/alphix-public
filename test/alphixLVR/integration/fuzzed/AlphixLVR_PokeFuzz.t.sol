@@ -54,7 +54,7 @@ contract AlphixLVR_PokeFuzz is BaseAlphixLVRTest {
         fee = uint24(bound(fee, LPFeeLibrary.MAX_LP_FEE + 1, type(uint24).max));
 
         vm.prank(feePoker);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(LPFeeLibrary.LPFeeTooLarge.selector, fee));
         hook.poke(poolKey, fee);
     }
 
