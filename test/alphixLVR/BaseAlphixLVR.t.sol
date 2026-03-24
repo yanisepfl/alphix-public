@@ -64,11 +64,7 @@ abstract contract BaseAlphixLVRTest is Test, Deployers {
 
         // Deploy AlphixLVR at correct hook address
         address hookAddr = _computeHookAddress();
-        deployCodeTo(
-            "src/AlphixLVR.sol:AlphixLVR",
-            abi.encode(poolManager, address(accessManager)),
-            hookAddr
-        );
+        deployCodeTo("src/AlphixLVR.sol:AlphixLVR", abi.encode(poolManager, address(accessManager)), hookAddr);
         hook = AlphixLVR(hookAddr);
         vm.label(hookAddr, "AlphixLVR");
 

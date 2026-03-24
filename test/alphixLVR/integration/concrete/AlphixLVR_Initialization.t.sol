@@ -80,7 +80,7 @@ contract AlphixLVR_Initialization is BaseAlphixLVRTest {
         });
         poolManager.initialize(key2, TickMath.getSqrtPriceAtTick(100));
 
-        (uint160 sqrtPrice,,, ) = poolManager.getSlot0(key2.toId());
+        (uint160 sqrtPrice,,,) = poolManager.getSlot0(key2.toId());
         assertTrue(sqrtPrice > 0, "Second pool should be initialized");
     }
 
@@ -99,7 +99,7 @@ contract AlphixLVR_Initialization is BaseAlphixLVRTest {
         // Pool initialization should still work (afterInitialize has no pause check)
         _initializePool();
 
-        (uint160 sqrtPrice,,, ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPrice,,,) = poolManager.getSlot0(poolKey.toId());
         assertTrue(sqrtPrice > 0, "Pool should initialize even while paused");
     }
 

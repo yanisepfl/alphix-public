@@ -116,11 +116,7 @@ contract AlphixLVR_FullCycle is BaseAlphixLVRTest {
         // Pool 2 with different tokens
         (Currency c2, Currency c3) = deployCurrencyPair();
         PoolKey memory key2 = PoolKey({
-            currency0: c2,
-            currency1: c3,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 10,
-            hooks: IHooks(hook)
+            currency0: c2, currency1: c3, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 10, hooks: IHooks(hook)
         });
         poolManager.initialize(key2, TickMath.getSqrtPriceAtTick(0));
 
@@ -152,9 +148,23 @@ contract AlphixLVR_FullCycle is BaseAlphixLVRTest {
         );
         MockERC20(Currency.unwrap(currency0)).approve(address(permit2), a0 + 1);
         MockERC20(Currency.unwrap(currency1)).approve(address(permit2), a1 + 1);
-        permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(a0 + 1), uint48(block.timestamp + 100));
-        permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(a1 + 1), uint48(block.timestamp + 100));
-        positionManager.mint(poolKey, TICK_LOWER, TICK_UPPER, LIQUIDITY, a0 + 1, a1 + 1, address(this), block.timestamp, Constants.ZERO_BYTES);
+        permit2.approve(
+            Currency.unwrap(currency0), address(positionManager), uint160(a0 + 1), uint48(block.timestamp + 100)
+        );
+        permit2.approve(
+            Currency.unwrap(currency1), address(positionManager), uint160(a1 + 1), uint48(block.timestamp + 100)
+        );
+        positionManager.mint(
+            poolKey,
+            TICK_LOWER,
+            TICK_UPPER,
+            LIQUIDITY,
+            a0 + 1,
+            a1 + 1,
+            address(this),
+            block.timestamp,
+            Constants.ZERO_BYTES
+        );
     }
 
     function _seedLiquidityForPool(PoolKey memory key, Currency c0, Currency c1) internal {
@@ -168,7 +178,9 @@ contract AlphixLVR_FullCycle is BaseAlphixLVRTest {
         MockERC20(Currency.unwrap(c1)).approve(address(permit2), a1 + 1);
         permit2.approve(Currency.unwrap(c0), address(positionManager), uint160(a0 + 1), uint48(block.timestamp + 100));
         permit2.approve(Currency.unwrap(c1), address(positionManager), uint160(a1 + 1), uint48(block.timestamp + 100));
-        positionManager.mint(key, -100, 100, 1_000_000e18, a0 + 1, a1 + 1, address(this), block.timestamp, Constants.ZERO_BYTES);
+        positionManager.mint(
+            key, -100, 100, 1_000_000e18, a0 + 1, a1 + 1, address(this), block.timestamp, Constants.ZERO_BYTES
+        );
     }
 
     function _performSwap(uint256 amount, bool zeroForOne) internal {

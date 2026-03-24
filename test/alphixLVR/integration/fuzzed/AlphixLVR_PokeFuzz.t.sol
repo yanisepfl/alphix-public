@@ -37,7 +37,7 @@ contract AlphixLVR_PokeFuzz is BaseAlphixLVRTest {
         assertEq(hook.getFee(poolKey.toId()), fee);
 
         // PoolManager fee
-        (,, , uint24 lpFee) = poolManager.getSlot0(poolKey.toId());
+        (,,, uint24 lpFee) = poolManager.getSlot0(poolKey.toId());
         assertEq(lpFee, fee);
     }
 

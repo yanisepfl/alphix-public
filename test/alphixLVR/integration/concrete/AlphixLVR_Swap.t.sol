@@ -51,7 +51,14 @@ contract AlphixLVR_Swap is BaseAlphixLVRTest {
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1 + 1), expiry);
 
         positionManager.mint(
-            poolKey, TICK_LOWER, TICK_UPPER, LIQUIDITY, amount0 + 1, amount1 + 1, address(this), block.timestamp,
+            poolKey,
+            TICK_LOWER,
+            TICK_UPPER,
+            LIQUIDITY,
+            amount0 + 1,
+            amount1 + 1,
+            address(this),
+            block.timestamp,
             Constants.ZERO_BYTES
         );
     }
