@@ -73,7 +73,7 @@ contract AlphixLVR_PokeFuzz is BaseAlphixLVRTest {
     function testFuzz_poke_multiPoolIsolation(uint24 fee1, uint24 fee2, int24 tickSpacing2) public {
         fee1 = uint24(bound(fee1, 0, LPFeeLibrary.MAX_LP_FEE));
         fee2 = uint24(bound(fee2, 0, LPFeeLibrary.MAX_LP_FEE));
-        tickSpacing2 = int24(int256(bound(uint256(int256(tickSpacing2)), 1, 16383)));
+        tickSpacing2 = int24(bound(int256(tickSpacing2), 1, 16383));
 
         // Skip if same tick spacing (would be same pool)
         vm.assume(tickSpacing2 != poolKey.tickSpacing);

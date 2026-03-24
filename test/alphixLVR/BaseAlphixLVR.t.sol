@@ -96,8 +96,10 @@ abstract contract BaseAlphixLVRTest is Test, Deployers {
     }
 
     function _computeHookAddress() internal pure returns (address) {
-        // Only afterInitialize flag
+        // Only afterInitialize flag is needed (no beforeSwap/afterSwap hooks).
         uint160 flags = uint160(Hooks.AFTER_INITIALIZE_FLAG);
+        // The high-bit prefix (0x8000 << 144) creates a deterministic, non-colliding
+        // address for CREATE2 test mining while the low bits encode the hook permissions.
         return address(flags | uint160(0x8000) << 144);
     }
 
