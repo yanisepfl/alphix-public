@@ -53,7 +53,15 @@ contract AlphixLVRFee_HookFee is BaseAlphixLVRFeeTest {
         permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(amount1 + 1), expiry);
 
         positionManager.mint(
-            poolKey, TICK_LOWER, TICK_UPPER, LIQUIDITY, amount0 + 1, amount1 + 1, address(this), block.timestamp, Constants.ZERO_BYTES
+            poolKey,
+            TICK_LOWER,
+            TICK_UPPER,
+            LIQUIDITY,
+            amount0 + 1,
+            amount1 + 1,
+            address(this),
+            block.timestamp,
+            Constants.ZERO_BYTES
         );
     }
 
@@ -189,13 +197,8 @@ contract AlphixLVRFee_HookFee is BaseAlphixLVRFeeTest {
     function test_multiPool_independentHookFees() public {
         // Pool 2
         (Currency c2, Currency c3) = deployCurrencyPair();
-        PoolKey memory key2 = PoolKey({
-            currency0: c2,
-            currency1: c3,
-            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
-            tickSpacing: 10,
-            hooks: hook
-        });
+        PoolKey memory key2 =
+            PoolKey({currency0: c2, currency1: c3, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 10, hooks: hook});
         poolManager.initialize(key2, TickMath.getSqrtPriceAtTick(0));
 
         // Set different hook fees

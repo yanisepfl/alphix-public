@@ -192,11 +192,13 @@ contract AlphixLVRFee is BaseDynamicFee, BaseHookFee, AccessManaged, Pausable, I
     }
 
     /// @dev Required override since both BaseDynamicFee and BaseHookFee inherit BaseHook.
-    function _afterSwap(address sender, PoolKey calldata key, SwapParams calldata params, BalanceDelta delta, bytes calldata hookData)
-        internal
-        override(BaseHook, BaseHookFee)
-        returns (bytes4, int128)
-    {
+    function _afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata hookData
+    ) internal override(BaseHook, BaseHookFee) returns (bytes4, int128) {
         return BaseHookFee._afterSwap(sender, key, params, delta, hookData);
     }
 }

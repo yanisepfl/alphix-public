@@ -116,10 +116,22 @@ contract AlphixLVRFee_FullCycle is BaseAlphixLVRFeeTest {
         );
         MockERC20(Currency.unwrap(currency0)).approve(address(permit2), a0 + 1);
         MockERC20(Currency.unwrap(currency1)).approve(address(permit2), a1 + 1);
-        permit2.approve(Currency.unwrap(currency0), address(positionManager), uint160(a0 + 1), uint48(block.timestamp + 100));
-        permit2.approve(Currency.unwrap(currency1), address(positionManager), uint160(a1 + 1), uint48(block.timestamp + 100));
+        permit2.approve(
+            Currency.unwrap(currency0), address(positionManager), uint160(a0 + 1), uint48(block.timestamp + 100)
+        );
+        permit2.approve(
+            Currency.unwrap(currency1), address(positionManager), uint160(a1 + 1), uint48(block.timestamp + 100)
+        );
         positionManager.mint(
-            poolKey, TICK_LOWER, TICK_UPPER, LIQUIDITY, a0 + 1, a1 + 1, address(this), block.timestamp, Constants.ZERO_BYTES
+            poolKey,
+            TICK_LOWER,
+            TICK_UPPER,
+            LIQUIDITY,
+            a0 + 1,
+            a1 + 1,
+            address(this),
+            block.timestamp,
+            Constants.ZERO_BYTES
         );
     }
 

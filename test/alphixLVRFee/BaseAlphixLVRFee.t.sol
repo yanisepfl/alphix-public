@@ -67,9 +67,7 @@ abstract contract BaseAlphixLVRFeeTest is Test, Deployers {
         // Deploy AlphixLVRFee at correct hook address
         address hookAddr = _computeHookAddress();
         deployCodeTo(
-            "src/AlphixLVRFee.sol:AlphixLVRFee",
-            abi.encode(poolManager, address(accessManager), treasury),
-            hookAddr
+            "src/AlphixLVRFee.sol:AlphixLVRFee", abi.encode(poolManager, address(accessManager), treasury), hookAddr
         );
         hook = AlphixLVRFee(hookAddr);
         vm.label(hookAddr, "AlphixLVRFee");
@@ -111,8 +109,8 @@ abstract contract BaseAlphixLVRFeeTest is Test, Deployers {
 
     function _computeHookAddress() internal pure returns (address) {
         // afterInitialize (BaseDynamicFee) + afterSwap + afterSwapReturnDelta (BaseHookFee)
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG) | uint160(Hooks.AFTER_SWAP_FLAG) | uint160(Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = uint160(Hooks.AFTER_INITIALIZE_FLAG) | uint160(Hooks.AFTER_SWAP_FLAG)
+            | uint160(Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
         // High-bit prefix for deterministic test address mining
         return address(flags | uint160(0x8000) << 144);
     }
