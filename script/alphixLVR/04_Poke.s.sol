@@ -38,13 +38,16 @@ contract PokeLVRScript is Script {
 
         envVar = string.concat("TOKEN0_", network);
         address token0 = vm.envAddress(envVar);
+        // token0 can be address(0) for ETH pools
 
         envVar = string.concat("TOKEN1_", network);
         address token1 = vm.envAddress(envVar);
         require(token1 != address(0), string.concat(envVar, " not set"));
+        require(token0 < token1, "Tokens must be in canonical order (token0 < token1)");
 
         envVar = string.concat("TICK_SPACING_", network);
         int24 tickSpacing = int24(vm.envInt(envVar));
+        require(tickSpacing > 0, "TICK_SPACING must be positive");
 
         envVar = string.concat("NEW_FEE_", network);
         uint24 newFee = uint24(vm.envUint(envVar));
