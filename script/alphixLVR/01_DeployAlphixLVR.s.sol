@@ -20,7 +20,7 @@ import {AlphixLVR} from "../../src/AlphixLVR.sol";
  * - DEPLOYMENT_NETWORK: Network identifier (e.g., BASE, ARB)
  * - POOL_MANAGER_{NETWORK}: Uniswap V4 PoolManager address
  * - CREATE2_DEPLOYER_{NETWORK}: CREATE2 factory address
- * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
+ * - ACCESS_MANAGER_LVR_{NETWORK}: LVR-specific AccessManager contract address
  *
  * Hook Permissions (1 enabled — matching BaseDynamicFee):
  * - afterInitialize
@@ -43,7 +43,7 @@ contract DeployAlphixLVRScript is Script {
         address create2DeployerAddr = vm.envAddress(envVar);
         require(create2DeployerAddr != address(0), string.concat(envVar, " not set"));
 
-        envVar = string.concat("ACCESS_MANAGER_", network);
+        envVar = string.concat("ACCESS_MANAGER_LVR_", network);
         address accessManagerAddr = vm.envAddress(envVar);
         require(accessManagerAddr != address(0), string.concat(envVar, " not set"));
 

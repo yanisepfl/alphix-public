@@ -25,9 +25,9 @@ import {Roles} from "../alphix/libraries/Roles.sol";
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
  * - ALPHIX_LVR_HOOK_{NETWORK}: AlphixLVR Hook contract address
- * - ACCESS_MANAGER_{NETWORK}: AccessManager contract address
- * - FEE_POKER_{NETWORK}: Address to grant FEE_POKER_ROLE
- * - PAUSER_{NETWORK}: Address to grant PAUSER_ROLE
+ * - ACCESS_MANAGER_LVR_{NETWORK}: LVR-specific AccessManager contract address
+ * - FEE_POKER_LVR_{NETWORK}: Address to grant FEE_POKER_ROLE (LVR-specific, compartmentalized)
+ * - PAUSER_LVR_{NETWORK}: Address to grant PAUSER_ROLE (LVR-specific, compartmentalized)
  */
 contract ConfigureRolesLVRScript is Script {
     function run() public {
@@ -40,15 +40,15 @@ contract ConfigureRolesLVRScript is Script {
         address hookAddr = vm.envAddress(envVar);
         require(hookAddr != address(0), string.concat(envVar, " not set"));
 
-        envVar = string.concat("ACCESS_MANAGER_", network);
+        envVar = string.concat("ACCESS_MANAGER_LVR_", network);
         address accessManagerAddr = vm.envAddress(envVar);
         require(accessManagerAddr != address(0), string.concat(envVar, " not set"));
 
-        envVar = string.concat("FEE_POKER_", network);
+        envVar = string.concat("FEE_POKER_LVR_", network);
         address feePoker = vm.envAddress(envVar);
         require(feePoker != address(0), string.concat(envVar, " not set"));
 
-        envVar = string.concat("PAUSER_", network);
+        envVar = string.concat("PAUSER_LVR_", network);
         address pauser = vm.envAddress(envVar);
         require(pauser != address(0), string.concat(envVar, " not set"));
 
