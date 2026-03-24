@@ -87,7 +87,10 @@ contract AlphixLVR_Swap is BaseAlphixLVRTest {
     }
 
     function test_swap_appliesPokedFee() public {
-        // Poke a high fee
+        // Snapshot state to ensure identical pool conditions for both swaps
+        uint256 snapshotId = vm.snapshot();
+
+        // Poke a high fee and swap
         vm.prank(feePoker);
         hook.poke(poolKey, 100_000); // 10%
 
@@ -95,7 +98,10 @@ contract AlphixLVR_Swap is BaseAlphixLVRTest {
         _performSwap(1e18, true);
         uint256 received0 = MockERC20(Currency.unwrap(currency1)).balanceOf(address(this)) - balBefore0;
 
-        // Now poke a lower fee
+        // Revert to snapshot so pool state is identical for next swap
+        vm.revertTo(snapshotId);
+
+        // Poke a lower fee and swap against same pool state
         vm.prank(feePoker);
         hook.poke(poolKey, 100); // 0.01%
 
