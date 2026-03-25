@@ -76,9 +76,10 @@ contract AlphixLVRFee is BaseDynamicFee, BaseHookFee, AccessManaged, Pausable, I
 
     /// @inheritdoc IAlphixLVRFee
     function poke(PoolKey calldata key, uint24 newFee) external restricted whenNotPaused {
-        _fees[key.toId()] = newFee;
+        PoolId poolId = key.toId();
+        _fees[poolId] = newFee;
         _poke(key);
-        emit FeePoked(key.toId(), newFee);
+        emit FeePoked(poolId, newFee);
     }
 
     /// @inheritdoc IAlphixLVRFee
@@ -103,8 +104,9 @@ contract AlphixLVRFee is BaseDynamicFee, BaseHookFee, AccessManaged, Pausable, I
     /// @inheritdoc IAlphixLVRFee
     function setHookFee(PoolKey calldata key, uint24 hookFee) external restricted whenNotPaused {
         if (hookFee > MAX_HOOK_FEE) revert HookFeeTooLarge();
-        _hookFees[key.toId()] = hookFee;
-        emit HookFeeSet(key.toId(), hookFee);
+        PoolId poolId = key.toId();
+        _hookFees[poolId] = hookFee;
+        emit HookFeeSet(poolId, hookFee);
     }
 
     /// @inheritdoc IAlphixLVRFee
@@ -124,13 +126,14 @@ contract AlphixLVRFee is BaseDynamicFee, BaseHookFee, AccessManaged, Pausable, I
         if (msg.sender != address(poolManager)) revert OnlyPoolManager();
 
         Currency[] memory currencies = abi.decode(data, (Currency[]));
+        address _treasury = treasury; // cache SLOAD
         for (uint256 i = 0; i < currencies.length; i++) {
             uint256 balance = poolManager.balanceOf(address(this), currencies[i].toId());
             if (balance > 0) {
                 // Burn ERC-6909 claims (settles debt with PoolManager)
                 currencies[i].settle(poolManager, address(this), balance, true);
                 // Take actual tokens to treasury
-                currencies[i].take(poolManager, treasury, balance, false);
+                currencies[i].take(poolManager, _treasury, balance, false);
             }
         }
         return "";
@@ -141,7 +144,7 @@ contract AlphixLVRFee is BaseDynamicFee, BaseHookFee, AccessManaged, Pausable, I
     // ═══════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IAlphixLVRFee
-    function setTreasury(address _treasury) external restricted {
+    function setTreasury(address _treasury) external restricted whenNotPaused {
         if (_treasury == address(0)) revert TreasuryNotSet();
         treasury = _treasury;
         emit TreasurySet(_treasury);
