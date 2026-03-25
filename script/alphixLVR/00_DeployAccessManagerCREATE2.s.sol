@@ -34,6 +34,10 @@ contract DeployAccessManagerCREATE2Script is Script {
         address initialAdmin = vm.envAddress(envVar);
         require(initialAdmin != address(0), string.concat(envVar, " not set"));
 
+        envVar = string.concat("CREATE2_DEPLOYER_", network);
+        address create2Deployer = vm.envAddress(envVar);
+        require(create2Deployer != address(0), string.concat(envVar, " not set"));
+
         bytes32 salt = vm.envBytes32("ACCESS_MANAGER_SALT_LVR");
 
         console.log("===========================================");
@@ -41,12 +45,13 @@ contract DeployAccessManagerCREATE2Script is Script {
         console.log("===========================================");
         console.log("Network:", network);
         console.log("Initial Admin:", initialAdmin);
+        console.log("CREATE2 Deployer:", create2Deployer);
         console.log("Salt:", vm.toString(salt));
         console.log("");
 
-        // Predict the address
+        // Predict the address using the deployer
         bytes memory creationCode = abi.encodePacked(type(AccessManager).creationCode, abi.encode(initialAdmin));
-        address predicted = vm.computeCreate2Address(salt, keccak256(creationCode));
+        address predicted = vm.computeCreate2Address(salt, keccak256(creationCode), create2Deployer);
         console.log("Predicted address:", predicted);
 
         vm.startBroadcast();

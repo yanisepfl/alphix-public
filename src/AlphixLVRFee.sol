@@ -50,6 +50,9 @@ contract AlphixLVRFee is BaseDynamicFee, BaseHookFee, AccessManaged, Pausable, I
     /// @dev Treasury address is zero.
     error TreasuryNotSet();
 
+    /// @dev Caller is not the PoolManager.
+    error OnlyPoolManager();
+
     /// @param _poolManager The Uniswap V4 PoolManager address.
     /// @param _accessManager The OpenZeppelin AccessManager address for role-based access control.
     /// @param _treasury The initial treasury address for collected hook fees.
@@ -118,7 +121,7 @@ contract AlphixLVRFee is BaseDynamicFee, BaseHookFee, AccessManaged, Pausable, I
 
     /// @dev Callback from PoolManager.unlock(). Burns ERC-6909 claims and takes tokens to treasury.
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
-        require(msg.sender == address(poolManager), "Only PoolManager");
+        if (msg.sender != address(poolManager)) revert OnlyPoolManager();
 
         Currency[] memory currencies = abi.decode(data, (Currency[]));
         for (uint256 i = 0; i < currencies.length; i++) {

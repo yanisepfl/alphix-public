@@ -26,6 +26,7 @@ import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManage
 import {EasyPosm} from "../utils/libraries/EasyPosm.sol";
 import {Deployers} from "../utils/Deployers.sol";
 import {AlphixLVRFee} from "../../src/AlphixLVRFee.sol";
+import {Roles} from "../../script/alphix/libraries/Roles.sol";
 
 /**
  * @title BaseAlphixLVRFeeTest
@@ -37,10 +38,10 @@ abstract contract BaseAlphixLVRFeeTest is Test, Deployers {
     using CurrencyLibrary for Currency;
     using StateLibrary for IPoolManager;
 
-    /* ---- CONSTANTS ---- */
-    uint64 public constant FEE_POKER_ROLE = 1;
-    uint64 public constant PAUSER_ROLE = 2;
-    uint64 public constant HOOK_FEE_ROLE = 3;
+    /* ---- ROLE CONSTANTS (from production Roles library) ---- */
+    uint64 public constant FEE_POKER_ROLE = Roles.FEE_POKER_ROLE;
+    uint64 public constant PAUSER_ROLE = Roles.PAUSER_ROLE;
+    uint64 public constant HOOK_FEE_ROLE = Roles.HOOK_FEE_ROLE;
 
     /* ---- STATE ---- */
     AlphixLVRFee public hook;
