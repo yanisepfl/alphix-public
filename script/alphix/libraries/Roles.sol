@@ -34,4 +34,9 @@ library Roles {
      * @dev Pauser role - can pause and unpause the contract
      */
     uint64 internal constant PAUSER_ROLE = 3;
+
+    /**
+     * @dev Hook fee manager role - can set hook fees and treasury (AlphixLVRFee only)
+     */
+    uint64 internal constant HOOK_FEE_ROLE = 4;
 }

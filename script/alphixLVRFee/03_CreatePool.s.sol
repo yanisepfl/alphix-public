@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
+import {AlphixLVRFee} from "../../src/AlphixLVRFee.sol";
+
+/**
+ * @title Create Pool for AlphixLVRFee
+ * @notice Initializes a new pool and atomically pokes the initial fee
+ *
+ * DEPLOYMENT ORDER: 3 (After roles are configured)
+ *
+ * Environment Variables Required:
+ * - DEPLOYMENT_NETWORK: Network identifier
+ * - POOL_MANAGER_{NETWORK}: Uniswap V4 PoolManager address
+ * - ALPHIX_LVR_FEE_HOOK_{NETWORK}: AlphixLVRFee Hook contract address
+ * - TOKEN0_{NETWORK}: First token address (use 0x0 for native ETH)
+ * - TOKEN1_{NETWORK}: Second token address (must be > TOKEN0)
+ * - TICK_SPACING_{NETWORK}: Tick spacing for the pool
+ * - SQRT_PRICE_{NETWORK}: Initial sqrt price (Q64.96 format)
+ * - INITIAL_FEE_{NETWORK}: Initial LP fee in hundredths of a bip
+ */
+contract CreatePoolLVRFeeScript is Script {
+    using PoolIdLibrary for PoolKey;
+
+    function run() public {
+        string memory network = vm.envString("DEPLOYMENT_NETWORK");
+        require(bytes(network).length > 0, "DEPLOYMENT_NETWORK not set");
+
+        string memory envVar;
+
+        envVar = string.concat("POOL_MANAGER_", network);
+        address poolManagerAddr = vm.envAddress(envVar);
+        require(poolManagerAddr != address(0), string.concat(envVar, " not set"));
+
+        envVar = string.concat("ALPHIX_LVR_FEE_HOOK_", network);
+        address hookAddr = vm.envAddress(envVar);
+        require(hookAddr != address(0), string.concat(envVar, " not set"));
+
+        envVar = string.concat("TOKEN0_", network);
+        address token0 = vm.envAddress(envVar);
+        // token0 can be address(0) for ETH pools
+
+        envVar = string.concat("TOKEN1_", network);
+        address token1 = vm.envAddress(envVar);
+        require(token1 != address(0), string.concat(envVar, " not set"));
+        require(token0 < token1, "Tokens must be in canonical order (token0 < token1)");
+
+        int24 tickSpacing;
+        {
+            envVar = string.concat("TICK_SPACING_", network);
+            int256 raw = vm.envInt(envVar);
+            require(raw > 0 && raw <= type(int24).max, "TICK_SPACING out of int24 range");
+            tickSpacing = int24(raw);
+        }
+
+        uint160 sqrtPrice;
+        {
+            envVar = string.concat("SQRT_PRICE_", network);
+            uint256 raw = vm.envUint(envVar);
+            require(raw > 0 && raw <= type(uint160).max, "SQRT_PRICE out of uint160 range");
+            sqrtPrice = uint160(raw);
+        }
+
+        uint24 initialFee;
+        {
+            envVar = string.concat("INITIAL_FEE_", network);
+            uint256 raw = vm.envUint(envVar);
+            require(raw <= type(uint24).max, "INITIAL_FEE out of uint24 range");
+            initialFee = uint24(raw);
+        }
+
+        IPoolManager poolManager = IPoolManager(poolManagerAddr);
+        AlphixLVRFee hook = AlphixLVRFee(hookAddr);
+
+        PoolKey memory poolKey = PoolKey({
+            currency0: Currency.wrap(token0),
+            currency1: Currency.wrap(token1),
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: tickSpacing,
+            hooks: IHooks(hook)
+        });
+
+        PoolId poolId = poolKey.toId();
+
+        console.log("===========================================");
+        console.log("CREATING ALPHIX LVR FEE POOL");
+        console.log("===========================================");
+        console.log("Network:", network);
+        console.log("PoolManager:", poolManagerAddr);
+        console.log("AlphixLVRFee Hook:", hookAddr);
+        console.log("Token0:", token0);
+        console.log("Token1:", token1);
+        console.log("Tick Spacing:", uint256(uint24(tickSpacing)));
+        console.log("Initial Fee:", uint256(initialFee));
+        console.log("Pool ID:", vm.toString(PoolId.unwrap(poolId)));
+        console.log("");
+
+        vm.startBroadcast();
+
+        // Step 1: Initialize pool (triggers afterInitialize which sets fee to 0)
+        console.log("Step 1: Initializing pool...");
+        poolManager.initialize(poolKey, sqrtPrice);
+        console.log("  - Pool initialized");
+
+        // Step 2: Poke the initial fee in the same broadcast (sequential txs, not atomic —
+        //         brief zero-fee window possible between init and poke txs on-chain)
+        if (initialFee > 0) {
+            console.log("Step 2: Setting initial fee...");
+            hook.poke(poolKey, initialFee);
+            console.log("  - Fee set to:", uint256(initialFee));
+        }
+
+        vm.stopBroadcast();
+
+        console.log("");
+        console.log("===========================================");
+        console.log("POOL CREATED SUCCESSFULLY");
+        console.log("===========================================");
+        console.log("Pool ID:", vm.toString(PoolId.unwrap(poolId)));
+        console.log("Next: Add liquidity, then run 04_Poke.s.sol or 05_SetHookFee.s.sol");
+        console.log("===========================================");
+    }
+}
