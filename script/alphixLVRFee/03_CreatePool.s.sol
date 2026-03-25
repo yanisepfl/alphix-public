@@ -53,16 +53,29 @@ contract CreatePoolLVRFeeScript is Script {
         require(token1 != address(0), string.concat(envVar, " not set"));
         require(token0 < token1, "Tokens must be in canonical order (token0 < token1)");
 
-        envVar = string.concat("TICK_SPACING_", network);
-        int24 tickSpacing = int24(vm.envInt(envVar));
-        require(tickSpacing > 0, "TICK_SPACING must be positive");
+        int24 tickSpacing;
+        {
+            envVar = string.concat("TICK_SPACING_", network);
+            int256 raw = vm.envInt(envVar);
+            require(raw > 0 && raw <= type(int24).max, "TICK_SPACING out of int24 range");
+            tickSpacing = int24(raw);
+        }
 
-        envVar = string.concat("SQRT_PRICE_", network);
-        uint160 sqrtPrice = uint160(vm.envUint(envVar));
-        require(sqrtPrice > 0, string.concat(envVar, " not set"));
+        uint160 sqrtPrice;
+        {
+            envVar = string.concat("SQRT_PRICE_", network);
+            uint256 raw = vm.envUint(envVar);
+            require(raw > 0 && raw <= type(uint160).max, "SQRT_PRICE out of uint160 range");
+            sqrtPrice = uint160(raw);
+        }
 
-        envVar = string.concat("INITIAL_FEE_", network);
-        uint24 initialFee = uint24(vm.envUint(envVar));
+        uint24 initialFee;
+        {
+            envVar = string.concat("INITIAL_FEE_", network);
+            uint256 raw = vm.envUint(envVar);
+            require(raw <= type(uint24).max, "INITIAL_FEE out of uint24 range");
+            initialFee = uint24(raw);
+        }
 
         IPoolManager poolManager = IPoolManager(poolManagerAddr);
         AlphixLVRFee hook = AlphixLVRFee(hookAddr);
@@ -97,7 +110,8 @@ contract CreatePoolLVRFeeScript is Script {
         poolManager.initialize(poolKey, sqrtPrice);
         console.log("  - Pool initialized");
 
-        // Step 2: Atomically poke the initial fee (avoids zero-fee window)
+        // Step 2: Poke the initial fee in the same broadcast (sequential txs, not atomic —
+        //         brief zero-fee window possible between init and poke txs on-chain)
         if (initialFee > 0) {
             console.log("Step 2: Setting initial fee...");
             hook.poke(poolKey, initialFee);

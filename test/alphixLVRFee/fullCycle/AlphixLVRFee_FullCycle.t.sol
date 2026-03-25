@@ -15,6 +15,7 @@ import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {EasyPosm} from "../../utils/libraries/EasyPosm.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {AlphixLVRFee} from "../../../src/AlphixLVRFee.sol";
 import {BaseAlphixLVRFeeTest} from "../BaseAlphixLVRFee.t.sol";
 
@@ -82,11 +83,11 @@ contract AlphixLVRFee_FullCycle is BaseAlphixLVRFeeTest {
 
         // Poke fails while paused
         vm.prank(feePoker);
-        vm.expectRevert();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         hook.poke(poolKey, 2000);
 
         // setHookFee also fails while paused
-        vm.expectRevert();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         hook.setHookFee(poolKey, 20_000);
 
         // But swaps still work (hook has afterSwap but no blocking logic)

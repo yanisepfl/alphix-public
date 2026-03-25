@@ -45,11 +45,14 @@ contract PokeLVRFeeScript is Script {
         require(token0 < token1, "Tokens must be in canonical order (token0 < token1)");
 
         envVar = string.concat("TICK_SPACING_", network);
-        int24 tickSpacing = int24(vm.envInt(envVar));
-        require(tickSpacing > 0, "TICK_SPACING must be positive");
+        int256 rawTickSpacing = vm.envInt(envVar);
+        require(rawTickSpacing > 0 && rawTickSpacing <= type(int24).max, "TICK_SPACING out of int24 range");
+        int24 tickSpacing = int24(rawTickSpacing);
 
         envVar = string.concat("NEW_FEE_", network);
-        uint24 newFee = uint24(vm.envUint(envVar));
+        uint256 rawNewFee = vm.envUint(envVar);
+        require(rawNewFee <= type(uint24).max, "NEW_FEE out of uint24 range");
+        uint24 newFee = uint24(rawNewFee);
 
         AlphixLVRFee hook = AlphixLVRFee(hookAddr);
 

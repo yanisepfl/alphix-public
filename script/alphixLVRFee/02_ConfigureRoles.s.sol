@@ -16,6 +16,9 @@ import {Roles} from "../alphix/libraries/Roles.sol";
  *
  * SENDER REQUIREMENTS: Must be run by AccessManager admin
  *
+ * NOTE: This script only GRANTS roles. If rotating addresses, manually revoke
+ *       the old holders via accessManager.revokeRole(roleId, oldAddress) first.
+ *
  * Environment Variables Required:
  * - DEPLOYMENT_NETWORK: Network identifier
  * - ALPHIX_LVR_FEE_HOOK_{NETWORK}: AlphixLVRFee Hook contract address

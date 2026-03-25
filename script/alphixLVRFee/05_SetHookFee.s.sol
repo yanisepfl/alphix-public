@@ -45,11 +45,14 @@ contract SetHookFeeScript is Script {
         require(token0 < token1, "Tokens must be in canonical order (token0 < token1)");
 
         envVar = string.concat("TICK_SPACING_", network);
-        int24 tickSpacing = int24(vm.envInt(envVar));
-        require(tickSpacing > 0, "TICK_SPACING must be positive");
+        int256 rawTickSpacing = vm.envInt(envVar);
+        require(rawTickSpacing > 0 && rawTickSpacing <= type(int24).max, "TICK_SPACING out of int24 range");
+        int24 tickSpacing = int24(rawTickSpacing);
 
         envVar = string.concat("HOOK_FEE_", network);
-        uint24 hookFee = uint24(vm.envUint(envVar));
+        uint256 rawHookFee = vm.envUint(envVar);
+        require(rawHookFee <= 1_000_000, "HOOK_FEE exceeds MAX_HOOK_FEE (1,000,000)");
+        uint24 hookFee = uint24(rawHookFee);
 
         AlphixLVRFee hook = AlphixLVRFee(hookAddr);
 
