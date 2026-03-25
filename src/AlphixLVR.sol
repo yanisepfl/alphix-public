@@ -50,9 +50,10 @@ contract AlphixLVR is BaseDynamicFee, AccessManaged, Pausable, IAlphixLVR {
 
     /// @inheritdoc IAlphixLVR
     function poke(PoolKey calldata key, uint24 newFee) external restricted whenNotPaused {
-        _fees[key.toId()] = newFee;
+        PoolId poolId = key.toId();
+        _fees[poolId] = newFee;
         _poke(key);
-        emit FeePoked(key.toId(), newFee);
+        emit FeePoked(poolId, newFee);
     }
 
     /// @inheritdoc IAlphixLVR

@@ -3,11 +3,11 @@ pragma solidity ^0.8.26;
 
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {BaseHookFee} from "@openzeppelin/uniswap-hooks/src/fee/BaseHookFee.sol";
 import {AlphixLVRFee} from "../../../../src/AlphixLVRFee.sol";
 import {IAlphixLVRFee} from "../../../../src/interfaces/IAlphixLVRFee.sol";
@@ -67,6 +67,22 @@ contract AlphixLVRFee_Admin is BaseAlphixLVRFeeTest {
         vm.prank(unauthorized);
         vm.expectRevert();
         hook.setTreasury(makeAddr("newTreasury"));
+    }
+
+    function test_setTreasury_revertsWhenPaused() public {
+        vm.prank(admin);
+        hook.pause();
+
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        hook.setTreasury(makeAddr("newTreasury"));
+
+        // Unpause and verify it works again
+        vm.prank(admin);
+        hook.unpause();
+
+        address newTreasury = makeAddr("newTreasury");
+        hook.setTreasury(newTreasury);
+        assertEq(hook.treasury(), newTreasury);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
